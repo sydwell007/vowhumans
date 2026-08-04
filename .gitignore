@@ -12,6 +12,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 models/weights/
-data/
+/data/
 *.log
 .DS_Store
