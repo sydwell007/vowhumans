@@ -1,0 +1,86 @@
+name: vowhumans
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vowhumans
+      POSTGRES_USER: vowhumans
+      POSTGRES_PASSWORD: vowhumans
+    ports: ["5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./packages/database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vowhumans"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports: ["6379:6379"]
+    command: redis-server --appendonly yes
+    volumes: ["redis-data:/data"]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: change-me-now
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["minio-data:/data"]
+
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    command: --dev --bind 0.0.0.0
+    ports: ["7880:7880", "7881:7881", "7882:7882/udp"]
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/api-gateway }
+    environment:
+      DATABASE_URL: postgresql://vowhumans:vowhumans@postgres:5432/vowhumans
+      REDIS_URL: redis://redis:6379/0
+      VOWHUMANS_SERVICE_API_KEY: dev-only-change-me
+    ports: ["8000:8000"]
+    depends_on: [postgres, redis, minio]
+
+  realtime-agent:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/realtime-agent }
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      LIVEKIT_URL: ws://livekit:7880
+      ENABLE_OPENAI_REALTIME: "false"
+    depends_on: [api-gateway, livekit]
+
+  mock-avatar-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/avatar-worker }
+    environment:
+      AVATAR_MODE: mock
+      ENABLE_MUSETALK: "false"
+    ports: ["8010:8000"]
+
+  studio-web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.studio
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
+      API_GATEWAY_URL: http://api-gateway:8000
+    ports: ["3000:3000"]
+    depends_on: [api-gateway]
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+

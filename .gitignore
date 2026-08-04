@@ -1,0 +1,17 @@
+node_modules/
+.next/
+.turbo/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+models/weights/
+data/
+*.log
+.DS_Store
