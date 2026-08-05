@@ -10,12 +10,14 @@
   ],
   "scripts": {
     "dev": "turbo dev --filter=@vowhumans/studio-web",
-    "build": "turbo build",
+    "build": "npm run security:scan && turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:python": "python -m unittest discover services -p test_*.py && python -m compileall -q services packages/sdk-python",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run test:python",
+    "check": "npm run security:scan && npm run route:check && npm run lint && npm run typecheck && npm run test && npm run test:python",
+    "security:scan": "node scripts/security-scan.mjs",
+    "route:check": "node scripts/route-check.mjs",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
@@ -28,4 +30,3 @@
     "node": ">=22.0.0"
   }
 }
-

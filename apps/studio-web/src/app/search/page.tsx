@@ -1,0 +1,1 @@
+import { SearchPage } from "@/components/CommercialPages"; export const metadata={title:"Search"}; export default async function Page({searchParams}:{searchParams:Promise<{q?:string}>}){return <SearchPage query={(await searchParams).q??""}/>}

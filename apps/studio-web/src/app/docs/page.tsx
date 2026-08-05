@@ -1,0 +1,1 @@
+import { DeveloperPortalPage } from "@/components/CommercialPages"; export const metadata={title:"Developer Quick Start"}; export default function Page(){return <DeveloperPortalPage section="quick-start"/>}

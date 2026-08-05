@@ -1,0 +1,11 @@
+# Backend source and operator-only deployment artifacts must never be served by Vercel.
+public/php
+public/sql
+backend-artifacts
+services
+infrastructure
+docs
+**/*.sql
+**/*.zip
+.env*
+!.env.example

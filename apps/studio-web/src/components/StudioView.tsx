@@ -105,10 +105,10 @@ function Dashboard() {
 
       <section className="metric-grid">
         {[
-          { label: "Active humans", value: "3", note: "+1 this month", icon: Bot, tone: "coral" },
-          { label: "Sessions this month", value: "2,592", note: "+18.4%", icon: Radio, tone: "cyan" },
-          { label: "Consent coverage", value: "100%", note: "All clear", icon: UserCheck, tone: "lime" },
-          { label: "Estimated provider cost", value: "R 4,286", note: "Within budget", icon: Activity, tone: "violet" },
+          { label: "Local human catalogue", value: "5", note: "Preview definitions", icon: Bot, tone: "coral" },
+          { label: "Persistent sessions", value: "0", note: "Backend not connected", icon: Radio, tone: "cyan" },
+          { label: "Consent coverage", value: "—", note: "Not measured", icon: UserCheck, tone: "lime" },
+          { label: "Provider cost source", value: "R 0", note: "No live provider data", icon: Activity, tone: "violet" },
         ].map((metric) => (
           <article className="metric-card" key={metric.label}>
             <span className={`metric-icon ${metric.tone}`}><metric.icon size={20} /></span>
@@ -141,13 +141,13 @@ function Dashboard() {
 
       <section className="split-grid">
         <div className="panel">
-          <PanelTitle title="Recent activity" eyebrow="Audit-friendly" />
+          <PanelTitle title="Sample workflow activity" eyebrow="Illustrative only" />
           <div className="activity-list">
             {[
-              ["Persona v3 published", "Professional Practice Interviewer", "8 min ago", "coral"],
-              ["Practice session completed", "Candidate-owned · transcript consented", "21 min ago", "cyan"],
-              ["Knowledge source indexed", "Interview Fundamentals · 24 chunks", "42 min ago", "lime"],
-              ["Consent package reviewed", "GoalVow Tutor · approved", "Yesterday", "violet"],
+              ["Persona v3 published", "Professional Practice Interviewer", "Example", "coral"],
+              ["Practice session completed", "Candidate-owned · transcript consented", "Example", "cyan"],
+              ["Knowledge source indexed", "Interview Fundamentals · sample chunks", "Example", "lime"],
+              ["Consent package reviewed", "GoalVow Tutor · sample approval", "Example", "violet"],
             ].map(([title, sub, time, tone]) => <div className="activity-row" key={title}><i className={tone} /><span><strong>{title}</strong><small>{sub}</small></span><time>{time}</time></div>)}
           </div>
         </div>
@@ -304,7 +304,7 @@ function Applications() {
 
 function Usage() {
   const bars=[38,51,44,72,64,81,70,92,74,61,88,77];
-  return <div className="content-stack"><section className="metric-grid">{[['Session minutes','18,420','+12.8%'],['Realtime audio','13,104 min','71% of usage'],['Presenter jobs','84','12 queued'],['Estimated cost','R 4,286','68% of budget']].map(([label,value,note])=><article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>)}</section><section className="split-grid wide-left"><div className="panel usage-chart"><PanelTitle title="Session volume" eyebrow="Last 12 months" action={<button className="table-action">Monthly <ChevronRight size={14}/></button>}/><div className="chart-area"><div className="chart-y"><span>3k</span><span>2k</span><span>1k</span><span>0</span></div><div className="bars">{bars.map((bar,index)=><div key={index}><i style={{height:`${bar}%`}}/><small>{['Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'][index]}</small></div>)}</div></div></div><div className="panel provider-cost"><PanelTitle title="Provider mix" eyebrow="Estimated cost"/>{[['Realtime voice','R 2,460','57%','coral'],['Transcription','R 814','19%','cyan'],['Language models','R 685','16%','lime'],['Storage + media','R 327','8%','violet']].map(([name,cost,share,tone])=><div className="cost-row" key={name}><i className={tone}/><span><b>{name}</b><small>{share}</small></span><strong>{cost}</strong></div>)}<div className="budget-meter"><span><i style={{width:'68%'}}/></span><small>68% of R 6,300 monthly budget</small></div></div></section></div>;
+  return <div className="content-stack"><section className="metric-grid">{[['Session minutes','0','Usage source not connected'],['Realtime audio','0 min','Provider disabled'],['Presenter jobs','0','Queue not connected'],['Estimated cost','R 0','No provider invoice source']].map(([label,value,note])=><article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>)}</section><section className="split-grid wide-left"><div className="panel usage-chart"><PanelTitle title="Sample session-volume shape" eyebrow="Illustrative data only" action={<button className="table-action">Monthly <ChevronRight size={14}/></button>}/><div className="chart-area"><div className="chart-y"><span>3k</span><span>2k</span><span>1k</span><span>0</span></div><div className="bars">{bars.map((bar,index)=><div key={index}><i style={{height:`${bar}%`}}/><small>{['Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'][index]}</small></div>)}</div></div></div><div className="panel provider-cost"><PanelTitle title="Provider cost categories" eyebrow="No live costs loaded"/>{[['Realtime voice','R 0','Not connected','coral'],['Transcription','R 0','Disabled','cyan'],['Language models','R 0','Disabled','lime'],['Storage + media','R 0','Not connected','violet']].map(([name,cost,share,tone])=><div className="cost-row" key={name}><i className={tone}/><span><b>{name}</b><small>{share}</small></span><strong>{cost}</strong></div>)}<div className="budget-meter"><span><i style={{width:'0%'}}/></span><small>No production budget source connected</small></div></div></section></div>;
 }
 
 function AssetLibrary({ type }: { type: 'voices' | 'faces' | 'gesture-profiles' }) {

@@ -1,0 +1,1 @@
+import { AdminPortal } from "@/components/CommercialPortals"; export const metadata={title:"Platform Administration",robots:{index:false,follow:false}}; export default async function Page({params}:{params:Promise<{section?:string[]}>}){return <AdminPortal section={(await params).section?.[0]}/>}

@@ -1,50 +1,43 @@
-# VowHumans Digital Human Platform
+# VowHumans Commercial Digital Human Platform
 
-VowHumans is GoalVow's consent-first platform for reusable AI presenters, tutors, interview-practice partners, mentors and support agents. This repository is an honest production foundation: the Studio, governance workflows, mock conversation flows, versioned API surface, SDKs, database migrations and CPU-safe service scaffolds are implemented; realtime provider accounts and GPU inference remain explicit operator integrations.
+VowHumans is GoalVow's consent-first platform for governed digital employees, presenters, tutors, interview-practice partners, mentors, coaches and support agents. The repository now contains a commercial website, product catalogue, customer and partner portals, Studio, API contracts, SDKs, database migrations, Afrihost PHP/MySQL deployment files and provider-safe service boundaries.
 
-## What works now
+The interface is deliberately honest about runtime state. Provider-dependent features remain labelled as previews or disabled until production credentials, data stores and licensed media pipelines are configured.
 
-| Mode | Status | Notes |
-| --- | --- | --- |
-| Voice-only | Development-ready | Mock flow works; LiveKit/OpenAI adapters require server credentials. |
-| Static portrait | Functional | Original AI-generated placeholder humans with visible disclosure. |
-| Pre-rendered avatar | Scaffold | Queue contract and presenter workflow are present; FFmpeg is required. |
-| Live 2D avatar | Scaffold | MuseTalk/LivePortrait worker interfaces; separate licensed GPU deployment required. |
-| 3D avatar | Planned | Provider interface only; no false 3D preview. |
-| Presenter rendering | Mock functional | Scene/queue UI and API contract work; media pipeline needs FFmpeg and TTS/GPU providers. |
-
-VowHumans does **not** claim Tavus-equivalent quality.
-
-## Start the Studio
+## Run locally
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The UI runs with safe mock data and without a GPU. Copy `.env.example` to `.env.local` only when adding server-side providers.
+Open `http://localhost:3000` for the commercial site and `http://localhost:3000/studio` for Studio.
 
 ## Validate
 
 ```powershell
 npm run check
+npm run build
 ```
 
-Docker Desktop must be running before `docker compose up --build`. FFmpeg is required for real presenter exports. The local audit found Node 24, npm 11, Python 3.14, Docker CLI 28, Git 2.54, and a GTX 1050 Ti; Docker daemon, FFmpeg and CUDA toolkit were unavailable during initial generation.
+The check includes a secrets/deployment-boundary scan, required-route contract, ESLint, TypeScript, 17 Vitest tests and 8 Python tests.
 
-## Repository map
+## Main surfaces
 
-- `apps/studio-web` — Next.js Studio plus Interview, Tutor and Presenter demos.
-- `services/*` — FastAPI API, realtime, avatar, presenter, media and moderation boundaries.
-- `packages/database` — PostgreSQL core schema with organisation isolation.
-- `packages/persona-schema` — immutable Persona contracts and avatar state machine.
-- `packages/sdk-typescript`, `packages/sdk-python` — integration clients.
-- `public/php`, `public/sql` — isolated Afrihost PHP/MySQL integration adapter for manual upload.
-- `docs` — architecture, licensing, deployment, safety and integration guides.
+| Surface | Route or location |
+| --- | --- |
+| Commercial website | `/`, `/platform`, `/products`, `/industries`, `/pricing`, `/digital-humans` |
+| Marketplace and Academy | `/marketplace`, `/templates`, `/academy` |
+| Customer and admin portals | `/app`, `/admin` |
+| Partner portal | `/partners` |
+| Developer and trust centres | `/developers`, `/docs`, `/api-reference`, `/security`, `/trust` |
+| Digital Human Studio | `/studio` |
+| Versioned preview API | `/api/v1/*` |
+| Afrihost upload package | `public/php`, `public/sql` |
+| Authoritative backend source | `backend-artifacts/php`, `backend-artifacts/sql` |
 
-## Manual accounts and tools
+## Deployment boundary
 
-Real realtime operation needs OpenAI and LiveKit credentials. Media storage needs S3/MinIO. GPU modes need a CUDA-capable provider (RunPod, Modal or a GPU VM), approved model licences and licensed actor media. Vercel may host the Studio only; do not deploy GPU inference there.
+Vercel hosts the Next.js experience. PHP and SQL are excluded from Vercel by `.vercelignore` and must be uploaded to Afrihost. Apply SQL migrations in `public/sql/MIGRATION_ORDER.md` order, then upload the contents of `public/php` without exposing configuration secrets. GPU inference, realtime providers, billing, email, persistent authentication and object storage require their respective external services.
 
-See [Architecture](docs/ARCHITECTURE.md), [Commercial licence review](docs/COMMERCIAL-LICENCE-REVIEW.md), [Known limitations](docs/KNOWN-LIMITATIONS.md), and [Afrihost adapter](public/php/README.md).
-
+Start with [Final implementation report](docs/FINAL_IMPLEMENTATION_REPORT.md), [Production readiness checklist](docs/PRODUCTION_READINESS_CHECKLIST.md), [Afrihost deployment guide](docs/AFRIHOST_BACKEND_DEPLOYMENT.md), [DNS guide](docs/DOMAIN_AND_DNS_GUIDE.md), and [Manual configuration](docs/MANUAL_CONFIGURATION_REQUIRED.md).

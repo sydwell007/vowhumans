@@ -6,7 +6,7 @@ describe("Studio seed contracts", () => {
     expect(humans.every((human) => /AI-generated/i.test(human.disclosure))).toBe(true);
   });
   it("includes only fictional placeholders", () => {
-    expect(humans).toHaveLength(3);
+    expect(humans).toHaveLength(5);
     expect(humans.filter((human) => human.name === "Thandi Mokoena" || human.name === "Sipho Daniels")).toHaveLength(2);
   });
   it("seeds all five starter Personas", () => expect(personas).toHaveLength(5));

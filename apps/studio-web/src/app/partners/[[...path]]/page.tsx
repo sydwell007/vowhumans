@@ -1,0 +1,1 @@
+import { PartnerPortal } from "@/components/CommercialPortals"; export const metadata={title:"Partners"}; export default async function Page({params}:{params:Promise<{path?:string[]}>}){return <PartnerPortal path={(await params).path}/>}

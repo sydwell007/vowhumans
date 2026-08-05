@@ -1,0 +1,2 @@
+import { notFound } from "next/navigation"; import { HumanDetail } from "@/components/CommercialPages"; import { humans } from "@/data/platform";
+export async function generateStaticParams(){return humans.map(human=>({human:human.id}))} export default async function Page({params}:{params:Promise<{human:string}>}){const {human}=await params;if(!humans.some(item=>item.id===human))notFound();return <HumanDetail slug={human}/>}

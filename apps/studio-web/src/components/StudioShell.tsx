@@ -33,7 +33,7 @@ export function StudioShell({ section, children }: { section: string; children: 
     <div className="studio-shell">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
-          <Link href="/" className="brand" onClick={() => setMobileOpen(false)}>
+          <Link href="/studio" className="brand" onClick={() => setMobileOpen(false)}>
             <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
             <span><strong>Vow</strong>Humans<small>Digital Human Platform</small></span>
           </Link>
@@ -56,7 +56,7 @@ export function StudioShell({ section, children }: { section: string; children: 
                 return (
                   <Link
                     key={item.label}
-                    href={item.slug ? `/${item.slug}` : "/"}
+                    href={item.slug ? `/studio/${item.slug}` : "/studio"}
                     className={active ? "active" : ""}
                     aria-current={active ? "page" : undefined}
                     onClick={() => setMobileOpen(false)}
@@ -101,7 +101,7 @@ export function StudioShell({ section, children }: { section: string; children: 
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && results[0]) {
-                  router.push(results[0].slug ? `/${results[0].slug}` : "/");
+                  router.push(results[0].slug ? `/studio/${results[0].slug}` : "/studio");
                   setQuery("");
                 }
               }}
@@ -110,7 +110,7 @@ export function StudioShell({ section, children }: { section: string; children: 
             {results.length > 0 && (
               <div className="search-results">
                 {results.map((result) => (
-                  <button key={result.label} onClick={() => { router.push(result.slug ? `/${result.slug}` : "/"); setQuery(""); }}>
+                  <button key={result.label} onClick={() => { router.push(result.slug ? `/studio/${result.slug}` : "/studio"); setQuery(""); }}>
                     <result.icon size={17} /><span>{result.label}</span>
                   </button>
                 ))}
@@ -132,6 +132,7 @@ export function StudioShell({ section, children }: { section: string; children: 
             </div>
             <button className="primary-button" onClick={quickAction}><Plus size={18} />{meta.action}</button>
           </section>
+          <div className="studio-data-notice" role="note"><strong>Preview dataset</strong><span>Records and activity shown in Studio are local product examples. Usage, billing, provider health and organisation persistence are not connected.</span></div>
           {children}
         </div>
       </main>

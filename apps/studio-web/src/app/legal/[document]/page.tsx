@@ -1,0 +1,2 @@
+import { notFound } from "next/navigation"; import { LegalPage } from "@/components/CommercialPages"; import { legalDocuments } from "@/data/commercial";
+export async function generateStaticParams(){return legalDocuments.map(document=>({document}))} export default async function Page({params}:{params:Promise<{document:string}>}){const {document}=await params;if(!legalDocuments.includes(document as typeof legalDocuments[number]))notFound();return <LegalPage slug={document}/>}

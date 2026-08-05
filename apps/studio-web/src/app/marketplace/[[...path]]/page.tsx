@@ -1,0 +1,1 @@
+import { MarketplacePage } from "@/components/CommercialPages"; export const metadata={title:"Marketplace"}; export default async function Page({params}:{params:Promise<{path?:string[]}>}){return <MarketplacePage path={(await params).path}/>}

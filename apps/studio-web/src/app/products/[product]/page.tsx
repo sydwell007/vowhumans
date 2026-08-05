@@ -1,0 +1,2 @@
+import { notFound } from "next/navigation"; import { ProductDetail } from "@/components/CommercialPages"; import { products } from "@/data/commercial";
+export async function generateStaticParams(){return products.map(product=>({product:product.slug}))} export default async function Page({params}:{params:Promise<{product:string}>}){const {product}=await params;if(!products.some(item=>item.slug===product))notFound();return <ProductDetail slug={product}/>}

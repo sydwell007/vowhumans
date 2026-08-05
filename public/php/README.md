@@ -4,7 +4,7 @@ Upload this `php` folder and the sibling `sql` migrations to the relevant Afriho
 
 ## Deployment
 
-1. Import `../sql/001_adapter_schema.sql` and `002_seed_reference_data.sql` in phpMyAdmin.
+1. Import `../sql/001_adapter_schema.sql`, `002_seed_reference_data.sql`, and additive `003_commercial_expansion.sql` in phpMyAdmin.
 2. Copy `config.example.php` outside `public_html`, insert database/platform/webhook secrets, and set `VOWHUMANS_CONFIG_FILE`. If the host cannot set it, use a protected `config.php` as a temporary fallback.
 3. Generate separate random API keys for PlugConnect and GoalVow services. Store only `SHA256(raw_key)` in `vhm_api_keys` with the minimum scopes.
 4. Set the approved CORS origins exactly; wildcards are not accepted.
@@ -14,3 +14,4 @@ Example key scopes: `applications:read`, `digital-humans:read`, `personas:read`,
 
 The adapter deliberately never returns practice answers through session listing APIs. Core provider keys stay server-side.
 
+The commercial dispatcher supports protected, organisation-scoped catalogue reads and persistent public sales/support request intake after migration 003. Public request routes are rate-limited and validate consent. Vercel excludes this entire folder; upload it only to the intended Afrihost API virtual host and keep configuration outside `public_html`.

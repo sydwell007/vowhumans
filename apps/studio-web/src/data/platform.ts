@@ -72,14 +72,39 @@ export const humans: Human[] = [
     mode: "Static portrait + voice",
     status: "Ready",
   },
+  {
+    id: "vowsupport-adviser",
+    name: "Lerato Maseko",
+    role: "VowSupport Adviser",
+    use: "Customer support triage and escalation",
+    disclosure: "Fictional AI-generated support adviser",
+    image: "/humans/support-adviser.png",
+    applications: ["VowSupport"],
+    persona: "Support Adviser",
+    mode: "Static portrait + text fallback",
+    status: "Draft",
+  },
+  {
+    id: "vowtools-coach",
+    name: "Kabelo Ndlovu",
+    role: "VowTools Coach",
+    use: "Guided productivity coaching",
+    disclosure: "Fictional AI-generated productivity coach",
+    image: "/humans/vowtools-coach.png",
+    applications: ["VowTools"],
+    persona: "Productivity Coach",
+    mode: "Static portrait + text fallback",
+    status: "Draft",
+  },
 ];
 
 export const applications = [
   { name: "PlugConnect", code: "PC", colour: "coral", humans: 2, sessions: "1,284", status: "Connected" },
   { name: "GoalVow Academies", code: "GA", colour: "cyan", humans: 1, sessions: "892", status: "Connected" },
   { name: "VowLMS", code: "VL", colour: "lime", humans: 1, sessions: "416", status: "Connected" },
-  { name: "VowSupport", code: "VS", colour: "violet", humans: 0, sessions: "—", status: "Sandbox" },
-  { name: "VowTools", code: "VT", colour: "amber", humans: 0, sessions: "—", status: "Sandbox" },
+  { name: "VowSupport", code: "VS", colour: "violet", humans: 1, sessions: "—", status: "Sandbox" },
+  { name: "VowTools", code: "VT", colour: "amber", humans: 1, sessions: "—", status: "Sandbox" },
+  { name: "VowRewards", code: "VR", colour: "coral", humans: 0, sessions: "—", status: "Planned" },
 ];
 
 export const personas = [

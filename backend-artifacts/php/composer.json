@@ -1,0 +1,9 @@
+{
+  "name": "goalvow/vowhumans-api",
+  "description": "Afrihost-compatible VowHumans commercial API adapter",
+  "type": "project",
+  "require": { "php": ">=8.2", "ext-json": "*", "ext-pdo": "*", "ext-pdo_mysql": "*", "ext-mbstring": "*" },
+  "autoload": { "psr-4": { "VowHumans\\": "services/" } },
+  "config": { "sort-packages": true, "platform-check": true },
+  "license": "proprietary"
+}

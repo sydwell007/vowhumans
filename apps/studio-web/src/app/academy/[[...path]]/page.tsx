@@ -1,0 +1,1 @@
+import { AcademyPage } from "@/components/CommercialPages"; export const metadata={title:"Academy"}; export default async function Page({params}:{params:Promise<{path?:string[]}>}){return <AcademyPage path={(await params).path}/>}

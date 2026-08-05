@@ -1,0 +1,1 @@
+import { DeveloperPortalPage } from "@/components/CommercialPages"; export const metadata={title:"API Reference"}; export default function Page(){return <DeveloperPortalPage section="api-reference"/>}
