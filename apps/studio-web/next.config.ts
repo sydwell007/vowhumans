@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Vercel packages the Next.js output itself; standalone is for our Docker image.
+  output: process.env.VERCEL ? undefined : "standalone",
   turbopack: { root: path.resolve(__dirname, "../..") },
   transpilePackages: ["@vowhumans/commercial-core", "@vowhumans/persona-schema"],
   poweredByHeader: false,
