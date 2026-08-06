@@ -45,6 +45,9 @@ services:
       DATABASE_URL: postgresql://vowhumans:vowhumans@postgres:5432/vowhumans
       REDIS_URL: redis://redis:6379/0
       VOWHUMANS_SERVICE_API_KEY: dev-only-change-me
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
     ports: ["8000:8000"]
     depends_on: [postgres, redis, minio]
 
@@ -58,6 +61,21 @@ services:
       LIVEKIT_URL: ws://livekit:7880
       ENABLE_OPENAI_REALTIME: "false"
     depends_on: [api-gateway, livekit]
+
+  realtime-agent-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/realtime-agent }
+    command: ["python", "/app/service/livekit_agent.py", "dev"]
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime}
+      ENABLE_OPENAI_REALTIME: "true"
+    depends_on: [livekit]
 
   mock-avatar-worker:
     build:

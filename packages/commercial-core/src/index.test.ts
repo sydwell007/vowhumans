@@ -16,4 +16,9 @@ describe("commercial platform contracts", () => {
     expect(result.annualHoursRedirected).toBeGreaterThan(1_000);
     expect(result.sensitivity.lowMinor).not.toBeNull();
   });
+  it("does not conflate a free plan's zero cost with the unpriced enterprise case", () => {
+    const result = calculateRoi({ employees: 3, monthlyInteractions: 500, averageMinutes: 6, monthlySalaryMinor: 2_500_000, employerCostRate: 0.2, afterHoursShare: 0.25, assistedConversionImprovement: 0.02, monthlyOpportunityValueMinor: 20_000_000, planId: "sandbox", estimatedLiveMinutes: 20, estimatedPresenterMinutes: 1 });
+    expect(result.vowHumansAnnualCostMinor).toBe(0);
+    expect(result.paybackMonths).toBe(1);
+  });
 });

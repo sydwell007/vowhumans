@@ -13,6 +13,7 @@
   "dependencies": {
     "@vowhumans/commercial-core": "*",
     "@vowhumans/persona-schema": "*",
+    "livekit-client": "^2.21.0",
     "lucide-react": "^0.468.0",
     "next": "^16.3.0",
     "react": "19.2.4",

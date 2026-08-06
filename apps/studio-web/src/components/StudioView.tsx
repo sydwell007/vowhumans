@@ -88,7 +88,7 @@ function Dashboard() {
           <p>Build reliable AI interviewers, tutors and presenters with consent, provenance and visible disclosure at the centre.</p>
           <div className="hero-actions">
             <Link className="button-light" href="/demos/interview"><Play size={17} fill="currentColor" />Try interview demo</Link>
-            <Link className="button-ghost" href="/safety">View safety controls <ArrowRight size={16} /></Link>
+            <Link className="button-ghost" href="/studio/safety">View safety controls <ArrowRight size={16} /></Link>
           </div>
           <div className="hero-footnote"><ShieldCheck size={16} /> No cloning. No hidden AI. No appearance scoring.</div>
         </div>
@@ -119,11 +119,11 @@ function Dashboard() {
 
       <section className="split-grid wide-left">
         <div className="panel">
-          <PanelTitle title="Digital humans" eyebrow="Ready to meet" action={<Link className="text-link" href="/digital-humans">View all <ArrowRight size={15} /></Link>} />
+          <PanelTitle title="Digital humans" eyebrow="Ready to meet" action={<Link className="text-link" href="/studio/digital-humans">View all <ArrowRight size={15} /></Link>} />
           <div className="human-list">
             {humans.map((human) => (
-              <Link className="human-row" href="/digital-humans" key={human.id}>
-                <span className="human-thumb"><Image src={human.image} alt="" fill sizes="52px" /></span>
+              <Link className="human-row" href="/studio/digital-humans" key={human.id}>
+                <span className="human-thumb"><Image src={human.image} alt={`AI-generated portrait of ${human.name}`} fill sizes="52px" /></span>
                 <span className="human-row-copy"><strong>{human.name}</strong><small>{human.role} · {human.applications.join(", ")}</small></span>
                 <StatusPill>Ready</StatusPill><ChevronRight size={17} />
               </Link>
@@ -153,7 +153,7 @@ function Dashboard() {
         </div>
         <div className="panel consent-panel">
           <PanelTitle title="Governance inbox" eyebrow="2 actions" />
-          <div className="governance-card"><span><Clock3 size={20} /></span><div><strong>2 identities expire in 45 days</strong><p>Renew written permissions before new sessions are blocked.</p><Link href="/identity-consent">Review consent <ArrowRight size={15} /></Link></div></div>
+          <div className="governance-card"><span><Clock3 size={20} /></span><div><strong>2 identities expire in 45 days</strong><p>Renew written permissions before new sessions are blocked.</p><Link href="/studio/identity-consent">Review consent <ArrowRight size={15} /></Link></div></div>
           <div className="governance-card safe"><span><ShieldCheck size={20} /></span><div><strong>Disclosure checks passing</strong><p>All active surfaces show the required AI-generated label.</p></div></div>
         </div>
       </section>
@@ -197,7 +197,7 @@ function AppWindowIcon() { return <Globe2 size={15} />; }
 
 function TestDrawer({ humanId, onClose }: { humanId: string; onClose: () => void }) {
   const human = humans.find((item) => item.id === humanId)!;
-  return <div className="drawer-scrim"><aside className="test-drawer"><button className="icon-button drawer-close" aria-label="Close test panel" onClick={onClose}><X size={19} /></button><p className="eyebrow">Safe test console</p><h2>Meet {human.name}</h2><div className="drawer-portrait"><Image src={human.image} alt="" fill sizes="320px" /><span className="image-disclosure"><Sparkles size={13} /> AI-generated</span></div><StatusPill tone="warn">Mock conversation</StatusPill><p>{human.disclosure}. The live provider is not configured, so this test will not access your microphone.</p><Link href="/demos/interview" className="primary-button"><Play size={17} />Open interview demo</Link></aside></div>;
+  return <div className="drawer-scrim"><aside className="test-drawer"><button className="icon-button drawer-close" aria-label="Close test panel" onClick={onClose}><X size={19} /></button><p className="eyebrow">Safe test console</p><h2>Meet {human.name}</h2><div className="drawer-portrait"><Image src={human.image} alt={`AI-generated portrait of ${human.name}`} fill sizes="320px" /><span className="image-disclosure"><Sparkles size={13} /> AI-generated</span></div><StatusPill tone="warn">Mock conversation</StatusPill><p>{human.disclosure}. The live provider is not configured, so this test will not access your microphone.</p><Link href="/demos/interview" className="primary-button"><Play size={17} />Open interview demo</Link></aside></div>;
 }
 
 function Personas() {
@@ -299,7 +299,7 @@ function PresenterStudio() {
 }
 
 function Applications() {
-  return <div className="content-stack"><section className="application-grid">{applications.map(app=><article className="application-card" key={app.name}><div className={`app-logo ${app.colour}`}>{app.code}</div><div className="application-head"><div><h2>{app.name}</h2><p>{app.status==='Connected'?'Production integration':'Development sandbox'}</p></div><StatusPill tone={app.status==='Connected'?'good':'warn'}>{app.status}</StatusPill></div><div className="app-stats"><span><small>Humans</small><strong>{app.humans}</strong></span><span><small>Sessions</small><strong>{app.sessions}</strong></span></div><button className="plain-button">Manage integration <ArrowRight size={15}/></button></article>)}</section><section className="panel integration-principle"><span><LockKeyhole size={23}/></span><div><p className="eyebrow">Server-to-server only</p><h2>Keys never visit the browser.</h2><p>Applications receive scoped service credentials and short-lived room tokens. Persona overrides stay versioned per application.</p></div><Link href="/api-keys" className="secondary-button">Manage API keys</Link></section></div>;
+  return <div className="content-stack"><section className="application-grid">{applications.map(app=><article className="application-card" key={app.name}><div className={`app-logo ${app.colour}`}>{app.code}</div><div className="application-head"><div><h2>{app.name}</h2><p>{app.status==='Connected'?'Production integration':'Development sandbox'}</p></div><StatusPill tone={app.status==='Connected'?'good':'warn'}>{app.status}</StatusPill></div><div className="app-stats"><span><small>Humans</small><strong>{app.humans}</strong></span><span><small>Sessions</small><strong>{app.sessions}</strong></span></div><button className="plain-button">Manage integration <ArrowRight size={15}/></button></article>)}</section><section className="panel integration-principle"><span><LockKeyhole size={23}/></span><div><p className="eyebrow">Server-to-server only</p><h2>Keys never visit the browser.</h2><p>Applications receive scoped service credentials and short-lived room tokens. Persona overrides stay versioned per application.</p></div><Link href="/studio/api-keys" className="secondary-button">Manage API keys</Link></section></div>;
 }
 
 function Usage() {

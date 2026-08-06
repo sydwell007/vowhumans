@@ -7,6 +7,9 @@ coverage/
 .env
 .env.local
 !.env.example
+config.php
+!config.example.php
+_diag.php
 __pycache__/
 *.py[cod]
 .venv/

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, time, uuid
+import hmac, os, time, uuid
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
@@ -14,7 +14,7 @@ class RenderRequest(BaseModel):
 
 def internal_key(value: str | None):
     expected=os.getenv("VOWHUMANS_INTERNAL_KEY","")
-    if expected and value != expected: raise HTTPException(401,"Internal service key required")
+    if not expected or not value or not hmac.compare_digest(expected, value): raise HTTPException(401,"Internal service key required")
 
 @app.get("/health")
 def health():

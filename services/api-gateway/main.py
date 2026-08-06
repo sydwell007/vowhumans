@@ -18,9 +18,40 @@ class AuthContext(BaseModel):
     organisation_id: uuid.UUID
     key_fingerprint: str
 
+def _load_key_registry() -> dict[str, str]:
+    # Optional VOWHUMANS_SERVICE_API_KEYS: JSON map of {service_key: organisation_id}.
+    # When configured, the organisation is resolved from the matched key instead of
+    # being trusted from a client-supplied header. Falls back to the legacy single
+    # shared-key/header-trust mode (dev-only) when unset.
+    raw = os.getenv("VOWHUMANS_SERVICE_API_KEYS", "")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return {str(key): str(org_id) for key, org_id in parsed.items()} if isinstance(parsed, dict) else {}
+
+_KEY_REGISTRY = _load_key_registry()
+
 def auth_context(x_api_key: Annotated[str | None, Header()] = None, x_organisation_id: Annotated[str | None, Header()] = None) -> AuthContext:
+    if not x_api_key:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Valid server-side service key required")
+
+    if _KEY_REGISTRY:
+        matched_org_id = next((org_id for key, org_id in _KEY_REGISTRY.items() if hmac.compare_digest(key, x_api_key)), None)
+        if matched_org_id is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Valid server-side service key required")
+        try:
+            organisation_id = uuid.UUID(matched_org_id)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Service key registry misconfigured") from exc
+        if x_organisation_id and x_organisation_id != str(organisation_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Organisation header does not match the scoped service key")
+        return AuthContext(organisation_id=organisation_id, key_fingerprint=hashlib.sha256(x_api_key.encode()).hexdigest()[:12])
+
     expected = os.getenv("VOWHUMANS_SERVICE_API_KEY", "")
-    if not expected or not x_api_key or not __import__("hmac").compare_digest(expected, x_api_key):
+    if not expected or not hmac.compare_digest(expected, x_api_key):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Valid server-side service key required")
     try: organisation_id = uuid.UUID(x_organisation_id or "")
     except ValueError as exc: raise HTTPException(400, "Verified organisation header required") from exc

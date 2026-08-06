@@ -9,6 +9,7 @@ export type Plan = {
   monthlyMinor: number | null;
   includedLiveMinutes: number;
   includedPresenterMinutes: number;
+  includedApiCalls: number | null;
   digitalHumans: number | null;
   teamSeats: number | null;
   features: string[];
@@ -17,12 +18,25 @@ export type Plan = {
 
 export const ANNUAL_DISCOUNT_RATE = 0.15;
 
+// Usage overage rates, applied per unit above a plan's included allowance.
+export const LIVE_MINUTE_OVERAGE_RATE_MINOR = 450;
+export const PRESENTER_MINUTE_OVERAGE_RATE_MINOR = 9500;
+export const API_CALL_OVERAGE_RATE_MINOR = 2;
+
+// ROI heuristics: assumed working hours per employee per year, and the share
+// of interaction time that can realistically be redirected to a digital
+// human (a base rate plus a bonus for after-hours coverage, capped).
+export const ANNUAL_WORKING_HOURS = 1_920;
+export const BASE_REDIRECT_FRACTION = 0.45;
+export const AFTER_HOURS_REDIRECT_BONUS = 0.25;
+export const MAX_REDIRECT_FRACTION = 0.8;
+
 export const plans: readonly Plan[] = [
-  { id: "sandbox", name: "Sandbox", audience: "Evaluation and prototypes", monthlyMinor: 0, includedLiveMinutes: 20, includedPresenterMinutes: 1, digitalHumans: 1, teamSeats: 1, status: "available", features: ["One draft digital human", "Safe test sessions", "Watermarked previews", "Community documentation"] },
-  { id: "starter", name: "Starter", audience: "Creators and small teams", monthlyMinor: 149900, includedLiveMinutes: 180, includedPresenterMinutes: 10, digitalHumans: 1, teamSeats: 3, status: "available", features: ["One published digital human", "Website embed", "One knowledge base", "Basic analytics", "Standard support"] },
-  { id: "professional", name: "Professional", audience: "Growing organisations", monthlyMinor: 499900, includedLiveMinutes: 750, includedPresenterMinutes: 35, digitalHumans: 5, teamSeats: 10, status: "available", features: ["Five digital humans", "API and webhooks", "Advanced analytics", "Template library", "Standard integrations"] },
-  { id: "business", name: "Business", audience: "Departments and mid-market", monthlyMinor: 1499900, includedLiveMinutes: 2500, includedPresenterMinutes: 100, digitalHumans: 20, teamSeats: 40, status: "available", features: ["Multiple workspaces", "Approvals and budgets", "Advanced security", "Priority support", "Custom branding"] },
-  { id: "enterprise", name: "Enterprise", audience: "Regulated and complex organisations", monthlyMinor: null, includedLiveMinutes: 0, includedPresenterMinutes: 0, digitalHumans: null, teamSeats: null, status: "contact-sales", features: ["SSO architecture", "Custom retention", "Security review support", "Regional deployment options", "SLA and procurement support"] },
+  { id: "sandbox", name: "Sandbox", audience: "Evaluation and prototypes", monthlyMinor: 0, includedLiveMinutes: 20, includedPresenterMinutes: 1, includedApiCalls: 500, digitalHumans: 1, teamSeats: 1, status: "available", features: ["One draft digital human", "Safe test sessions", "Watermarked previews", "Community documentation"] },
+  { id: "starter", name: "Starter", audience: "Creators and small teams", monthlyMinor: 149900, includedLiveMinutes: 180, includedPresenterMinutes: 10, includedApiCalls: 10_000, digitalHumans: 1, teamSeats: 3, status: "available", features: ["One published digital human", "Website embed", "One knowledge base", "Basic analytics", "Standard support"] },
+  { id: "professional", name: "Professional", audience: "Growing organisations", monthlyMinor: 499900, includedLiveMinutes: 750, includedPresenterMinutes: 35, includedApiCalls: 50_000, digitalHumans: 5, teamSeats: 10, status: "available", features: ["Five digital humans", "API and webhooks", "Advanced analytics", "Template library", "Standard integrations"] },
+  { id: "business", name: "Business", audience: "Departments and mid-market", monthlyMinor: 1499900, includedLiveMinutes: 2500, includedPresenterMinutes: 100, includedApiCalls: 250_000, digitalHumans: 20, teamSeats: 40, status: "available", features: ["Multiple workspaces", "Approvals and budgets", "Advanced security", "Priority support", "Custom branding"] },
+  { id: "enterprise", name: "Enterprise", audience: "Regulated and complex organisations", monthlyMinor: null, includedLiveMinutes: 0, includedPresenterMinutes: 0, includedApiCalls: null, digitalHumans: null, teamSeats: null, status: "contact-sales", features: ["SSO architecture", "Custom retention", "Security review support", "Regional deployment options", "SLA and procurement support"] },
 ] as const;
 
 export function planById(id: PlanId): Plan {
@@ -47,9 +61,9 @@ export type UsageEstimateInput = {
 export function estimateUsageMinor(input: UsageEstimateInput): number | null {
   const plan = planById(input.planId);
   if (plan.monthlyMinor === null) return null;
-  const liveOverage = Math.max(0, input.liveMinutes - plan.includedLiveMinutes) * 450;
-  const presenterOverage = Math.max(0, input.presenterMinutes - plan.includedPresenterMinutes) * 9500;
-  const apiOverage = Math.max(0, input.apiCalls - 10_000) * 2;
+  const liveOverage = Math.max(0, input.liveMinutes - plan.includedLiveMinutes) * LIVE_MINUTE_OVERAGE_RATE_MINOR;
+  const presenterOverage = Math.max(0, input.presenterMinutes - plan.includedPresenterMinutes) * PRESENTER_MINUTE_OVERAGE_RATE_MINOR;
+  const apiOverage = plan.includedApiCalls === null ? 0 : Math.max(0, input.apiCalls - plan.includedApiCalls) * API_CALL_OVERAGE_RATE_MINOR;
   return plan.monthlyMinor + liveOverage + presenterOverage + apiOverage;
 }
 
@@ -82,15 +96,18 @@ export function calculateRoi(input: RoiInput): RoiResult {
   const loadedSalary = input.monthlySalaryMinor * (1 + input.employerCostRate);
   const currentAnnualCostMinor = Math.round(loadedSalary * input.employees * 12);
   const interactionHours = input.monthlyInteractions * input.averageMinutes / 60;
-  const annualHoursRedirected = Math.round(interactionHours * 12 * Math.min(0.8, 0.45 + input.afterHoursShare * 0.25));
+  const annualHoursRedirected = Math.round(interactionHours * 12 * Math.min(MAX_REDIRECT_FRACTION, BASE_REDIRECT_FRACTION + input.afterHoursShare * AFTER_HOURS_REDIRECT_BONUS));
   const monthlyPlatform = estimateUsageMinor({ planId: input.planId, liveMinutes: input.estimatedLiveMinutes, presenterMinutes: input.estimatedPresenterMinutes, apiCalls: input.monthlyInteractions });
   const vowHumansAnnualCostMinor = monthlyPlatform === null ? null : monthlyPlatform * 12;
-  const hourlyLabourMinor = input.employees > 0 ? currentAnnualCostMinor / (input.employees * 1_920) : 0;
+  const hourlyLabourMinor = input.employees > 0 ? currentAnnualCostMinor / (input.employees * ANNUAL_WORKING_HOURS) : 0;
   const redirectedValue = annualHoursRedirected * hourlyLabourMinor;
   const conversionValue = input.monthlyOpportunityValueMinor * input.assistedConversionImprovement * 12;
   const grossBenefit = Math.round(redirectedValue + conversionValue);
   const estimatedAnnualBenefitMinor = vowHumansAnnualCostMinor === null ? null : Math.round(grossBenefit - vowHumansAnnualCostMinor);
-  const paybackMonths = vowHumansAnnualCostMinor && grossBenefit > 0 ? Math.max(1, Math.ceil(vowHumansAnnualCostMinor / (grossBenefit / 12))) : null;
+  // vowHumansAnnualCostMinor can legitimately be 0 (a free plan); use an explicit
+  // null check rather than truthiness so a free plan isn't conflated with the
+  // unpriced "contact sales" enterprise case.
+  const paybackMonths = vowHumansAnnualCostMinor !== null && grossBenefit > 0 ? Math.max(1, Math.ceil(vowHumansAnnualCostMinor / (grossBenefit / 12))) : null;
   const threeYearBenefitMinor = estimatedAnnualBenefitMinor === null ? null : estimatedAnnualBenefitMinor * 3;
   return {
     currentAnnualCostMinor,
