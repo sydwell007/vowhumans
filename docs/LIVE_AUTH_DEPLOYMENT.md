@@ -11,20 +11,27 @@ flagged in `docs/MANUAL_CONFIGURATION_REQUIRED.md` and `docs/SECURITY_RISK_REPOR
 
 ## 1. Provision the database
 
-From the Vercel dashboard, attach a **Vercel Postgres** database to this project
-(Storage → Create Database → Postgres). Vercel automatically injects `POSTGRES_URL`
-(and related `POSTGRES_*` vars) into the project's environment variables — the app
-reads `DATABASE_URL` first, falling back to `POSTGRES_URL`, so no extra wiring is
-needed once it's attached.
+From the Vercel dashboard, attach a database to this project: Storage → Create
+Database → **Neon** (Postgres). This is what "Vercel Postgres" means today — Vercel's
+native Postgres offering is Neon-backed, so there's no separate "Vercel Postgres"
+product to choose instead. Doing it this way auto-injects `POSTGRES_URL` (and related
+`POSTGRES_*` vars) into the project's environment variables — the app reads
+`DATABASE_URL` first, falling back to `POSTGRES_URL`, so no extra wiring is needed
+once it's attached. (Provisioning a database directly at neon.tech and pasting the
+connection string into Vercel manually works identically, if you'd rather manage it
+outside the Vercel dashboard.)
+
+Afrihost is unaffected by any of this — the PHP/MariaDB bridge has its own separate
+schema (`vhm_*` tables) and no concept of end-user accounts; this database and that
+one never talk to each other.
 
 ## 2. Run the migrations, in order
 
-Vercel Postgres doesn't auto-run init scripts the way the local `docker-compose`
-Postgres container does (see `docker-compose.yml` — it mounts
-`packages/database/migrations` as `/docker-entrypoint-initdb.d`, which only fires on
-a fresh local container). Against the real database, run all four manually, in order,
-using the connection string Vercel shows you (or `vercel env pull` to get it locally
-first):
+Neon doesn't auto-run init scripts the way the local `docker-compose` Postgres
+container does (see `docker-compose.yml` — it mounts `packages/database/migrations`
+as `/docker-entrypoint-initdb.d`, which only fires on a fresh local container).
+Against the real database, run all four manually, in order, using the connection
+string Vercel/Neon shows you (or `vercel env pull` to get it locally first):
 
 ```
 psql "$DATABASE_URL" -f packages/database/migrations/001_platform.sql

@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Download, LoaderCircle, ShieldCheck } from "lucide-react";
 import { calculateRoi, plans } from "@vowhumans/commercial-core";
 
@@ -35,9 +35,8 @@ const authCopy: Record<"signin"|"signup",{title:string;summary:string;button:str
   signup:{title:"Register for VowHumans",summary:"Create a real GoalVow Platform account. Email verification isn't connected yet, so use a password you don't reuse elsewhere.",button:"Register"},
 };
 
-function AuthFormInner({kind}:{kind:"signin"|"signup"}) {
+export function AuthForm({kind}:{kind:"signin"|"signup"}) {
   const router=useRouter();
-  const searchParams=useSearchParams();
   const [state,setState]=useState<"idle"|"sending"|"error">("idle");
   const [message,setMessage]=useState("");
   const content=authCopy[kind];
@@ -48,15 +47,15 @@ function AuthFormInner({kind}:{kind:"signin"|"signup"}) {
       const response=await fetch(`/api/v1/auth/${kind==="signin"?"login":"register"}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
       const result=await response.json() as {message?:string;data?:{redirect?:string}};
       if(!response.ok) throw new Error(result.message??"That didn't work. Try again.");
-      router.push(searchParams.get("next") ?? result.data?.redirect ?? "/studio");
+      // Read "next" directly at submit time rather than via useSearchParams(), which
+      // would force this whole page out of static rendering (Suspense boundary renders
+      // a blank fallback in the prerendered HTML until client JS hydrates).
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.push(next ?? result.data?.redirect ?? "/studio");
       router.refresh();
     } catch(error){ setState("error"); setMessage(error instanceof Error?error.message:"That didn't work. Try again."); }
   }
   return <div className="lead-layout"><section><p className="commercial-kicker"><span/>ACCOUNT</p><h1>{content.title}</h1><p>{content.summary}</p><div className="form-proof"><ShieldCheck size={20}/><span><b>Passwords are never stored in plain text</b><small>Hashed with a unique random salt per account.</small></span></div></section><form className="commercial-form" onSubmit={submit}><label>Work email<input required type="email" name="email" autoComplete="email" placeholder="name@company.com"/></label>{kind==="signup"?<><label>Full name<input required name="name" autoComplete="name" minLength={2}/></label><label>Workspace name<input required name="organisation" autoComplete="organization" minLength={2}/></label></>:null}<label>Password<input required name="password" type="password" autoComplete={kind==="signin"?"current-password":"new-password"} minLength={8}/></label>{kind==="signup"?<label className="check-label"><input required type="checkbox" name="terms" value="accepted"/><span>I agree to the Terms of Service and Privacy Policy.</span></label>:null}<button className="public-button" disabled={state==="sending"}>{state==="sending"?<LoaderCircle className="spin" size={16}/>:null}{content.button}</button>{message?<p role="status" className={`form-status ${state}`}>{message}</p>:null}{kind==="signin"?<Link href="/sign-up">New here? Register <ArrowRight size={14}/></Link>:<Link href="/sign-in">Already have an account? Sign in <ArrowRight size={14}/></Link>}</form></div>;
-}
-
-export function AuthForm({kind}:{kind:"signin"|"signup"}) {
-  return <Suspense fallback={null}><AuthFormInner kind={kind}/></Suspense>;
 }
 
 function currency(value:number){return new Intl.NumberFormat("en-ZA",{style:"currency",currency:"ZAR",maximumFractionDigits:0}).format(value)}
