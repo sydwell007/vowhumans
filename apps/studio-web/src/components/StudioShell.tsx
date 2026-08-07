@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, Menu, Plus, Search, X } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Plus, Search, X } from "lucide-react";
 import { useState } from "react";
 import { navigation, pageMeta } from "@/data/platform";
+import { useAuth } from "./AuthContext";
 
 const navItems = navigation.flatMap((group) => group.items);
 
+function greetingForHour(hour: number) {
+  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
+
 export function StudioShell({ section, children }: { section: string; children: React.ReactNode }) {
   const router = useRouter();
+  const user = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [notificationsRead, setNotificationsRead] = useState(false);
   const meta = pageMeta[section];
   const results = query.trim()
     ? navItems.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())).slice(0, 5)
@@ -27,6 +34,18 @@ export function StudioShell({ section, children }: { section: string; children: 
     };
     setNotice(outcome[section] ?? `${meta.action} opened in safe draft mode.`);
     window.setTimeout(() => setNotice(null), 4200);
+  }
+
+  function openNotifications() {
+    setNotificationsRead(true);
+    setNotice("2 identities expire in 45 days · disclosure checks are passing.");
+    window.setTimeout(() => setNotice(null), 4200);
+  }
+
+  async function logout() {
+    await fetch("/api/v1/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    router.push("/");
+    router.refresh();
   }
 
   return (
@@ -81,9 +100,9 @@ export function StudioShell({ section, children }: { section: string; children: 
         </div>
 
         <div className="sidebar-profile">
-          <span className="avatar-initials">NM</span>
-          <div><strong>Naledi M.</strong><small>Platform owner</small></div>
-          <span className="more-dots">•••</span>
+          <span className="avatar-initials">{user.displayName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>
+          <div><strong>{user.displayName}</strong><small>{user.organisationName}</small></div>
+          <button className="icon-button" aria-label="Log out" onClick={logout}><LogOut size={16} /></button>
         </div>
       </aside>
 
@@ -119,15 +138,15 @@ export function StudioShell({ section, children }: { section: string; children: 
           </div>
           <div className="topbar-actions">
             <span className="ai-disclosure-chip"><i /> AI systems disclosed</span>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={19} /><b>2</b></button>
+            <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && <b>2</b>}</button>
           </div>
         </header>
 
         <div className="page-wrap">
           <section className="page-heading">
             <div>
-              <p className="eyebrow">{meta.eyebrow}</p>
-              <h1>{meta.title}</h1>
+              <p className="eyebrow">{section === "dashboard" ? new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" }) : meta.eyebrow}</p>
+              <h1>{section === "dashboard" ? `${greetingForHour(new Date().getHours())}, ${user.displayName.split(" ")[0]}` : meta.title}</h1>
               <p className="page-description">{meta.description}</p>
             </div>
             <button className="primary-button" onClick={quickAction}><Plus size={18} />{meta.action}</button>

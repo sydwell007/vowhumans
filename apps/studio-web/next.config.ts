@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { loadEnvConfig } from "@next/env";
+
+// .env.local etc. live at the monorepo root, not in this app's own directory — Next.js
+// only auto-loads env files from its own directory by default, so load the root's
+// explicitly. This mutates process.env once at server startup; every subsequent
+// request handler in this process sees the values via the normal process.env global.
+loadEnvConfig(path.resolve(__dirname, "../.."));
 
 const nextConfig: NextConfig = {
   // Vercel packages the Next.js output itself; standalone is for our Docker image.

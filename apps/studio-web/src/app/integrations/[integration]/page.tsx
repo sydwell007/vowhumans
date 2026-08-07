@@ -1,2 +1,4 @@
-import { notFound } from "next/navigation"; import { IntegrationDetail } from "@/components/CommercialPages"; import { integrations } from "@/data/commercial";
+import type { Metadata } from "next"; import { notFound } from "next/navigation"; import { IntegrationDetail } from "@/components/CommercialPages"; import { integrations } from "@/data/commercial";
+export async function generateStaticParams(){return integrations.map(integration=>({integration:integration.slug}))}
+export async function generateMetadata({params}:{params:Promise<{integration:string}>}):Promise<Metadata>{const {integration:slug}=await params;const item=integrations.find(i=>i.slug===slug);if(!item)return {};return {title:`${item.name} integration`,description:item.scope}}
 export default async function Page({params}:{params:Promise<{integration:string}>}){const {integration}=await params;if(!integrations.some(item=>item.slug===integration))notFound();return <IntegrationDetail slug={integration}/>}

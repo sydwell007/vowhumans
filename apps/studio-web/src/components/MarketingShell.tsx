@@ -36,7 +36,7 @@ export function MarketingShell({ children, tone = "light" }: { children: React.R
         <div><strong>Build</strong><Link href="/developers">Developers</Link><Link href="/api-reference">API reference</Link><Link href="/sdks">SDKs</Link><Link href="/templates">Templates</Link><Link href="/integrations">Integrations</Link></div>
         <div><strong>Company</strong><Link href="/about">About</Link><Link href="/customers">Customers</Link><Link href="/partners">Partners</Link><Link href="/investors">Investors</Link><Link href="/contact">Contact</Link></div>
         <div><strong>Trust</strong><Link href="/security">Security</Link><Link href="/trust">Trust Centre</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/terms">Terms</Link><Link href="/legal/responsible-ai">Responsible AI</Link></div>
-        <div className="footer-bottom"><span>© 2026 VowHumans · A GoalVow platform</span><span>South Africa · Global-ready architecture</span><span>vowhumans.com DNS configuration pending</span></div>
+        <div className="footer-bottom"><span>© 2026 VowHumans · A GoalVow platform</span><span>South Africa · Global-ready architecture</span><Link href="/status">System status</Link></div>
       </footer>
     </div>
   );

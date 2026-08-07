@@ -1,2 +1,4 @@
-import { notFound } from "next/navigation"; import { CourseDetail } from "@/components/CommercialPages"; import { academyCourses } from "@/data/commercial";
+import type { Metadata } from "next"; import { notFound } from "next/navigation"; import { CourseDetail } from "@/components/CommercialPages"; import { academyCourses } from "@/data/commercial";
+export async function generateStaticParams(){return academyCourses.map(course=>({course:course.slug}))}
+export async function generateMetadata({params}:{params:Promise<{course:string}>}):Promise<Metadata>{const {course:slug}=await params;const item=academyCourses.find(c=>c.slug===slug);if(!item)return {};return {title:item.name,description:`${item.level} · ${item.lessons} lesson Academy course`}}
 export default async function Page({params}:{params:Promise<{course:string}>}){const {course}=await params;if(!academyCourses.some(item=>item.slug===course))notFound();return <CourseDetail slug={course}/>}
