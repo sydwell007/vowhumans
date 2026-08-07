@@ -15,12 +15,21 @@ if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
   }
 }
 
-// Vercel Postgres injects POSTGRES_URL; local/dev uses DATABASE_URL (see docker-compose.yml).
-// Deliberately not validated here: this module is imported by route/layout modules that
-// Next.js evaluates during build-time page-data collection, even for routes that never
-// run at build time. postgres.js connects lazily, so an empty/missing string only
-// surfaces as a real error the first time a query actually runs (i.e. at request time).
-const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? "";
+// local/dev uses DATABASE_URL (see docker-compose.yml). Production's actual variable name
+// has moved around a few times while getting the Neon integration wired up in the Vercel
+// dashboard, so check every name it's realistically ended up under rather than requiring
+// one more manual rename in the dashboard. Deliberately not validated here: this module is
+// imported by route/layout modules that Next.js evaluates during build-time page-data
+// collection, even for routes that never run at build time. postgres.js connects lazily,
+// so an empty/missing string only surfaces as a real error the first time a query runs
+// (i.e. at request time).
+const connectionString =
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.DATABASE_POSTGRES_URL ??
+  process.env.database_POSTGRES_URL ??
+  process.env.database_POSTGRES_URL_NO_SSL ??
+  "";
 
 // A fresh module-scope singleton per server instance. max:1 matches postgres.js's own
 // guidance for serverless environments, where each invocation should hold at most one
