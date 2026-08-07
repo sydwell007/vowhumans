@@ -30,6 +30,12 @@ const sql = postgres(connectionString, {
   idle_timeout: 20,
   connect_timeout: 10,
   ssl: connectionString.includes("localhost") ? false : "require",
+  // Neon's connection string (and most managed Postgres in front of PgBouncer-style
+  // transaction pooling) doesn't reliably support server-side prepared statements across
+  // requests — a later query can land on a different pooled backend than the one that
+  // prepared it. postgres.js defaults to using them; disable explicitly. Harmless locally
+  // too (docker-compose is a direct connection with no pooler).
+  prepare: false,
 });
 
 export default sql;
