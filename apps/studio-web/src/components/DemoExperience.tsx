@@ -5,10 +5,11 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, AudioLines, BookOpenText, Check, CircleAlert, FileText, GraduationCap, Mic, MicOff, Play, Send, ShieldCheck, Sparkles, Video, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { humans } from "@/data/platform";
+import { BrandLogo } from "./BrandLogo";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 
 function DemoHeader({ active }: { active: string }) {
-  return <header className="demo-header"><Link href="/" className="demo-brand"><span className="brand-mark"><i/><i/><i/></span><span><strong>Vow</strong>Humans<small>Experience Lab</small></span></Link><nav>{['interview','tutor','presenter'].map(item=><Link key={item} className={active===item?'active':''} href={`/demos/${item}`}>{item[0].toUpperCase()+item.slice(1)}</Link>)}</nav><span className="ai-disclosure-chip"><i/>AI experience disclosed</span></header>;
+  return <header className="demo-header"><Link href="/" className="demo-brand" aria-label="VowHumans home"><BrandLogo variant="lockup" /></Link><nav>{['interview','tutor','presenter'].map(item=><Link key={item} className={active===item?'active':''} href={`/demos/${item}`}>{item[0].toUpperCase()+item.slice(1)}</Link>)}</nav><span className="ai-disclosure-chip"><i/>AI experience disclosed</span></header>;
 }
 
 function InterviewDemo() {

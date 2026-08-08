@@ -6,6 +6,7 @@ import { Bell, ChevronDown, LogOut, Menu, Plus, Search, X } from "lucide-react";
 import { useState } from "react";
 import { navigation, pageMeta } from "@/data/platform";
 import { useAuth } from "./AuthContext";
+import { BrandLogo } from "./BrandLogo";
 
 const navItems = navigation.flatMap((group) => group.items);
 
@@ -53,8 +54,7 @@ export function StudioShell({ section, children }: { section: string; children: 
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <Link href="/studio" className="brand" onClick={() => setMobileOpen(false)}>
-            <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-            <span><strong>Vow</strong>Humans<small>Digital Human Platform</small></span>
+            <BrandLogo variant="lockup" priority />
           </Link>
           <button className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={19} /></button>
         </div>

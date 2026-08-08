@@ -25,8 +25,8 @@ export function MarketingHome() {
       <section className="commercial-hero">
         <div className="commercial-hero-copy">
           <p className="commercial-kicker"><span /> AI DIGITAL WORKFORCE PLATFORM</p>
-          <h1>Build your AI<br /><em>digital workforce.</em></h1>
-          <p>Create secure, branded digital employees that teach, interview, sell, guide and support people across websites, applications and enterprise systems.</p>
+          <h1>Human presence.<br /><em>AI intelligence.</em></h1>
+          <p>Build a secure, branded AI digital workforce that teaches, interviews, sells, guides and supports people across websites, applications and enterprise systems.</p>
           <div className="commercial-actions"><Link href="/sign-up" className="public-button">Start building <ArrowRight size={17} /></Link><Link href="/book-demo" className="public-button ghost">Book an enterprise demo</Link></div>
           <Link href="/demos/interview" className="overview-link"><span><Play size={16} fill="currentColor" /></span> Watch the platform overview <ArrowRight size={14} /></Link>
           <div className="hero-proof"><span><Check size={14} /> Safe sandbox included</span><span><Check size={14} /> No card for evaluation</span><span><Check size={14} /> POPIA-aware foundations</span></div>
