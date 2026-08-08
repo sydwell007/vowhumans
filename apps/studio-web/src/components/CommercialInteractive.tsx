@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Download, LoaderCircle, ShieldCheck } from "lucide-react";
 import { calculateRoi, plans } from "@vowhumans/commercial-core";
 
@@ -36,7 +35,6 @@ const authCopy: Record<"signin"|"signup",{title:string;summary:string;button:str
 };
 
 export function AuthForm({kind}:{kind:"signin"|"signup"}) {
-  const router=useRouter();
   const [state,setState]=useState<"idle"|"sending"|"error">("idle");
   const [message,setMessage]=useState("");
   const content=authCopy[kind];
@@ -51,8 +49,12 @@ export function AuthForm({kind}:{kind:"signin"|"signup"}) {
       // would force this whole page out of static rendering (Suspense boundary renders
       // a blank fallback in the prerendered HTML until client JS hydrates).
       const next = new URLSearchParams(window.location.search).get("next");
-      router.push(next ?? result.data?.redirect ?? "/studio");
-      router.refresh();
+      // A hard navigation, not router.push(): this just set an httpOnly session cookie
+      // via Set-Cookie, and a client-side soft navigation can land on a stale cached
+      // response for the destination (e.g. a cached sign-in redirect from before this
+      // user had a session) rather than re-checking auth server-side. A full page load
+      // guarantees the new cookie is sent and the destination is evaluated fresh.
+      window.location.href = next ?? result.data?.redirect ?? "/studio";
     } catch(error){ setState("error"); setMessage(error instanceof Error?error.message:"That didn't work. Try again."); }
   }
   return <div className="lead-layout"><section><p className="commercial-kicker"><span/>ACCOUNT</p><h1>{content.title}</h1><p>{content.summary}</p><div className="form-proof"><ShieldCheck size={20}/><span><b>Passwords are never stored in plain text</b><small>Hashed with a unique random salt per account.</small></span></div></section><form className="commercial-form" onSubmit={submit}><label>Work email<input required type="email" name="email" autoComplete="email" placeholder="name@company.com"/></label>{kind==="signup"?<><label>Full name<input required name="name" autoComplete="name" minLength={2}/></label><label>Workspace name<input required name="organisation" autoComplete="organization" minLength={2}/></label></>:null}<label>Password<input required name="password" type="password" autoComplete={kind==="signin"?"current-password":"new-password"} minLength={8}/></label>{kind==="signup"?<label className="check-label"><input required type="checkbox" name="terms" value="accepted"/><span>I agree to the Terms of Service and Privacy Policy.</span></label>:null}<button className="public-button" disabled={state==="sending"}>{state==="sending"?<LoaderCircle className="spin" size={16}/>:null}{content.button}</button>{message?<p role="status" className={`form-status ${state}`}>{message}</p>:null}{kind==="signin"?<Link href="/sign-up">New here? Register <ArrowRight size={14}/></Link>:<Link href="/sign-in">Already have an account? Sign in <ArrowRight size={14}/></Link>}</form></div>;
