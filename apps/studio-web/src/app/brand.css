@@ -110,7 +110,7 @@ p { text-wrap: pretty; }
   object-fit: contain;
 }
 
-.brand-logo-lockup { width: 150px; }
+.brand-logo-lockup { width: 220px; }
 .brand-logo-mark { width: 62px; }
 
 /* Global public shell and navigation */
@@ -130,7 +130,7 @@ p { text-wrap: pretty; }
   top: 0;
   z-index: 100;
   display: grid;
-  grid-template-columns: 174px minmax(0, 1fr) auto;
+  grid-template-columns: 224px minmax(0, 1fr) auto;
   align-items: center;
   gap: clamp(20px, 3vw, 44px);
   min-height: 96px;
@@ -149,7 +149,7 @@ p { text-wrap: pretty; }
 }
 
 .public-header > .public-brand { height: 94px; }
-.public-header > .public-brand .brand-logo { width: 142px; }
+.public-header > .public-brand .brand-logo { width: 210px; }
 
 .public-nav {
   position: static;
@@ -892,8 +892,8 @@ p { text-wrap: pretty; }
   background: #03050f;
   color: var(--vh-text);
 }
-.footer-lead .public-brand { margin: -24px 0 -12px; }
-.footer-lead .brand-logo { width: 210px; }
+.footer-lead .public-brand { margin: 0 0 18px; }
+.footer-lead .brand-logo { width: 280px; }
 .public-footer strong { color: var(--vh-text); font-size: 11px; }
 .public-footer a,
 .footer-lead > p { color: var(--vh-text-muted); font-size: 11px; line-height: 1.7; }
@@ -916,8 +916,8 @@ p { text-wrap: pretty; }
 }
 .brand-row { min-height: 112px; padding: 4px 20px 2px; border-bottom: 1px solid var(--vh-border); }
 .brand { display: inline-flex; height: 100px; align-items: center; }
-.brand .brand-logo { width: 140px; }
-.demo-brand .brand-logo { width: 130px; }
+.brand .brand-logo { width: 220px; }
+.demo-brand .brand-logo { width: 200px; }
 .environment-card { border-color: var(--vh-border); background: rgba(148, 163, 184, 0.045); }
 .environment-card strong { color: var(--vh-text-secondary); font-size: 11px; }
 .environment-card small { color: var(--vh-text-muted); }
@@ -983,7 +983,7 @@ p { text-wrap: pretty; }
 .portal-nav .public-brand,
 .admin-frame .public-brand { min-height: 88px; }
 .portal-nav .brand-logo,
-.admin-frame .brand-logo { width: 132px; }
+.admin-frame .brand-logo { width: 208px; }
 .portal-nav nav a,
 .admin-frame aside nav a { color: var(--vh-text-muted); font-size: 10px; }
 .portal-nav nav a:hover,
@@ -1406,8 +1406,8 @@ body {
 .admin-frame :where(p, li, dd) { color: var(--vh-text-secondary); }
 
 @media (max-width: 1280px) {
-  .public-header { grid-template-columns: 156px minmax(0, 1fr) auto; gap: 12px; padding-inline: 24px; }
-  .public-header > .public-brand .brand-logo { width: 132px; }
+  .public-header { grid-template-columns: 194px minmax(0, 1fr) auto; gap: 12px; padding-inline: 24px; }
+  .public-header > .public-brand .brand-logo { width: 184px; }
   .nav-group-menu > button,
   .public-nav > a { padding-inline: 8px; font-size: 12px; }
   .commercial-hero { grid-template-columns: 0.9fr 1.1fr; padding-inline: 4vw; }
@@ -1502,7 +1502,7 @@ body {
 @media (max-width: 560px) {
   .public-header { min-height: 80px; padding-inline: 16px; }
   .public-header > .public-brand { height: 78px; }
-  .public-header > .public-brand .brand-logo { width: 118px; }
+  .public-header > .public-brand .brand-logo { width: 174px; }
   .mobile-navigation { inset-block-start: 80px; padding-inline: 16px; }
   .commercial-hero,
   .commercial-section,
@@ -1534,7 +1534,7 @@ body {
   .investor-evidence { margin-top: 48px; padding: 25px; }
   .public-footer { grid-template-columns: 1fr; padding: 58px 20px 22px; }
   .footer-lead { grid-column: auto; }
-  .footer-lead .brand-logo { width: 190px; }
+  .footer-lead .brand-logo { width: 250px; }
   .mobile-navigation-actions { grid-template-columns: 1fr; }
   .lead-page { padding-inline: 17px; }
 }

@@ -7,7 +7,7 @@ type BrandLogoProps = {
 };
 
 const assets = {
-  lockup: { src: "/brand/vowhumans-lockup.png", width: 885, height: 615 },
+  lockup: { src: "/brand/vowhumans-horizontal-lockup.png", width: 1394, height: 386 },
   mark: { src: "/brand/vowhumans-mark.png", width: 550, height: 457 },
 } as const;
 
@@ -22,9 +22,8 @@ export function BrandLogo({ variant = "lockup", priority = false, className = ""
         width={asset.width}
         height={asset.height}
         priority={priority}
-        sizes={variant === "lockup" ? "(max-width: 640px) 128px, 164px" : "72px"}
+        sizes={variant === "lockup" ? "(max-width: 640px) 174px, 220px" : "72px"}
       />
     </span>
   );
 }
-
