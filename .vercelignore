@@ -1,3 +1,13 @@
+# Local-only build artifacts. Harmless to omit under normal git-based deploys (these are
+# already gitignored, so git-based deploys never see them) but required for `vercel deploy`
+# run directly from a local checkout, which uploads the raw filesystem rather than the git
+# tree and would otherwise sweep in every node_modules/.next across the whole monorepo.
+node_modules
+.next
+.turbo
+coverage
+dist
+
 # Backend source and operator-only deployment artifacts must never be served by Vercel.
 /public/php
 /public/sql
