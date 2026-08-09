@@ -23,6 +23,8 @@ function InterviewDemo() {
   const [liveStatus,setLiveStatus]=useState<LiveVoiceRoomStatus|null>(null);
   async function startLiveSession(){
     setStage('live');
+    setLiveRoom(null);
+    setLiveStatus(null);
     try{
       const sessionRes=await fetch('/api/v1/sessions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({digital_human_id:human.id,mode,job_context:context,transcript_consent:consent,recording_consent:consent})});
       const sessionBody=await sessionRes.json().catch(()=>null);

@@ -107,6 +107,15 @@ export const applications = [
   { name: "VowRewards", code: "VR", colour: "coral", humans: 0, sessions: "—", status: "Planned" },
 ];
 
+export const identityRecords = [
+  { owner: "GoalVow original placeholder", identity: "Thandi Mokoena", scope: "PlugConnect practice", expiry: "31 Dec 2027", status: "Approved" },
+  { owner: "GoalVow original placeholder", identity: "Sipho Daniels", scope: "PlugConnect practice", expiry: "31 Dec 2027", status: "Approved" },
+  { owner: "GoalVow synthetic asset", identity: "GoalVow Tutor", scope: "Academies · VowLMS", expiry: "No actor likeness", status: "Approved" },
+  { owner: "Awaiting owner verification", identity: "Custom presenter 04", scope: "Not assigned", expiry: "—", status: "Blocked" },
+] as const;
+
+export const identityAlertCount = identityRecords.filter((record) => record.status === "Blocked").length;
+
 export const personas = [
   { name: "Professional Practice Interviewer", role: "Talent Partner", version: "v3", state: "Published", updated: "2 Aug 2026" },
   { name: "GoalVow Course Tutor", role: "Course Facilitator", version: "v5", state: "Published", updated: "1 Aug 2026" },
@@ -151,7 +160,7 @@ export const navigation = [
 ];
 
 export const pageMeta: Record<string, { eyebrow: string; title: string; description: string; action: string }> = {
-  dashboard: { eyebrow: "Monday, 3 August", title: "Good evening, Naledi", description: "Here’s what your digital humans are doing across GoalVow today.", action: "Create digital human" },
+  dashboard: { eyebrow: "", title: "", description: "Here’s what your digital humans are doing across GoalVow today.", action: "Create digital human" },
   "digital-humans": { eyebrow: "Identity + voice + Persona", title: "Digital Humans", description: "Manage every disclosed AI representative and the applications they can serve.", action: "New digital human" },
   personas: { eyebrow: "Behaviour layer", title: "Personas", description: "Design roles, guardrails, objectives, knowledge and conversation style with immutable published versions.", action: "New Persona" },
   knowledge: { eyebrow: "Retrieval with citations", title: "Knowledge", description: "Control the approved sources that ground tutors, interviewers and advisers.", action: "Add source" },

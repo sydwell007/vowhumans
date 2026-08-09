@@ -36,7 +36,7 @@
   --navy: var(--vh-midnight-2);
   --coral: var(--vh-blue);
   --cyan: var(--vh-cyan);
-  --lime: var(--vh-cyan);
+  --lime: var(--vh-success);
   --violet: var(--vh-violet);
   --amber: var(--vh-warning);
   --danger: var(--vh-danger);
@@ -46,7 +46,7 @@
   --vh-cream: var(--vh-midnight-2);
   --vh-paper: var(--vh-surface);
   --vh-coral: var(--vh-blue);
-  --vh-lime: var(--vh-cyan);
+  --vh-lime: var(--vh-success);
   --vh-ink: var(--vh-text);
   --vh-muted: var(--vh-text-muted);
   --vh-line: var(--vh-border);
@@ -75,7 +75,7 @@ h3,
 .commercial-site h1,
 .commercial-site h2,
 .commercial-site h3 {
-  font-family: "Aptos Display", "Segoe UI Variable Display", Inter, "Segoe UI", sans-serif;
+  font-family: "Aptos Display", "Segoe UI Variable Display", Inter, "Segoe UI", sans-serif !important;
   text-wrap: balance;
 }
 
@@ -957,7 +957,7 @@ p { text-wrap: pretty; }
 .notification-button b { border-color: var(--vh-midnight); background: var(--vh-spectrum); }
 .page-wrap { max-width: 1500px; padding: 38px 38px 76px; }
 .eyebrow { color: var(--vh-cyan); }
-.page-heading h1 { color: var(--vh-text); font-family: inherit; font-size: clamp(34px, 3.7vw, 52px); font-weight: 700; }
+.page-heading h1 { color: var(--vh-text); font-family: "Aptos Display", "Segoe UI Variable Display", Inter, "Segoe UI", sans-serif; font-size: clamp(34px, 3.7vw, 52px); font-weight: 700; }
 .page-description { color: var(--vh-text-muted); font-size: 13px; }
 .studio-data-notice { border-color: rgba(0, 217, 255, 0.15); background: rgba(0, 217, 255, 0.05); color: var(--vh-text-secondary); }
 
@@ -967,7 +967,7 @@ p { text-wrap: pretty; }
   color: var(--vh-text);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
-.studio-shell :where(.panel-title h2, .metric-card strong, .human-card h3, .application-card h3, .dashboard-hero h2, .safety-hero h2) { color: var(--vh-text); font-family: inherit; }
+.studio-shell :where(.panel-title h2, .metric-card strong, .human-card-head h2, .application-head h2, .dashboard-hero h2, .safety-hero h2) { color: var(--vh-text); font-family: inherit; }
 .studio-shell :where(.panel p, .metric-card small, .human-card p, .human-meta, .table-row, .activity-row, .application-card p, .truth-card p, .cost-row, .webhook-row, .readiness-list, .requirement-list) { color: var(--vh-text-muted); }
 .studio-shell :where(input, textarea, select) { border-color: var(--vh-border); background: var(--vh-midnight-2); color: var(--vh-text); }
 .studio-shell :where(.secondary-button, .plain-button) { border-color: var(--vh-border); background: var(--vh-surface-raised); color: var(--vh-text-secondary); }
@@ -1638,6 +1638,69 @@ body {
 .studio-shell .filter-note svg {
   color: var(--vh-cyan) !important;
 }
+
+/* Toast: readable badge regardless of --lime/--cyan aliasing. */
+.toast > span {
+  background: var(--vh-success) !important;
+  color: var(--vh-midnight) !important;
+}
+
+/* secondary-button/plain-button: the light-theme hover rule (white background)
+   still wins on specificity, leaving near-white text on a near-white hover
+   background. Restore contrast for every state, including hover. */
+.studio-shell .secondary-button,
+.studio-shell .plain-button {
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .secondary-button:hover,
+.studio-shell .plain-button:hover {
+  background: var(--vh-surface-hover) !important;
+  color: var(--vh-text) !important;
+}
+
+.studio-shell .metric-card strong {
+  color: var(--vh-text) !important;
+  font-family: "Aptos Display", "Segoe UI Variable Display", Inter, sans-serif !important;
+}
+
+/* Light-theme pastel icon badges, still on their original backgrounds and
+   never migrated to the dark, tinted-glass badge treatment used elsewhere
+   (e.g. .asset-intro > span, .consent-banner > span). */
+.studio-shell :is(.empty-icon, .primer-icon, .persona-glyph, .audit-icon, .source-cell > i, .integration-principle > span) {
+  background: rgba(0, 217, 255, 0.14) !important;
+  color: var(--vh-cyan) !important;
+}
+
+.studio-shell .review-visual {
+  background: rgba(37, 99, 255, 0.16) !important;
+  color: var(--vh-blue) !important;
+}
+
+.studio-shell .governance-card > span {
+  background: rgba(251, 191, 36, 0.16) !important;
+  color: var(--vh-warning) !important;
+}
+
+.studio-shell .governance-card.safe > span {
+  background: rgba(52, 211, 153, 0.16) !important;
+  color: var(--vh-success) !important;
+}
+
+.studio-shell .metric-icon,
+.studio-shell .app-logo {
+  background: rgba(0, 217, 255, 0.14) !important;
+  color: var(--vh-cyan) !important;
+}
+.studio-shell .metric-icon.coral,
+.studio-shell .app-logo.coral { background: rgba(37, 99, 255, 0.16) !important; color: var(--vh-blue) !important; }
+.studio-shell .metric-icon.lime,
+.studio-shell .app-logo.lime { background: rgba(52, 211, 153, 0.16) !important; color: var(--vh-success) !important; }
+.studio-shell .metric-icon.violet,
+.studio-shell .app-logo.violet { background: rgba(124, 58, 237, 0.16) !important; color: var(--vh-violet) !important; }
+.studio-shell .metric-icon.amber,
+.studio-shell .app-logo.amber { background: rgba(251, 191, 36, 0.16) !important; color: var(--vh-warning) !important; }
 
 .studio-shell .status-pill.good,
 .studio-shell .status-pill:not(.warn, .muted, .danger) {

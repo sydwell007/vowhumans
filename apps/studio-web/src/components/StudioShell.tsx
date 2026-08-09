@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu, Plus, Search, X } from "lucide-react";
-import { useState } from "react";
-import { navigation, pageMeta } from "@/data/platform";
+import { useEffect, useRef, useState } from "react";
+import { identityAlertCount, navigation, pageMeta } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { BrandLogo } from "./BrandLogo";
 
@@ -21,10 +21,22 @@ export function StudioShell({ section, children }: { section: string; children: 
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationsRead, setNotificationsRead] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const meta = pageMeta[section];
   const results = query.trim()
     ? navItems.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())).slice(0, 5)
     : [];
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   function quickAction() {
     const outcome: Record<string, string> = {
@@ -32,6 +44,11 @@ export function StudioShell({ section, children }: { section: string; children: 
       "identity-consent": "Identity registration opened in draft mode; publication remains blocked.",
       "presenter-studio": "A new presenter project draft is ready below.",
       "api-keys": "Key creation is ready; production keys are displayed once and stored hashed.",
+      "live-sessions": "A disclosed mock test session is starting; no real microphone or provider is used.",
+      usage: "A usage report draft was generated from the illustrative data shown below; no live provider invoice is connected.",
+      "audit-logs": "An audit export draft was generated from the visible event history below.",
+      safety: "This concern has been recorded locally for review; nothing was sent to a live system.",
+      settings: "Your changes are saved locally to this preview session only.",
     };
     setNotice(outcome[section] ?? `${meta.action} opened in safe draft mode.`);
     window.setTimeout(() => setNotice(null), 4200);
@@ -39,7 +56,7 @@ export function StudioShell({ section, children }: { section: string; children: 
 
   function openNotifications() {
     setNotificationsRead(true);
-    setNotice("2 identities expire in 45 days · disclosure checks are passing.");
+    setNotice(`${identityAlertCount} ${identityAlertCount === 1 ? "identity is" : "identities are"} awaiting owner verification · disclosure checks are passing.`);
     window.setTimeout(() => setNotice(null), 4200);
   }
 
@@ -81,7 +98,7 @@ export function StudioShell({ section, children }: { section: string; children: 
                     onClick={() => setMobileOpen(false)}
                   >
                     <Icon size={18} strokeWidth={1.8} /><span>{item.label}</span>
-                    {item.label === "Identity & Consent" && <b className="nav-count">2</b>}
+                    {item.label === "Identity & Consent" && identityAlertCount > 0 && <b className="nav-count">{identityAlertCount}</b>}
                   </Link>
                 );
               })}
@@ -114,6 +131,7 @@ export function StudioShell({ section, children }: { section: string; children: 
           <div className="search-wrap">
             <Search size={18} />
             <input
+              ref={searchInputRef}
               aria-label="Search Studio"
               placeholder="Search Studio…"
               value={query}
@@ -138,7 +156,7 @@ export function StudioShell({ section, children }: { section: string; children: 
           </div>
           <div className="topbar-actions">
             <span className="ai-disclosure-chip"><i /> AI systems disclosed</span>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && <b>2</b>}</button>
+            <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && identityAlertCount > 0 && <b>{identityAlertCount}</b>}</button>
           </div>
         </header>
 
