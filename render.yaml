@@ -10,6 +10,11 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/v1/health
     envVars:
+      # Render defaults to the newest Python (3.14 as of writing), which is too new for
+      # pydantic-core's prebuilt wheels — pip falls back to a source build via maturin
+      # and fails. Pin to a version with known-good prebuilt wheels.
+      - key: PYTHON_VERSION
+        value: 3.12.7
       - key: VOWHUMANS_ALLOWED_ORIGIN
         value: https://vowhumans.com
       - key: LIVEKIT_URL
@@ -32,6 +37,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python livekit_agent.py start
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
