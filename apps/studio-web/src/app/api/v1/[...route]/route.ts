@@ -8,6 +8,10 @@ import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLoc
 
 const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
+// Gives proxyToGateway's 40s upstream timeout room to actually complete instead of
+// Vercel's own function timeout cutting it off first (Hobby default is 10s).
+export const maxDuration = 45;
+
 function response(data: unknown, status = 200) {
   return NextResponse.json({ success: true, data, meta: { mode: "development-mock", request_id: randomUUID() } }, { status, headers: { "x-vowhumans-mode": "development-mock" } });
 }
@@ -40,7 +44,10 @@ async function proxyToGateway(path: string, body: unknown): Promise<{ status: nu
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey, "x-organisation-id": PUBLIC_DEMO_ORGANISATION_ID },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(6000),
+      // The gateway can run on a free instance that spins down after inactivity and
+      // takes up to ~50s to wake on the next request — a short timeout here would
+      // misreport a slow-but-working gateway as unreachable and fall back to mock mode.
+      signal: AbortSignal.timeout(40000),
     });
     const data = await upstream.json().catch(() => null);
     if (!upstream.ok || data === null) return null;
