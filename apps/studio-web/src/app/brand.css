@@ -1551,6 +1551,340 @@ body {
 .studio-shell .button-light,
 .studio-shell .button-ghost { font-size: 13px; }
 
+/* Studio visual-integrity layer: supersedes the original light-theme component rules. */
+.studio-shell .search-wrap input::placeholder {
+  color: var(--vh-text-muted) !important;
+  opacity: 1;
+}
+
+.studio-shell .form-grid :is(input, textarea, select),
+.studio-shell .script-field textarea,
+.studio-shell .console-controls textarea {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-midnight-2) !important;
+  color: var(--vh-text) !important;
+  caret-color: var(--vh-cyan);
+  -webkit-text-fill-color: var(--vh-text);
+}
+
+.studio-shell .form-grid :is(input, textarea):read-only {
+  background: rgba(11, 23, 43, 0.78) !important;
+  color: var(--vh-text-secondary) !important;
+  -webkit-text-fill-color: var(--vh-text-secondary);
+}
+
+.studio-shell :is(input, textarea, select):focus {
+  border-color: var(--vh-cyan) !important;
+  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.13) !important;
+}
+
+.studio-shell select option {
+  background: var(--vh-midnight-2);
+  color: var(--vh-text);
+}
+
+.studio-shell .segmented {
+  border-color: var(--vh-border) !important;
+  background: rgba(11, 23, 43, 0.82) !important;
+}
+
+.studio-shell .segmented button,
+.studio-shell .settings-nav button {
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .segmented button:hover,
+.studio-shell .settings-nav button:hover {
+  background: var(--vh-surface-hover) !important;
+  color: var(--vh-text) !important;
+}
+
+.studio-shell .segmented button.selected,
+.studio-shell .settings-nav button.selected {
+  border-color: rgba(0, 217, 255, 0.18) !important;
+  background: linear-gradient(120deg, rgba(37, 99, 255, 0.2), rgba(124, 58, 237, 0.14)) !important;
+  color: var(--vh-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 217, 255, 0.08) !important;
+}
+
+.studio-shell .persona-list > button:hover,
+.studio-shell .persona-list > button.selected {
+  border-color: var(--vh-border-strong) !important;
+  background: var(--vh-surface-hover) !important;
+}
+
+.studio-shell .persona-list > button :is(strong, small),
+.studio-shell .human-meta span,
+.studio-shell .filter-note,
+.studio-shell :is(.readiness-list, .health-grid) > div > span,
+.studio-shell .safety-checklist > div:not(.panel-title) > span,
+.studio-shell .settings-switches > div > span,
+.studio-shell .requirement-list > div,
+.studio-shell .safety-control-grid > article > strong {
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell :is(.readiness-list, .health-grid) > div,
+.studio-shell .safety-checklist > div:not(.panel-title),
+.studio-shell .settings-switches > div,
+.studio-shell .human-meta,
+.studio-shell .table-row,
+.studio-shell .asset-detail {
+  border-color: var(--vh-border) !important;
+}
+
+.studio-shell .human-meta svg,
+.studio-shell .safety-checklist svg,
+.studio-shell .filter-note svg {
+  color: var(--vh-cyan) !important;
+}
+
+.studio-shell .status-pill.good,
+.studio-shell .status-pill:not(.warn, .muted, .danger) {
+  border: 1px solid rgba(52, 211, 153, 0.18) !important;
+  background: rgba(52, 211, 153, 0.1) !important;
+  color: #a7f3d0 !important;
+}
+
+.studio-shell .status-pill.warn {
+  border: 1px solid rgba(251, 191, 36, 0.22) !important;
+  background: rgba(251, 191, 36, 0.11) !important;
+  color: #fde68a !important;
+}
+
+.studio-shell .status-pill.muted {
+  border: 1px solid var(--vh-border) !important;
+  background: rgba(148, 163, 184, 0.08) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .status-pill.danger {
+  border: 1px solid rgba(251, 113, 133, 0.22) !important;
+  background: rgba(251, 113, 133, 0.1) !important;
+  color: #fecdd3 !important;
+}
+
+.studio-shell .status-pill.good i,
+.studio-shell .status-pill:not(.warn, .muted, .danger) i { background: var(--vh-success) !important; }
+.studio-shell .status-pill.warn i { background: var(--vh-warning) !important; }
+.studio-shell .status-pill.muted i { background: var(--vh-text-muted) !important; }
+.studio-shell .status-pill.danger i { background: var(--vh-danger) !important; }
+
+.studio-shell .guardrail-tags span {
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  background: rgba(52, 211, 153, 0.08) !important;
+  color: #b7f7d9 !important;
+}
+
+.studio-shell .immutable-note {
+  border: 1px solid var(--vh-border);
+  background: rgba(148, 163, 184, 0.07) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .immutable-note svg { color: #a78bfa !important; }
+
+.studio-shell .console-chat {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-midnight-2) !important;
+}
+
+.studio-shell .chat-message p {
+  border: 1px solid var(--vh-border);
+  background: var(--vh-surface) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .chat-message.user p {
+  border-color: rgba(37, 99, 255, 0.28);
+  background: rgba(37, 99, 255, 0.14) !important;
+  color: var(--vh-text) !important;
+}
+.studio-shell .chat-message.user > span {
+  background: var(--vh-blue) !important;
+  color: #fff !important;
+}
+
+.studio-shell .format-picker button {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .format-picker button:hover {
+  border-color: var(--vh-border-strong) !important;
+  background: var(--vh-surface-hover) !important;
+  color: var(--vh-text) !important;
+}
+
+.studio-shell .format-picker button.selected {
+  border-color: var(--vh-cyan) !important;
+  background: linear-gradient(120deg, rgba(37, 99, 255, 0.24), rgba(124, 58, 237, 0.18)) !important;
+  color: var(--vh-text) !important;
+}
+
+.studio-shell .pipeline-strip > div {
+  color: var(--vh-text-muted) !important;
+}
+
+.studio-shell .pipeline-strip > div::after { background: var(--vh-border) !important; }
+.studio-shell .pipeline-strip span {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .pipeline-strip .active span {
+  border-color: var(--vh-cyan) !important;
+  background: var(--vh-spectrum) !important;
+  color: #fff !important;
+}
+
+.studio-shell .preview-meta > div {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface) !important;
+}
+.studio-shell .preview-meta span { color: var(--vh-text-muted) !important; }
+.studio-shell .preview-meta strong { color: var(--vh-text) !important; }
+
+.studio-shell .requirement-list > div {
+  border: 1px solid var(--vh-border);
+  background: var(--vh-surface-raised) !important;
+}
+.studio-shell .requirement-list > div > span {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .requirement-list > div.done {
+  border-color: rgba(52, 211, 153, 0.2);
+  background: rgba(52, 211, 153, 0.08) !important;
+  color: #b7f7d9 !important;
+}
+.studio-shell .requirement-list > div.done > span {
+  background: rgba(52, 211, 153, 0.16) !important;
+  color: #a7f3d0 !important;
+}
+
+.studio-shell .governance-card.safe {
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  background: rgba(52, 211, 153, 0.07) !important;
+}
+.studio-shell .governance-card.safe strong { color: #d1fae5 !important; }
+.studio-shell .governance-card.safe p { color: #b7dbc9 !important; }
+.studio-shell .governance-card a { color: #67e8f9 !important; }
+
+.studio-shell .layer-flow :is(span, strong) {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .layer-flow strong {
+  border-color: rgba(0, 217, 255, 0.24) !important;
+  color: var(--vh-cyan) !important;
+}
+.studio-shell .layer-flow i { color: var(--vh-text-muted) !important; }
+
+.studio-shell :is(.table-tools button, .table-action, .audit-toolbar button, .asset-detail button) {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell :is(.table-tools button, .table-action, .audit-toolbar button, .asset-detail button):hover {
+  border-color: var(--vh-border-strong) !important;
+  background: var(--vh-surface-hover) !important;
+  color: var(--vh-text) !important;
+}
+.studio-shell .table-row code { color: #8fe7f4 !important; }
+.studio-shell .new-row { background: rgba(251, 191, 36, 0.06) !important; }
+
+.studio-shell .session-overview > div { border-color: var(--vh-border) !important; }
+.studio-shell .panel-note {
+  border: 1px solid rgba(251, 191, 36, 0.2) !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+  color: #fde68a !important;
+}
+.studio-shell .review-warning {
+  border: 1px solid rgba(251, 113, 133, 0.2);
+  background: rgba(251, 113, 133, 0.08) !important;
+  color: #fecdd3 !important;
+}
+.studio-shell .truth-card { color: #fde68a !important; }
+.studio-shell .prohibited-grid span {
+  border: 1px solid rgba(251, 113, 133, 0.17);
+  background: rgba(251, 113, 133, 0.08) !important;
+  color: #fecdd3 !important;
+}
+
+.studio-shell .data-table {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overscroll-behavior-inline: contain;
+}
+
+.studio-shell .webhook-row > div { min-width: 0; }
+.studio-shell .webhook-row code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
+@media (max-width: 620px) {
+  .studio-shell .health-grid { grid-template-columns: 1fr; }
+
+  .studio-shell .webhook-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .studio-shell .webhook-row > .status-pill { grid-column: 2; }
+  .studio-shell .webhook-row > .icon-button { grid-column: 3; grid-row: 1; }
+
+  .studio-shell .data-table { overflow: visible; }
+  .studio-shell .table-row.table-head { display: none; }
+  .studio-shell .table-row:not(.table-head) {
+    min-width: 0 !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 15px;
+    border: 1px solid var(--vh-border) !important;
+    border-radius: 12px;
+    background: rgba(11, 23, 43, 0.55);
+  }
+  .studio-shell .table-row:not(.table-head) > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .studio-shell .table-row:not(.table-head) > span:first-child { grid-column: 1 / -1; }
+  .studio-shell .table-row:not(.table-head) > span:not(:first-child)::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--vh-cyan);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .studio-shell .knowledge-table .table-row > span:nth-child(2)::before { content: "Scope"; }
+  .studio-shell .knowledge-table .table-row > span:nth-child(3)::before { content: "Chunks"; }
+  .studio-shell .knowledge-table .table-row > span:nth-child(4)::before { content: "Status"; }
+  .studio-shell .knowledge-table .table-row > span:nth-child(5)::before { content: "Updated"; }
+  .studio-shell .consent-table .table-row > span:nth-child(2)::before { content: "Owner"; }
+  .studio-shell .consent-table .table-row > span:nth-child(3)::before { content: "Permitted scope"; }
+  .studio-shell .consent-table .table-row > span:nth-child(4)::before { content: "Expiry"; }
+  .studio-shell .consent-table .table-row > span:nth-child(5)::before { content: "Status"; }
+  .studio-shell .sessions-table .table-row > span:nth-child(2)::before { content: "Application"; }
+  .studio-shell .sessions-table .table-row > span:nth-child(3)::before { content: "Ownership"; }
+  .studio-shell .sessions-table .table-row > span:nth-child(4)::before { content: "State"; }
+  .studio-shell .sessions-table .table-row > span:nth-child(5)::before { content: "Duration"; }
+  .studio-shell .sessions-table .table-row > span:nth-child(6)::before { content: "Mode"; }
+  .studio-shell .keys-table .table-row > span:nth-child(2)::before { content: "Prefix"; }
+  .studio-shell .keys-table .table-row > span:nth-child(3)::before { content: "Scopes"; }
+  .studio-shell .keys-table .table-row > span:nth-child(4)::before { content: "Last used"; }
+  .studio-shell .keys-table .table-row > span:nth-child(5)::before { content: "Status"; }
+}
+
 /* Premium legal-document layout */
 .legal-page-shell {
   padding: 76px max(32px, calc((100vw - var(--vh-content)) / 2)) 104px;

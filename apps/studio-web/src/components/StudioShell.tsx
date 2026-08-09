@@ -53,7 +53,7 @@ export function StudioShell({ section, children }: { section: string; children: 
     <div className="studio-shell">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
-          <Link href="/studio" className="brand" onClick={() => setMobileOpen(false)}>
+          <Link href="/studio" className="brand" aria-label="VowHumans Studio home" onClick={() => setMobileOpen(false)}>
             <BrandLogo variant="lockup" priority />
           </Link>
           <button className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={19} /></button>
