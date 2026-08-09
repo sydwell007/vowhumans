@@ -1401,6 +1401,58 @@ body {
 .tutor-input input { background: transparent; color: var(--vh-text); font-size: 14px; }
 .input-note { color: var(--vh-text-muted); font-size: 11px; }
 
+/* Interview demo: live room panel, mic toggle and completion screen never
+   migrated off the original white card — text with no explicit color
+   inherited the dark theme's near-white body color and became invisible. */
+.room-panel {
+  background: var(--vh-surface);
+  border-left: 1px solid var(--vh-border);
+}
+.room-panel h2 { color: var(--vh-text); }
+.room-panel > div:first-child > p:not(.eyebrow) { color: var(--vh-text-muted); }
+.mock-transcript b { color: var(--vh-cyan); }
+.mock-transcript p { background: var(--vh-midnight-2); color: var(--vh-text-secondary); }
+.mock-transcript .candidate p { background: rgba(124, 58, 237, 0.13); }
+.room-controls > button:first-child {
+  border-color: var(--vh-border);
+  background: var(--vh-surface-raised);
+  color: var(--vh-text-secondary);
+}
+.room-controls > button:first-child:hover {
+  border-color: var(--vh-border-strong);
+  color: var(--vh-text);
+}
+.room-controls > button:first-child.muted {
+  border-color: rgba(251, 113, 133, 0.35);
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--vh-danger);
+}
+
+.complete-card {
+  border-color: var(--vh-border);
+  background: var(--vh-surface);
+  color: var(--vh-text);
+  box-shadow: var(--vh-shadow-card);
+}
+.complete-card > p:not(.eyebrow) { color: var(--vh-text-muted); }
+.complete-icon { background: rgba(52, 211, 153, 0.16); color: var(--vh-success); }
+.feedback-grid > div { background: var(--vh-surface-raised); }
+.feedback-grid span { color: var(--vh-cyan); }
+.feedback-grid p { color: var(--vh-text-muted); }
+
+/* Presenter demo: the avatar picker was never migrated either. */
+.presenter-picker button {
+  border-color: var(--vh-border);
+  background: var(--vh-midnight-2);
+}
+.presenter-picker button.selected {
+  border-color: var(--vh-cyan);
+  background: rgba(37, 99, 255, 0.16);
+}
+.presenter-picker b { color: var(--vh-text); }
+.presenter-picker small { color: var(--vh-text-muted); }
+.render-truth { background: rgba(251, 191, 36, 0.1) !important; border-color: rgba(251, 191, 36, 0.22) !important; color: var(--vh-warning) !important; }
+
 .studio-shell :where(p, li, dd),
 .portal-frame :where(p, li, dd),
 .admin-frame :where(p, li, dd) { color: var(--vh-text-secondary); }
