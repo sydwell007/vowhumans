@@ -1,0 +1,46 @@
+services:
+  # Issues session records and signed LiveKit room tokens for the Next.js app.
+  # Stateless HTTP service — the free web tier is fine for this.
+  - type: web
+    name: vowhumans-api-gateway
+    runtime: python
+    rootDir: services/api-gateway
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: VOWHUMANS_ALLOWED_ORIGIN
+        value: https://vowhumans.com
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # Must be the exact same value already set as VOWHUMANS_SERVICE_API_KEY in Vercel.
+      - key: VOWHUMANS_SERVICE_API_KEY
+        sync: false
+
+  # The actual voice AI: stays connected to LiveKit and joins a room whenever a
+  # session is created. Must run continuously — needs a paid worker plan, not free.
+  - type: worker
+    name: vowhumans-realtime-agent
+    runtime: python
+    rootDir: services/realtime-agent
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python livekit_agent.py start
+    envVars:
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: ENABLE_OPENAI_REALTIME
+        value: "true"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_REALTIME_MODEL
+        value: gpt-realtime

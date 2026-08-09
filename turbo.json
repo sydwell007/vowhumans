@@ -32,6 +32,7 @@
         "VAT_RATE",
         "MARKETPLACE_COMMISSION_RATE",
         "EMAIL_*",
+        "RESEND_API_KEY",
         "SUPPORT_EMAIL",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "SENTRY_DSN",
