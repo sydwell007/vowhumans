@@ -29,11 +29,14 @@ services:
 
   # The actual voice AI: stays connected to LiveKit and joins a room whenever a
   # session is created. Must run continuously — needs a paid worker plan, not free.
+  # Starter's 512MB RAM is not enough: livekit-agents + the openai plugin + av +
+  # inference warmup routinely exceed it, crashing the worker every few minutes
+  # (confirmed via repeated "Ran out of memory (used over 512MB)" events on Render).
   - type: worker
     name: vowhumans-realtime-agent
     runtime: python
     rootDir: services/realtime-agent
-    plan: starter
+    plan: standard
     buildCommand: pip install -r requirements.txt
     startCommand: python livekit_agent.py start
     envVars:
