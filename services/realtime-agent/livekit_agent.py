@@ -22,7 +22,7 @@ async def entrypoint(ctx: JobContext):
     persona_instructions = "Stay within the configured Persona scope, keep answers concise, and preserve user privacy."
     if os.getenv("ENABLE_OPENAI_REALTIME","false").lower() != "true":
         raise RuntimeError("Realtime provider disabled; use the Studio mock flow")
-    session = AgentSession(llm=openai.realtime.RealtimeModel(model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"), voice="alloy"))
+    session = AgentSession(llm=openai.realtime.RealtimeModel(model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"), voice=os.getenv("OPENAI_REALTIME_VOICE", "marin")))
     await session.start(room=ctx.room, agent=VowHumansAgent(persona_instructions))
     await session.generate_reply(instructions="Disclose that you are AI, then deliver the approved opening message.")
 

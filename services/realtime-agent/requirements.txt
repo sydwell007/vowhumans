@@ -1,5 +1,5 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-livekit-agents==1.2.6
-livekit-plugins-openai==1.2.6
+livekit-agents~=1.6
+livekit-plugins-openai~=1.6
 
