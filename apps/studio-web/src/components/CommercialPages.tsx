@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CircleAlert, LockKeyhole, Search, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpenText, CalendarDays, CircleAlert, FileCheck2, LockKeyhole, Scale, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { ANNUAL_DISCOUNT_RATE } from "@vowhumans/commercial-core";
 import { academyCourses, customerStories, industries, integrations, legalDocuments, products, publicPages, templates } from "@/data/commercial";
 import { humans } from "@/data/platform";
@@ -89,6 +89,144 @@ export function CourseDetail({slug}:{slug:string}){const course=academyCourses.f
 
 export function DeveloperPortalPage({section="developers"}:{section?:string}){const samples={typescript:`const client = new VowHumans({ apiKey: process.env.VOWHUMANS_API_KEY! });\nawait client.sessions.create({ digitalHumanId, mode: "static-portrait" });`,python:`client = VowHumans(api_key=os.environ["VOWHUMANS_API_KEY"])\nsession = client.create_interview_session(payload)`,php:`$client = new VowHumansClient(getenv('VOWHUMANS_API_KEY'));\n$session = $client->post('/api/v1/sessions', $payload);`,curl:`curl -X POST https://api.vowhumans.com/api/v1/sessions \\\n  -H "Authorization: Bearer $VOWHUMANS_API_KEY"`};return <MarketingShell><Hero eyebrow="VOWHUMANS CONNECT" title={section==='status'?'Platform and provider status':'APIs that preserve the boundary.'} summary="Versioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration."/><section className="commercial-page-body dev-layout"><aside className="dev-nav"><Link href="/developers">Quick start</Link><Link href="/api-reference">API reference</Link><Link href="/sdks">SDKs</Link><Link href="/webhooks">Webhooks</Link><Link href="/status">Status</Link></aside><div className="detail-content"><article className="content-card"><span className="commercial-status">SANDBOX READY</span><h2>{section.replaceAll('-',' ')}</h2><p>Use server-side credentials only. The browser receives short-lived, scoped session tokens from a trusted backend.</p></article><div className="code-sample-grid">{Object.entries(samples).map(([language,code])=><article key={language}><span>{language.toUpperCase()}</span><pre><code>{code}</code></pre></article>)}</div><article className="content-card"><h2>API surface</h2><p>Auth, organisations, workspaces, users, digital humans, identities, consent, voices, Personas, knowledge, sessions, LiveKit tokens, presenter projects, renders, applications, integrations, templates, marketplace, webhooks, usage, billing, analytics and health.</p><Link href="/api/openapi">Open development specification <ArrowRight size={14}/></Link></article></div></section></MarketingShell>}
 
-export function LegalPage({slug}:{slug:string}){if(!legalDocuments.includes(slug as typeof legalDocuments[number]))return null;const title=slug.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join(' ');return <MarketingShell><Hero eyebrow="LEGAL DOCUMENT PLACEHOLDER" title={title} summary="Version 0.1 · Draft for legal review · Not formal legal advice" actions={false} crumbs={[{label:"Legal"},{label:title}]}/><section className="commercial-page-body legal-copy"><div className="pricing-note"><CircleAlert size={18}/><p><b>Legal review required.</b> This document structure is provided for counsel and must not be treated as approved terms until publication status changes.</p></div><h2>Purpose and scope</h2><p>This placeholder identifies the topics VowHumans expects the final document to govern, including account use, digital-human disclosure, customer content, service providers, security, privacy and acceptable operation.</p><h2>Platform responsibilities</h2><p>VowHumans will describe active controls accurately and distinguish service foundations, external provider dependencies, compliance readiness and certified status.</p><h2>Customer responsibilities</h2><p>Customers must use authorised identities and content, obtain required consent, protect credentials, follow prohibited-use controls and configure appropriate human escalation.</p><h2>Change history</h2><p>Draft v0.1 created 5 August 2026. No acceptance is requested while the document remains in legal-review status.</p></section></MarketingShell>}
+type LegalDocumentSection = {
+  id: string;
+  title: string;
+  copy: string;
+  points?: string[];
+};
+
+type LegalDocumentProfile = {
+  eyebrow: string;
+  summary: string;
+  introduction: string;
+  sections: LegalDocumentSection[];
+};
+
+const legalProfiles: Partial<Record<(typeof legalDocuments)[number], LegalDocumentProfile>> = {
+  privacy: {
+    eyebrow: "PRIVACY & DATA GOVERNANCE",
+    summary: "A draft framework for how VowHumans handles personal information, organisation data and disclosed digital-human activity.",
+    introduction: "This document is being structured to explain what information the platform expects to process, why it is needed, how it is protected and which choices remain with customers and individuals.",
+    sections: [
+      { id: "scope", title: "Scope and application", copy: "The final notice will identify the VowHumans services, websites, Studio workspaces, customer portals and support interactions covered by the privacy framework." },
+      { id: "information", title: "Information handled", copy: "The platform architecture separates account and organisation information from customer-provided content, identity permissions, consent records, usage events and security metadata.", points: ["Account, organisation and workspace details", "Customer-provided knowledge and configuration", "Identity, face and voice permission records", "Usage, audit, security and support events"] },
+      { id: "purpose", title: "Purpose and controlled use", copy: "Information should be used only for defined platform operations, security, support, legal obligations and customer-authorised digital-human experiences. New purposes require review and appropriate notice." },
+      { id: "providers", title: "Service providers and transfers", copy: "The approved document will list relevant provider categories, processing locations and safeguards. No provider or cross-border readiness claim should be published before configuration and counsel review." },
+      { id: "retention", title: "Retention and security", copy: "Retention periods, deletion workflows, access controls and incident processes must be documented against the production systems actually enabled for each organisation." },
+      { id: "rights", title: "Individual rights and contact", copy: "The final notice will explain how people can request access, correction, deletion or restriction where applicable, and how privacy questions or complaints are escalated." },
+    ],
+  },
+  terms: {
+    eyebrow: "PLATFORM TERMS",
+    summary: "A draft commercial framework for responsible access to VowHumans products, Studio workspaces and digital-human services.",
+    introduction: "These terms are being organised to make authority, acceptable operation, customer content, service dependencies and account responsibilities understandable before acceptance is requested.",
+    sections: [
+      { id: "agreement", title: "Agreement and service scope", copy: "The approved terms will identify the contracting entity, eligible services, incorporated policies, order documents and the date on which an agreement becomes effective." },
+      { id: "accounts", title: "Accounts and authority", copy: "Organisations are responsible for authorised users, accurate workspace information, role assignment, credential security and activity performed through their accounts." },
+      { id: "acceptable-use", title: "Permitted and prohibited use", copy: "Customers may use VowHumans only for lawful, disclosed and appropriately supervised experiences.", points: ["No hidden AI or covert recording", "No unauthorised face or voice cloning", "No impersonation, fraud or deceptive identity use", "No unsupported regulated or harmful decision-making"] },
+      { id: "content", title: "Customer content and permissions", copy: "Customers must hold the rights and permissions required for source media, knowledge, scripts, brands and personal information they submit or connect to the platform." },
+      { id: "availability", title: "Availability and external dependencies", copy: "Realtime, media, storage, payment and AI-provider capabilities depend on separately configured services. Draft or preview status must not be represented as a production service commitment." },
+      { id: "suspension", title: "Suspension, termination and export", copy: "The final terms will define proportionate suspension grounds, termination rights, data export windows, retained records and obligations that continue after access ends." },
+    ],
+  },
+  "responsible-ai": {
+    eyebrow: "RESPONSIBLE AI",
+    summary: "A draft governance standard for transparent, consent-based and human-accountable digital-human experiences.",
+    introduction: "This framework is designed to make AI disclosure, identity provenance, consent, knowledge boundaries, escalation and prohibited capabilities visible throughout the product lifecycle.",
+    sections: [
+      { id: "principles", title: "Governance principles", copy: "VowHumans experiences should be purpose-bound, proportionate, reviewable and designed around a named human or organisational owner." },
+      { id: "disclosure", title: "Disclosure and human agency", copy: "People should know when they are interacting with an AI system, understand its role and retain a clear route to stop, leave or reach a human where the context requires it." },
+      { id: "identity", title: "Identity and voice consent", copy: "Faces, voices and source media require documented authority, defined uses, expiry and revocation. Fictional or synthetic identities must not be represented as real people." },
+      { id: "prohibited", title: "Prohibited capabilities", copy: "Product and customer controls should prevent deceptive or unsafe uses.", points: ["Public-figure or unauthorised impersonation", "Appearance-based employment scoring", "Face-based emotion or honesty detection", "Hidden recording or undisclosed transcript capture", "Medical diagnosis or unsupported professional claims"] },
+      { id: "data", title: "Data and knowledge boundaries", copy: "Digital employees should use approved, access-controlled knowledge; distinguish evidence from uncertainty; and avoid exposing private organisation or individual information." },
+      { id: "oversight", title: "Oversight, testing and incidents", copy: "Owners should test behaviour before publication, monitor outcomes, preserve relevant audit events, support abuse reporting and suspend unsafe experiences while incidents are reviewed." },
+    ],
+  },
+};
+
+function defaultLegalProfile(title: string): LegalDocumentProfile {
+  return {
+    eyebrow: "LEGAL & GOVERNANCE",
+    summary: `A structured draft for the VowHumans ${title.toLowerCase()} framework, pending specialist legal review and publication approval.`,
+    introduction: "This document structure identifies the operational topics expected in the final policy while clearly separating platform foundations from approved legal commitments.",
+    sections: [
+      { id: "scope", title: "Purpose and scope", copy: "The approved document will define who and what it covers, when it applies and how it interacts with customer agreements and other VowHumans policies." },
+      { id: "platform", title: "Platform responsibilities", copy: "VowHumans will describe active controls accurately and distinguish working foundations, external provider dependencies, readiness activity and independently certified status." },
+      { id: "customer", title: "Customer responsibilities", copy: "Customers must use authorised identities and content, obtain required consent, protect credentials, follow prohibited-use controls and configure suitable human escalation." },
+      { id: "operation", title: "Operational controls", copy: "The final document will identify applicable access, security, retention, reporting and audit processes against the production services that are actually enabled." },
+      { id: "changes", title: "Changes and contact", copy: "Publication, material changes, effective dates and contact routes will be recorded here after legal and operational approval." },
+    ],
+  };
+}
+
+export function LegalPage({ slug }: { slug: string }) {
+  if (!legalDocuments.includes(slug as typeof legalDocuments[number])) return null;
+  const title = slug.split("-").map((word) => word.toLowerCase() === "ai" ? "AI" : word[0].toUpperCase() + word.slice(1)).join(" ");
+  const profile = legalProfiles[slug as keyof typeof legalProfiles] ?? defaultLegalProfile(title);
+
+  return (
+    <MarketingShell>
+      <Hero eyebrow={profile.eyebrow} title={title} summary={profile.summary} actions={false} crumbs={[{ label: "Legal" }, { label: title }]} />
+      <section className="legal-page-shell">
+        <div className="legal-document-layout">
+          <aside className="legal-document-sidebar" aria-label={`${title} document navigation`}>
+            <div className="legal-status-card">
+              <span><FileCheck2 size={18} /> Document status</span>
+              <strong>Draft for counsel</strong>
+              <p>Not yet an approved policy or contractual commitment.</p>
+            </div>
+            <nav className="legal-toc" aria-label="On this page">
+              <span>ON THIS PAGE</span>
+              {profile.sections.map((section, index) => (
+                <a href={`#${section.id}`} key={section.id}><b>{String(index + 1).padStart(2, "0")}</b>{section.title}</a>
+              ))}
+            </nav>
+            <div className="legal-contact-card">
+              <Scale size={21} />
+              <strong>Need clarification?</strong>
+              <p>Direct legal, privacy and governance questions to the VowHumans review team.</p>
+              <Link href="/contact">Contact the team <ArrowRight size={14} /></Link>
+            </div>
+          </aside>
+
+          <article className="legal-document">
+            <header className="legal-document-header">
+              <span className="legal-document-label"><BookOpenText size={16} /> Controlled document</span>
+              <h2>Document overview</h2>
+              <p className="legal-document-lede">{profile.introduction}</p>
+              <dl className="legal-document-meta">
+                <div><dt>VERSION</dt><dd>0.2 draft</dd></div>
+                <div><dt>LAST STRUCTURED</dt><dd><CalendarDays size={14} /> 9 August 2026</dd></div>
+                <div><dt>OWNER</dt><dd>Legal & governance</dd></div>
+              </dl>
+            </header>
+
+            <div className="legal-review-notice" role="note">
+              <CircleAlert size={20} />
+              <p><b>Legal review required.</b> This structured draft supports counsel review and must not be treated as approved terms, a final privacy notice or formal legal advice until its publication status changes.</p>
+            </div>
+
+            <div className="legal-section-list">
+              {profile.sections.map((section, index) => (
+                <section className="legal-section" id={section.id} key={section.id}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <h2>{section.title}</h2>
+                  <p>{section.copy}</p>
+                  {section.points ? <ul>{section.points.map((point) => <li key={point}><ShieldCheck size={16} />{point}</li>)}</ul> : null}
+                </section>
+              ))}
+            </div>
+
+            <footer className="legal-document-footer">
+              <div><strong>Change history</strong><p>Draft v0.2 restructured on 9 August 2026 for clearer review and navigation. Acceptance is not requested while review status remains active.</p></div>
+              <Link href="/trust">Visit Trust Centre <ArrowRight size={14} /></Link>
+            </footer>
+          </article>
+        </div>
+      </section>
+    </MarketingShell>
+  );
+}
 
 export function SearchPage({query}:{query:string}){const q=query.trim().toLowerCase();const items=[...products.map(item=>({title:item.name,copy:item.summary,href:`/products/${item.slug}`,type:'Product'})),...industries.map(item=>({title:item.name,copy:item.headline,href:`/industries/${item.slug}`,type:'Industry'})),...templates.map(item=>({title:item.name,copy:item.description,href:`/templates/${item.slug}`,type:'Template'})),...academyCourses.map(item=>({title:item.name,copy:`${item.level} Academy course`,href:`/academy/courses/${item.slug}`,type:'Course'}))];const results=q?items.filter(item=>(item.title+' '+item.copy).toLowerCase().includes(q)):items.slice(0,8);return <MarketingShell><Hero eyebrow="PUBLIC SEARCH" title={q?`Results for “${query}”`:'Search VowHumans'} summary="Public results include products, industries, templates and Academy content only. Private organisation data never enters this index." actions={false}/><section className="commercial-page-body"><form action="/search" className="public-search"><Search size={18}/><input name="q" defaultValue={query} aria-label="Search public VowHumans content" placeholder="Search products, industries, templates…"/><button className="public-button">Search</button></form><div className="search-results-public">{results.map(item=><Link href={item.href} key={item.href}><span>{item.type}</span><h2>{item.title}</h2><p>{item.copy}</p><ArrowRight size={15}/></Link>)}{results.length===0?<div className="content-card"><h2>No public results</h2><p>Try a broader term. Private organisation and admin resources are intentionally excluded.</p></div>:null}</div></section></MarketingShell>}
