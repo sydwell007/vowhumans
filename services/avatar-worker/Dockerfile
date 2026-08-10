@@ -3,6 +3,11 @@
 # loads several GB of model weights into GPU memory once at startup and stays
 # resident, which fits a long-running pod much better than a cold-started
 # serverless function.
+#
+# Model weights are NOT baked into this image (they're several GB and would make
+# the image slow to build and push). Instead entrypoint.sh downloads them once,
+# on first boot, into RunPod's persistent Network Volume (mounted at /workspace)
+# — every restart after that reuses the cached copy instead of re-downloading.
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -14,7 +19,9 @@ RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 WORKDIR /app
 
 # MuseTalk is a research repo, not a pip package — vendor it in and put it on
-# PYTHONPATH so musetalk_engine.py's `from musetalk...` imports resolve.
+# PYTHONPATH so musetalk_engine.py's `from musetalk...` imports resolve. Its
+# download_weights.sh (run at container startup, not build time — see entrypoint.sh)
+# needs to run from within this checkout.
 RUN git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk
 ENV PYTHONPATH=/opt/MuseTalk:$PYTHONPATH
 
@@ -26,17 +33,11 @@ RUN pip install --no-cache-dir -U openmim \
     && mim install "mmdet==3.1.0" \
     && mim install "mmpose==1.1.0"
 
-# Model weights (several GB) — MuseTalk's own download script. Baking this into
-# the image means a large image but an instant-ready container; if the RunPod
-# build times out on this, switch to downloading at first boot into a RunPod
-# Network Volume instead so it only happens once across restarts.
-RUN cd /opt/MuseTalk && bash download_weights.sh
-ENV MUSETALK_MODELS_DIR=/opt/MuseTalk/models
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py musetalk_engine.py .
+COPY main.py musetalk_engine.py entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./entrypoint.sh"]
