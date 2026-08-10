@@ -346,13 +346,250 @@ function Usage() {
   return <div className="content-stack"><section className="metric-grid">{[['Session minutes','0','Usage source not connected'],['Realtime audio','0 min','Provider disabled'],['Presenter jobs','0','Queue not connected'],['Estimated cost','R 0','No provider invoice source']].map(([label,value,note])=><article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>)}</section><section className="split-grid wide-left"><div className="panel usage-chart"><PanelTitle title="Sample session-volume shape" eyebrow="Illustrative data only" action={<button className="table-action" onClick={() => setGrainIndex((i) => (i + 1) % usageGrains.length)}>{grain.label} <ChevronRight size={14}/></button>}/><div className="chart-area"><div className="chart-y"><span>3k</span><span>2k</span><span>1k</span><span>0</span></div><div className="bars">{grain.bars.map((bar,index)=><div key={index}><i style={{height:`${bar}%`}}/><small>{grain.steps[index]}</small></div>)}</div></div></div><div className="panel provider-cost"><PanelTitle title="Provider cost categories" eyebrow="No live costs loaded"/>{[['Realtime voice','R 0','Not connected','coral'],['Transcription','R 0','Disabled','cyan'],['Language models','R 0','Disabled','lime'],['Storage + media','R 0','Not connected','violet']].map(([name,cost,share,tone])=><div className="cost-row" key={name}><i className={tone}/><span><b>{name}</b><small>{share}</small></span><strong>{cost}</strong></div>)}<div className="budget-meter"><span><i style={{width:'0%'}}/></span><small>No production budget source connected</small></div></div></section></div>;
 }
 
-function AssetLibrary({ type }: { type: 'faces' | 'gesture-profiles' }) {
-  const config = {
-    faces: { icon: Fingerprint, label: 'Face asset', summary: 'Provenance and consent remain separate', items: [['Thandi placeholder','GoalVow generated','PlugConnect','Approved'],['Sipho placeholder','GoalVow generated','PlugConnect','Approved'],['Tutor placeholder','GoalVow generated','Academies · VowLMS','Approved']] },
-    'gesture-profiles': { icon: Sparkles, label: 'Gesture profile', summary: 'Natural timing with conservative limits', items: [['Professional calm','Blink 4–7s','Head ±3°','Published'],['Tutor engaged','Blink 3–6s','Head ±4°','Published'],['Presenter neutral','Blink 4–8s','Head ±2°','Draft']] },
-  }[type];
-  const Icon=config.icon;
-  return <div className="content-stack"><section className="asset-intro"><span><Icon size={26}/></span><div><p className="eyebrow">Independent identity layer</p><h2>{config.label} library</h2><p>{config.summary}. Publication always checks current permissions and revocation status.</p></div></section><section className="asset-card-grid">{config.items.map(item=><article className="panel asset-card" key={item[0]}><div className="asset-card-top"><span className="empty-icon"><Icon size={21}/></span><StatusPill tone={item[3]==='Draft'?'warn':'good'}>{item[3]}</StatusPill></div><h2>{item[0]}</h2><p>{item[1]}</p><div className="asset-detail"><span>{item[2]}</span><IconMenuButton className="icon-button" label={item[0]} /></div></article>)}</section><section className="panel"><EmptyAction icon={type==='faces'?Fingerprint:Sparkles} title={`Create a ${config.label.toLowerCase()} draft`} copy="New assets stay unpublished until provider, provenance and consent checks pass." button="Create safe draft"/></section></div>;
+const GESTURE_FEATURE_DEFAULTS: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string }> = {
+  blinking: { label: 'Blinking', hasRange: true, defaultEnabled: true, defaultRange: '4–7s' },
+  head_tilt: { label: 'Head tilt', hasRange: true, defaultEnabled: true, defaultRange: '±3°' },
+  head_nod: { label: 'Head nod / shake', hasRange: true, defaultEnabled: true, defaultRange: '±4°' },
+  micro_expressions: { label: 'Micro-expressions', hasRange: false, defaultEnabled: true, defaultRange: '' },
+  gaze_shift: { label: 'Gaze shift', hasRange: false, defaultEnabled: true, defaultRange: '' },
+  breathing_sway: { label: 'Breathing / idle sway', hasRange: false, defaultEnabled: true, defaultRange: '' },
+  hand_gestures: { label: 'Hand gestures', hasRange: false, defaultEnabled: false, defaultRange: '' },
+};
+
+type FaceAsset = { id: string; media_type: string; detector_provider: string | null; preprocessing_state: string; state: string };
+type FaceAssignment = { human_slug: string; face_asset_id: string };
+
+function FaceLibrary() {
+  const [faces, setFaces] = useState<FaceAsset[]>([]);
+  const [assignments, setAssignments] = useState<FaceAssignment[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [addMode, setAddMode] = useState<'generate' | 'upload'>('generate');
+  const [prompt, setPrompt] = useState('');
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  async function refresh() {
+    const [facesRes, assignmentsRes] = await Promise.all([
+      fetch('/api/v1/faces').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/face-assignments').then(r => r.json()).catch(() => null),
+    ]);
+    if (facesRes?.success) setFaces(facesRes.data.items);
+    if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
+  useEffect(() => { refresh(); }, []);
+
+  async function assignFace(humanSlug: string, faceAssetId: string) {
+    setBusyId(faceAssetId);
+    await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, face_asset_id: faceAssetId || null }) }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function deleteFace(id: string) {
+    setBusyId(id);
+    await fetch(`/api/v1/faces/${id}`, { method: 'DELETE' }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function submitAdd(event: React.FormEvent) {
+    event.preventDefault();
+    setAdding(true);
+    setError(null);
+    try {
+      let res: Response;
+      if (addMode === 'upload') {
+        if (!addFile) { setError('Choose an image file to upload.'); setAdding(false); return; }
+        const form = new FormData();
+        form.set('file', addFile);
+        res = await fetch('/api/v1/faces', { method: 'POST', body: form });
+      } else {
+        if (!prompt.trim() || prompt.trim().length < 10) { setError('Describe the face you want generated (at least 10 characters).'); setAdding(false); return; }
+        res = await fetch('/api/v1/faces', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: prompt.trim() }) });
+      }
+      const responseBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(responseBody.message || 'Could not add this face.');
+      setPrompt(''); setAddFile(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add this face.');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  return (
+    <div className="content-stack">
+      <section className="asset-intro"><span><Fingerprint size={26} /></span><div><p className="eyebrow">Independent identity layer</p><h2>Face asset library</h2><p>Generate an original AI portrait or upload your own. Publication always checks current permissions and revocation status.</p></div></section>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && faces.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><Fingerprint size={24} /></span><p className="eyebrow">No face assets yet</p><h2>Add your first face</h2><p>Describe a fictional person for an AI-generated portrait, or upload your own image, using the form below.</p></section>
+      )}
+      <section className="asset-card-grid">
+        {faces.map((face) => {
+          const assigned = assignments.find((a) => a.face_asset_id === face.id);
+          return (
+            <article className="panel asset-card" key={face.id}>
+              <div className="asset-card-top">
+                <StatusPill tone={face.detector_provider === 'gpt-image-1' ? 'good' : 'muted'}>{face.detector_provider === 'gpt-image-1' ? 'AI-generated' : 'Uploaded'}</StatusPill>
+                <button className="icon-button" aria-label="Delete face asset" onClick={() => deleteFace(face.id)} disabled={busyId === face.id}><Trash2 size={16} /></button>
+              </div>
+              <div className="face-asset-preview"><Image src={`/api/v1/faces/${face.id}/image`} alt="" fill sizes="200px" unoptimized /></div>
+              <div className="asset-detail"><span>{face.media_type}</span></div>
+              <label className="full">Assign to digital human
+                <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignFace(slug, face.id); }} disabled={busyId === face.id}>
+                  <option value="">Not assigned</option>
+                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
+                </select>
+              </label>
+            </article>
+          );
+        })}
+      </section>
+      <section className="panel">
+        <PanelTitle title="Add a face asset" eyebrow="Generate or upload" />
+        <form className="form-grid two" onSubmit={submitAdd}>
+          <label>Source
+            <select value={addMode} onChange={(e) => setAddMode(e.target.value as 'generate' | 'upload')}>
+              <option value="generate">Generate with AI</option>
+              <option value="upload">Upload my own photo</option>
+            </select>
+          </label>
+          {addMode === 'generate' ? (
+            <label className="full">Describe the person<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Warm, professional South African woman in her 30s, business attire" /></label>
+          ) : (
+            <label className="full">Image file (max 8MB)<input type="file" accept="image/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} /></label>
+          )}
+          <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add face asset'}</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+type GestureProfile = { id: string; name: string; state: string; state_config: { features: Record<string, { enabled: boolean; range: string }> } };
+type GestureAssignment = { human_slug: string; gesture_profile_id: string };
+
+function GestureLibrary() {
+  const [profiles, setProfiles] = useState<GestureProfile[]>([]);
+  const [assignments, setAssignments] = useState<GestureAssignment[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [selectedFeatures, setSelectedFeatures] = useState<Record<string, { enabled: boolean; range: string }>>(() =>
+    Object.fromEntries(Object.entries(GESTURE_FEATURE_DEFAULTS).map(([key, def]) => [key, { enabled: def.defaultEnabled, range: def.defaultRange }]))
+  );
+  const [creating, setCreating] = useState(false);
+
+  async function refresh() {
+    const [profilesRes, assignmentsRes] = await Promise.all([
+      fetch('/api/v1/gesture-profiles').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/gesture-assignments').then(r => r.json()).catch(() => null),
+    ]);
+    if (profilesRes?.success) setProfiles(profilesRes.data.items);
+    if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
+  useEffect(() => { refresh(); }, []);
+
+  async function assignProfile(humanSlug: string, gestureProfileId: string) {
+    setBusyId(gestureProfileId);
+    await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, gesture_profile_id: gestureProfileId || null }) }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function deleteProfile(id: string) {
+    setBusyId(id);
+    await fetch(`/api/v1/gesture-profiles/${id}`, { method: 'DELETE' }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function submitCreate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) { setError('Give the gesture profile a name.'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/gesture-profiles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), features: selectedFeatures }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this gesture profile.');
+      setName('');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this gesture profile.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="content-stack">
+      <section className="asset-intro"><span><Sparkles size={26} /></span><div><p className="eyebrow">Motion with restraint</p><h2>Gesture profile library</h2><p>Choose which natural movements a digital human uses, and how pronounced each one is.</p></div></section>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && profiles.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><Sparkles size={24} /></span><p className="eyebrow">No gesture profiles yet</p><h2>Create your first profile</h2><p>Pick which movements to include using the form below — every feature is on by default except hand gestures.</p></section>
+      )}
+      <section className="asset-card-grid">
+        {profiles.map((profile) => {
+          const assigned = assignments.find((a) => a.gesture_profile_id === profile.id);
+          const enabledFeatures = Object.entries(profile.state_config?.features ?? {}).filter(([, v]) => v.enabled);
+          return (
+            <article className="panel asset-card" key={profile.id}>
+              <div className="asset-card-top">
+                <span className="empty-icon"><Sparkles size={21} /></span>
+                <button className="icon-button" aria-label="Delete gesture profile" onClick={() => deleteProfile(profile.id)} disabled={busyId === profile.id}><Trash2 size={16} /></button>
+              </div>
+              <h2>{profile.name}</h2>
+              <div className="layer-flow">
+                {enabledFeatures.map(([key, v]) => <span key={key}>{GESTURE_FEATURE_DEFAULTS[key]?.label ?? key}{v.range ? ` · ${v.range}` : ''}</span>)}
+              </div>
+              <label className="full">Assign to digital human
+                <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignProfile(slug, profile.id); }} disabled={busyId === profile.id}>
+                  <option value="">Not assigned</option>
+                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
+                </select>
+              </label>
+            </article>
+          );
+        })}
+      </section>
+      <section className="panel">
+        <PanelTitle title="Create a gesture profile" eyebrow="Toggle features and adjust ranges" />
+        <form className="form-grid two" onSubmit={submitCreate}>
+          <label className="full">Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Warm and attentive" /></label>
+          <div className="full settings-switches">
+            {Object.entries(GESTURE_FEATURE_DEFAULTS).map(([key, def]) => (
+              <div key={key}>
+                <span>
+                  <strong>{def.label}</strong>
+                  {def.hasRange && selectedFeatures[key]?.enabled && (
+                    <input
+                      className="gesture-range-input"
+                      value={selectedFeatures[key]?.range ?? ''}
+                      onChange={(e) => setSelectedFeatures((prev) => ({ ...prev, [key]: { ...prev[key], range: e.target.value } }))}
+                      placeholder={def.defaultRange}
+                    />
+                  )}
+                </span>
+                <button type="button" className="secondary-button" onClick={() => setSelectedFeatures((prev) => ({ ...prev, [key]: { ...prev[key], enabled: !prev[key]?.enabled } }))}>
+                  <StatusPill tone={selectedFeatures[key]?.enabled ? 'good' : 'muted'}>{selectedFeatures[key]?.enabled ? 'On' : 'Off'}</StatusPill>
+                </button>
+              </div>
+            ))}
+          </div>
+          <button className="primary-button" type="submit" disabled={creating}>{creating ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}{creating ? 'Creating…' : 'Create gesture profile'}</button>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 type Voice = { id: string; name: string; provider: 'openai' | 'custom'; provider_voice_id: string | null; language: string; is_custom: boolean; state: string };
@@ -558,8 +795,8 @@ export function StudioView({ section }: { section: string }) {
     case 'personas': return <Personas/>;
     case 'knowledge': return <Knowledge/>;
     case 'voices': return <VoiceLibrary/>;
-    case 'faces': return <AssetLibrary type="faces"/>;
-    case 'gesture-profiles': return <AssetLibrary type="gesture-profiles"/>;
+    case 'faces': return <FaceLibrary/>;
+    case 'gesture-profiles': return <GestureLibrary/>;
     case 'live-sessions': return <LiveSessions/>;
     case 'presenter-studio': return <PresenterStudio/>;
     case 'applications': return <Applications/>;

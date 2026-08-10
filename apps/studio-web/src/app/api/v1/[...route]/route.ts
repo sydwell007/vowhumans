@@ -6,10 +6,20 @@ import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
+
+const GESTURE_FEATURES: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string }> = {
+  blinking: { label: "Blinking", hasRange: true, defaultEnabled: true, defaultRange: "4–7s" },
+  head_tilt: { label: "Head tilt", hasRange: true, defaultEnabled: true, defaultRange: "±3°" },
+  head_nod: { label: "Head nod / shake", hasRange: true, defaultEnabled: true, defaultRange: "±4°" },
+  micro_expressions: { label: "Micro-expressions", hasRange: false, defaultEnabled: true, defaultRange: "" },
+  gaze_shift: { label: "Gaze shift", hasRange: false, defaultEnabled: true, defaultRange: "" },
+  breathing_sway: { label: "Breathing / idle sway", hasRange: false, defaultEnabled: true, defaultRange: "" },
+  hand_gestures: { label: "Hand gestures", hasRange: false, defaultEnabled: false, defaultRange: "" },
+};
 
 async function requireOrganisation(request: NextRequest): Promise<string | null> {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -138,6 +148,45 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     `;
     return response({ items: rows });
   }
+
+  if (resource === "faces" && route[1] && route[2] === "image") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [face] = await sql<{ object_key: string }[]>`SELECT object_key FROM face_assets WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!face) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const [blob] = await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${face.object_key} AND organisation_id = ${organisationId}`;
+    if (!blob) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return new NextResponse(new Uint8Array(blob.data), { headers: { "content-type": blob.mime_type, "cache-control": "private, max-age=3600" } });
+  }
+
+  if (resource === "faces" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT id, media_type, detector_provider, preprocessing_state, state, created_at FROM face_assets WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    return response({ items: rows });
+  }
+
+  if (resource === "face-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT human_slug, face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId}`;
+    return response({ items: rows });
+  }
+
+  if (resource === "gesture-profiles" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT id, name, state, state_config, created_at FROM gesture_profiles WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    const items = rows.map((row) => ({ ...row, state_config: typeof row.state_config === "string" ? JSON.parse(row.state_config) : row.state_config }));
+    return response({ items, available_features: GESTURE_FEATURES });
+  }
+
+  if (resource === "gesture-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT human_slug, gesture_profile_id FROM human_gesture_assignments WHERE organisation_id = ${organisationId}`;
+    return response({ items: rows });
+  }
   if (resource === "personas") return response({ items: personas });
   if (resource === "applications") return response({ items: applications });
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
@@ -178,6 +227,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       RETURNING id, name, provider, language, is_custom, state, created_at
     `;
     return NextResponse.json({ success: true, data: voiceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "faces" && !route[1] && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!(file instanceof Blob) || file.size === 0) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Choose an image file." }, { status: 422 });
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Image file must be 8MB or smaller." }, { status: 422 });
+    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const objectKey = `face-${randomUUID()}`;
+    const mimeType = file.type || "image/jpeg";
+    await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, ${mimeType}, ${bytes}, ${bytes.length})`;
+    const [faceRow] = await sql`
+      INSERT INTO face_assets (organisation_id, object_key, sha256, media_type, provenance, detector_provider, preprocessing_state, state)
+      VALUES (${organisationId}, ${objectKey}, ${createHash("sha256").update(bytes).digest("hex")}, ${mimeType}, ${JSON.stringify({ source: "upload" })}::jsonb, 'upload', 'ready', 'active')
+      RETURNING id, media_type, detector_provider, preprocessing_state, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: faceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -304,6 +376,93 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { human_slug: humanSlug, voice_id: voiceId }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  if (resource === "faces" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    if (!prompt || prompt.length < 10) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the face you want generated (at least 10 characters)." }, { status: 422 });
+    }
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "OpenAI is not configured." }, { status: 503 });
+    const disclosedPrompt = `Professional headshot portrait photo, original fictional person (not a real or public individual), ${prompt}. Neutral studio background, forward-facing, natural lighting, photorealistic.`;
+    const upstream = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: "gpt-image-1", prompt: disclosedPrompt, n: 1, size: "1024x1024", quality: "low" }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => "");
+      return NextResponse.json({ success: false, code: "GENERATION_FAILED", message: detail.slice(0, 300) || "Could not generate this face." }, { status: 502 });
+    }
+    const generated = await upstream.json() as { data?: { b64_json?: string }[] };
+    const b64 = generated.data?.[0]?.b64_json;
+    if (!b64) return NextResponse.json({ success: false, code: "GENERATION_FAILED", message: "The provider returned no image." }, { status: 502 });
+    const bytes = Buffer.from(b64, "base64");
+    const objectKey = `face-${randomUUID()}`;
+    await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, 'image/png', ${bytes}, ${bytes.length})`;
+    const [faceRow] = await sql`
+      INSERT INTO face_assets (organisation_id, object_key, sha256, media_type, provenance, detector_provider, preprocessing_state, state)
+      VALUES (${organisationId}, ${objectKey}, ${createHash("sha256").update(bytes).digest("hex")}, 'image/png', ${JSON.stringify({ source: "openai-generated", prompt })}::jsonb, 'gpt-image-1', 'ready', 'active')
+      RETURNING id, media_type, detector_provider, preprocessing_state, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: faceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "face-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const faceAssetId = typeof body.face_asset_id === "string" ? body.face_asset_id : null;
+    if (!humanSlug) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug is required." }, { status: 422 });
+    if (faceAssetId) {
+      await sql`
+        INSERT INTO human_face_assignments (organisation_id, human_slug, face_asset_id) VALUES (${organisationId}, ${humanSlug}, ${faceAssetId})
+        ON CONFLICT (organisation_id, human_slug) DO UPDATE SET face_asset_id = EXCLUDED.face_asset_id, assigned_at = now()
+      `;
+    } else {
+      await sql`DELETE FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${humanSlug}`;
+    }
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, face_asset_id: faceAssetId }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "gesture-profiles" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const featuresInput = (body.features && typeof body.features === "object" ? body.features : {}) as Record<string, { enabled?: boolean; range?: string }>;
+    if (!name) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the gesture profile a name." }, { status: 422 });
+    const features: Record<string, { enabled: boolean; range: string }> = {};
+    for (const key of Object.keys(GESTURE_FEATURES)) {
+      const input = featuresInput[key];
+      features[key] = { enabled: input ? Boolean(input.enabled) : GESTURE_FEATURES[key].defaultEnabled, range: typeof input?.range === "string" ? input.range : GESTURE_FEATURES[key].defaultRange };
+    }
+    const [profileRow] = await sql`
+      INSERT INTO gesture_profiles (organisation_id, name, state, state_config)
+      VALUES (${organisationId}, ${name}, 'active', ${JSON.stringify({ features })}::jsonb)
+      RETURNING id, name, state, state_config, created_at
+    `;
+    return NextResponse.json({ success: true, data: { ...profileRow, state_config: { features } }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "gesture-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const gestureProfileId = typeof body.gesture_profile_id === "string" ? body.gesture_profile_id : null;
+    if (!humanSlug) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug is required." }, { status: 422 });
+    if (gestureProfileId) {
+      await sql`
+        INSERT INTO human_gesture_assignments (organisation_id, human_slug, gesture_profile_id) VALUES (${organisationId}, ${humanSlug}, ${gestureProfileId})
+        ON CONFLICT (organisation_id, human_slug) DO UPDATE SET gesture_profile_id = EXCLUDED.gesture_profile_id, assigned_at = now()
+      `;
+    } else {
+      await sql`DELETE FROM human_gesture_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${humanSlug}`;
+    }
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, gesture_profile_id: gestureProfileId }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (resource === "livekit") {
     const proxied = await proxyToGateway("/api/v1/livekit/token", {
       session_id: body.session_id,
@@ -327,6 +486,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     `;
     const objectKey = deleted ? audioObjectKeyFromSettings(deleted.settings) : null;
     if (objectKey) await sql`DELETE FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
+  if (route[0] === "faces" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql<{ object_key: string }[]>`
+      DELETE FROM face_assets WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING object_key
+    `;
+    if (deleted) await sql`DELETE FROM media_blobs WHERE object_key = ${deleted.object_key} AND organisation_id = ${organisationId}`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
+  if (route[0] === "gesture-profiles" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM gesture_profiles WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
   if (route[0] !== "sessions") return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });

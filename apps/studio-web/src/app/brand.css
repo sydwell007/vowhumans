@@ -1453,6 +1453,10 @@ body {
 .presenter-picker small { color: var(--vh-text-muted); }
 .render-truth { background: rgba(251, 191, 36, 0.1) !important; border-color: rgba(251, 191, 36, 0.22) !important; color: var(--vh-warning) !important; }
 
+.face-asset-preview { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 12px; margin-bottom: 14px; background: var(--vh-surface-raised); }
+.face-asset-preview img { object-fit: cover; }
+.gesture-range-input { width: 68px; margin-left: 8px; padding: 4px 7px; border: 1px solid var(--vh-border); border-radius: 6px; background: var(--vh-midnight-2); color: var(--vh-text); font-size: 12px; }
+
 .studio-shell :where(p, li, dd),
 .portal-frame :where(p, li, dd),
 .admin-frame :where(p, li, dd) { color: var(--vh-text-secondary); }
