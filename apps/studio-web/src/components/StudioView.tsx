@@ -32,6 +32,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UploadCloud,
   UserCheck,
   Video,
@@ -39,7 +40,7 @@ import {
   Webhook,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { applications, humans, identityAlertCount, identityRecords, personas } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 
@@ -345,14 +346,169 @@ function Usage() {
   return <div className="content-stack"><section className="metric-grid">{[['Session minutes','0','Usage source not connected'],['Realtime audio','0 min','Provider disabled'],['Presenter jobs','0','Queue not connected'],['Estimated cost','R 0','No provider invoice source']].map(([label,value,note])=><article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>)}</section><section className="split-grid wide-left"><div className="panel usage-chart"><PanelTitle title="Sample session-volume shape" eyebrow="Illustrative data only" action={<button className="table-action" onClick={() => setGrainIndex((i) => (i + 1) % usageGrains.length)}>{grain.label} <ChevronRight size={14}/></button>}/><div className="chart-area"><div className="chart-y"><span>3k</span><span>2k</span><span>1k</span><span>0</span></div><div className="bars">{grain.bars.map((bar,index)=><div key={index}><i style={{height:`${bar}%`}}/><small>{grain.steps[index]}</small></div>)}</div></div></div><div className="panel provider-cost"><PanelTitle title="Provider cost categories" eyebrow="No live costs loaded"/>{[['Realtime voice','R 0','Not connected','coral'],['Transcription','R 0','Disabled','cyan'],['Language models','R 0','Disabled','lime'],['Storage + media','R 0','Not connected','violet']].map(([name,cost,share,tone])=><div className="cost-row" key={name}><i className={tone}/><span><b>{name}</b><small>{share}</small></span><strong>{cost}</strong></div>)}<div className="budget-meter"><span><i style={{width:'0%'}}/></span><small>No production budget source connected</small></div></div></section></div>;
 }
 
-function AssetLibrary({ type }: { type: 'voices' | 'faces' | 'gesture-profiles' }) {
+function AssetLibrary({ type }: { type: 'faces' | 'gesture-profiles' }) {
   const config = {
-    voices: { icon: AudioLines, label: 'Voice', summary: 'Provider voice or consented custom asset', items: [['Ayo · Warm','OpenAI adapter','English (ZA)','Provider voice'],['Nandi · Clear','Development mock','English · isiZulu','Mock'],['Tutor neutral','OpenAI adapter','Multilingual','Provider voice']] },
     faces: { icon: Fingerprint, label: 'Face asset', summary: 'Provenance and consent remain separate', items: [['Thandi placeholder','GoalVow generated','PlugConnect','Approved'],['Sipho placeholder','GoalVow generated','PlugConnect','Approved'],['Tutor placeholder','GoalVow generated','Academies · VowLMS','Approved']] },
     'gesture-profiles': { icon: Sparkles, label: 'Gesture profile', summary: 'Natural timing with conservative limits', items: [['Professional calm','Blink 4–7s','Head ±3°','Published'],['Tutor engaged','Blink 3–6s','Head ±4°','Published'],['Presenter neutral','Blink 4–8s','Head ±2°','Draft']] },
   }[type];
   const Icon=config.icon;
-  return <div className="content-stack"><section className="asset-intro"><span><Icon size={26}/></span><div><p className="eyebrow">Independent identity layer</p><h2>{config.label} library</h2><p>{config.summary}. Publication always checks current permissions and revocation status.</p></div></section><section className="asset-card-grid">{config.items.map(item=><article className="panel asset-card" key={item[0]}><div className="asset-card-top"><span className="empty-icon"><Icon size={21}/></span><StatusPill tone={item[3]==='Draft'?'warn':'good'}>{item[3]}</StatusPill></div><h2>{item[0]}</h2><p>{item[1]}</p><div className="asset-detail"><span>{item[2]}</span><IconMenuButton className="icon-button" label={item[0]} /></div>{type==='voices'&&<InlineAction className="secondary-button" idleLabel={<><Play size={15}/>Play sample</>} doneLabel="Sample pending" />}</article>)}</section><section className="panel"><EmptyAction icon={type==='voices'?Mic2:type==='faces'?Fingerprint:Sparkles} title={`Create a ${config.label.toLowerCase()} draft`} copy="New assets stay unpublished until provider, provenance and consent checks pass." button="Create safe draft"/></section></div>;
+  return <div className="content-stack"><section className="asset-intro"><span><Icon size={26}/></span><div><p className="eyebrow">Independent identity layer</p><h2>{config.label} library</h2><p>{config.summary}. Publication always checks current permissions and revocation status.</p></div></section><section className="asset-card-grid">{config.items.map(item=><article className="panel asset-card" key={item[0]}><div className="asset-card-top"><span className="empty-icon"><Icon size={21}/></span><StatusPill tone={item[3]==='Draft'?'warn':'good'}>{item[3]}</StatusPill></div><h2>{item[0]}</h2><p>{item[1]}</p><div className="asset-detail"><span>{item[2]}</span><IconMenuButton className="icon-button" label={item[0]} /></div></article>)}</section><section className="panel"><EmptyAction icon={type==='faces'?Fingerprint:Sparkles} title={`Create a ${config.label.toLowerCase()} draft`} copy="New assets stay unpublished until provider, provenance and consent checks pass." button="Create safe draft"/></section></div>;
+}
+
+type Voice = { id: string; name: string; provider: 'openai' | 'custom'; provider_voice_id: string | null; language: string; is_custom: boolean; state: string };
+type VoiceAssignment = { human_slug: string; voice_id: string; voice_name: string };
+
+function VoiceLibrary() {
+  const [voices, setVoices] = useState<Voice[]>([]);
+  const [assignments, setAssignments] = useState<VoiceAssignment[]>([]);
+  const [providerVoices, setProviderVoices] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [addMode, setAddMode] = useState<'provider' | 'upload'>('provider');
+  const [addName, setAddName] = useState('');
+  const [addLanguage, setAddLanguage] = useState('English (South Africa)');
+  const [addProviderVoice, setAddProviderVoice] = useState('');
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [adding, setAdding] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  async function refresh() {
+    const [voicesRes, assignmentsRes] = await Promise.all([
+      fetch('/api/v1/voices').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/voice-assignments').then(r => r.json()).catch(() => null),
+    ]);
+    if (voicesRes?.success) {
+      setVoices(voicesRes.data.items);
+      setProviderVoices(voicesRes.data.available_provider_voices ?? []);
+      if (!addProviderVoice && voicesRes.data.available_provider_voices?.[0]) setAddProviderVoice(voicesRes.data.available_provider_voices[0]);
+    }
+    if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
+  useEffect(() => { refresh(); }, []);
+
+  async function playSample(voice: Voice) {
+    setError(null);
+    audioRef.current?.pause();
+    setPlayingId(voice.id);
+    try {
+      const res = await fetch(`/api/v1/voices/${voice.id}/sample`);
+      if (!res.ok) {
+        const problem = await res.json().catch(() => ({}));
+        throw new Error(problem.message || 'Could not play this sample.');
+      }
+      const blob = await res.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setPlayingId((current) => (current === voice.id ? null : current));
+      await audio.play();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not play this sample.');
+      setPlayingId(null);
+    }
+  }
+
+  async function assignVoice(humanSlug: string, voiceId: string) {
+    setBusyId(voiceId);
+    await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, voice_id: voiceId || null }) }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function deleteVoice(id: string) {
+    setBusyId(id);
+    await fetch(`/api/v1/voices/${id}`, { method: 'DELETE' }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function submitAdd(event: React.FormEvent) {
+    event.preventDefault();
+    if (!addName.trim()) { setError('Give the voice a name.'); return; }
+    setAdding(true);
+    setError(null);
+    try {
+      let res: Response;
+      if (addMode === 'upload') {
+        if (!addFile) { setError('Choose an audio file to upload.'); setAdding(false); return; }
+        const form = new FormData();
+        form.set('name', addName.trim());
+        form.set('language', addLanguage);
+        form.set('file', addFile);
+        res = await fetch('/api/v1/voices', { method: 'POST', body: form });
+      } else {
+        res = await fetch('/api/v1/voices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: addName.trim(), language: addLanguage, provider_voice_id: addProviderVoice }) });
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not add this voice.');
+      setAddName(''); setAddFile(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add this voice.');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  return (
+    <div className="content-stack">
+      <section className="asset-intro"><span><AudioLines size={26} /></span><div><p className="eyebrow">Independent identity layer</p><h2>Voice library</h2><p>Provider voice or your own uploaded asset. Publication always checks current permissions and revocation status.</p></div></section>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && voices.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><AudioLines size={24} /></span><p className="eyebrow">No voices yet</p><h2>Add your first voice</h2><p>Pick one of your OpenAI account&apos;s voices, or upload your own recording, using the form below.</p></section>
+      )}
+      <section className="asset-card-grid">
+        {voices.map((voice) => {
+          const assigned = assignments.find((a) => a.voice_id === voice.id);
+          return (
+            <article className="panel asset-card" key={voice.id}>
+              <div className="asset-card-top">
+                <span className="empty-icon"><AudioLines size={21} /></span>
+                <StatusPill tone={voice.is_custom ? 'muted' : 'good'}>{voice.is_custom ? 'Uploaded' : 'Provider voice'}</StatusPill>
+              </div>
+              <h2>{voice.name}</h2>
+              <p>{voice.is_custom ? 'Your uploaded recording' : `OpenAI · ${voice.provider_voice_id}`}</p>
+              <div className="asset-detail">
+                <span>{voice.language}</span>
+                <button className="icon-button" aria-label={`Delete ${voice.name}`} onClick={() => deleteVoice(voice.id)} disabled={busyId === voice.id}><Trash2 size={16} /></button>
+              </div>
+              <button className="secondary-button" onClick={() => playSample(voice)} disabled={playingId === voice.id}>
+                {playingId === voice.id ? <RefreshCw size={15} className="spin" /> : <Play size={15} />}{playingId === voice.id ? 'Playing…' : 'Play sample'}
+              </button>
+              <label className="full">Assign to digital human
+                <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignVoice(slug, voice.id); }} disabled={busyId === voice.id}>
+                  <option value="">Not assigned</option>
+                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
+                </select>
+              </label>
+            </article>
+          );
+        })}
+      </section>
+      <section className="panel">
+        <PanelTitle title="Add a voice" eyebrow="Provider voice or your own upload" />
+        <form className="form-grid two" onSubmit={submitAdd}>
+          <label className="full">Name<input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="e.g. Warm and professional" /></label>
+          <label>Language<select value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)}><option>English (South Africa)</option><option>isiZulu</option><option>Multilingual</option></select></label>
+          <label>Source
+            <select value={addMode} onChange={(e) => setAddMode(e.target.value as 'provider' | 'upload')}>
+              <option value="provider">Pick a provider voice</option>
+              <option value="upload">Upload my own recording</option>
+            </select>
+          </label>
+          {addMode === 'provider' ? (
+            <label className="full">Provider voice<select value={addProviderVoice} onChange={(e) => setAddProviderVoice(e.target.value)}>{providerVoices.map((v) => <option key={v} value={v}>{v}</option>)}</select></label>
+          ) : (
+            <label className="full">Audio file (max 8MB)<input type="file" accept="audio/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} /></label>
+          )}
+          <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add voice'}</button>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 function ApiKeys() {
@@ -401,7 +557,7 @@ export function StudioView({ section }: { section: string }) {
     case 'digital-humans': return <DigitalHumans/>;
     case 'personas': return <Personas/>;
     case 'knowledge': return <Knowledge/>;
-    case 'voices': return <AssetLibrary type="voices"/>;
+    case 'voices': return <VoiceLibrary/>;
     case 'faces': return <AssetLibrary type="faces"/>;
     case 'gesture-profiles': return <AssetLibrary type="gesture-profiles"/>;
     case 'live-sessions': return <LiveSessions/>;

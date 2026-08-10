@@ -6,7 +6,16 @@ import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+
+const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
+const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
+
+async function requireOrganisation(request: NextRequest): Promise<string | null> {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const user = token ? await readSession(token) : null;
+  return user?.organisationId ?? null;
+}
 
 // Gives proxyToGateway's 40s upstream timeout room to actually complete instead of
 // Vercel's own function timeout cutting it off first (Hobby default is 10s).
@@ -69,6 +78,59 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   if (resource === "health") return response({ status: "ok", persistence: false, providers: { afrihost_api: "not-verified", realtime: "mock", avatar: "static", gpu: "disabled", billing: "disabled", email: "disabled" } });
   if (resource === "digital-humans") return response({ items: humans });
+
+  if (resource === "voices" && route[1] && route[2] === "sample") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [voice] = await sql<{ provider: string; provider_voice_id: string | null; settings: { audio_object_key?: string } }[]>`
+      SELECT provider, provider_voice_id, settings FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+    `;
+    if (!voice) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+
+    if (voice.provider === "openai" && voice.provider_voice_id) {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "OpenAI is not configured." }, { status: 503 });
+      const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: voice.provider_voice_id, input: VOICE_SAMPLE_TEXT, response_format: "mp3" }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => "");
+        return NextResponse.json({ success: false, code: "TTS_FAILED", message: detail.slice(0, 300) || "Could not generate the sample." }, { status: 502 });
+      }
+      const audio = await upstream.arrayBuffer();
+      return new NextResponse(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "private, max-age=3600" } });
+    }
+
+    const objectKey = voice.settings?.audio_object_key;
+    if (!objectKey) return NextResponse.json({ success: false, code: "NO_AUDIO", message: "This voice has no stored audio yet." }, { status: 404 });
+    const [blob] = await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}`;
+    if (!blob) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return new NextResponse(new Uint8Array(blob.data), { headers: { "content-type": blob.mime_type, "cache-control": "private, max-age=3600" } });
+  }
+
+  if (resource === "voices" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT id, name, provider, provider_voice_id, language, is_custom, state, created_at
+      FROM voices WHERE organisation_id = ${organisationId} ORDER BY created_at DESC
+    `;
+    return response({ items: rows, available_provider_voices: [...OPENAI_TTS_VOICES] });
+  }
+
+  if (resource === "voice-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT a.human_slug, a.voice_id, v.name AS voice_name
+      FROM human_voice_assignments a JOIN voices v ON v.id = a.voice_id
+      WHERE a.organisation_id = ${organisationId}
+    `;
+    return response({ items: rows });
+  }
   if (resource === "personas") return response({ items: personas });
   if (resource === "applications") return response({ items: applications });
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
@@ -83,6 +145,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { route } = await params;
   const resource = route[0];
   if (!allowedResources.has(resource)) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+
+  // Multipart uploads must be branched off before the generic request.json() parse
+  // below — a request body can only be read once.
+  if (resource === "voices" && !route[1] && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const form = await request.formData();
+    const name = String(form.get("name") ?? "").trim();
+    const language = String(form.get("language") ?? "English (South Africa)").trim();
+    const file = form.get("file");
+    if (!name || !(file instanceof Blob) || file.size === 0) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a name and an audio file." }, { status: 422 });
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Audio file must be 8MB or smaller." }, { status: 422 });
+    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const objectKey = `voice-${randomUUID()}`;
+    const mimeType = file.type || "audio/mpeg";
+    await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, ${mimeType}, ${bytes}, ${bytes.length})`;
+    const [voiceRow] = await sql`
+      INSERT INTO voices (organisation_id, name, provider, language, is_custom, state, settings)
+      VALUES (${organisationId}, ${name}, 'custom', ${language}, true, 'active', ${JSON.stringify({ audio_object_key: objectKey })}::jsonb)
+      RETURNING id, name, provider, language, is_custom, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: voiceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
   if (resource === "auth" && route[1] === "register") {
@@ -173,6 +263,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (proxied) return NextResponse.json({ success: true, data: proxied.data, meta: { mode: "live", request_id: randomUUID() } }, { status: proxied.status, headers: { "x-vowhumans-mode": "live" } });
   }
 
+  if (resource === "voices" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const language = typeof body.language === "string" ? body.language.trim() : "English (South Africa)";
+    const providerVoiceId = typeof body.provider_voice_id === "string" ? body.provider_voice_id : "";
+    if (!name || !OPENAI_TTS_VOICES.has(providerVoiceId)) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a name and choose a valid provider voice." }, { status: 422 });
+    }
+    const [voiceRow] = await sql`
+      INSERT INTO voices (organisation_id, name, provider, provider_voice_id, language, is_custom, state)
+      VALUES (${organisationId}, ${name}, 'openai', ${providerVoiceId}, ${language}, false, 'active')
+      RETURNING id, name, provider, provider_voice_id, language, is_custom, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: voiceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "voice-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const voiceId = typeof body.voice_id === "string" ? body.voice_id : null;
+    if (!humanSlug) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug is required." }, { status: 422 });
+    if (voiceId) {
+      await sql`
+        INSERT INTO human_voice_assignments (organisation_id, human_slug, voice_id) VALUES (${organisationId}, ${humanSlug}, ${voiceId})
+        ON CONFLICT (organisation_id, human_slug) DO UPDATE SET voice_id = EXCLUDED.voice_id, assigned_at = now()
+      `;
+    } else {
+      await sql`DELETE FROM human_voice_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${humanSlug}`;
+    }
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, voice_id: voiceId }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (resource === "livekit") {
     const proxied = await proxyToGateway("/api/v1/livekit/token", {
       session_id: body.session_id,
@@ -186,8 +310,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   return response({ id: randomUUID(), resource, state: isPublicRequest ? "validated-preview" : "draft", persistent: false, message: "Validated in safe preview. Configure the production API to persist and deliver this request.", received_fields: Object.keys(body as object).filter(key=>!key.toLowerCase().includes("password")), disclosure_required: true }, isPublicRequest ? 202 : 201);
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
   const { route } = await params;
+  if (route[0] === "voices" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql<{ settings: { audio_object_key?: string } }[]>`
+      DELETE FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING settings
+    `;
+    const objectKey = deleted?.settings?.audio_object_key;
+    if (objectKey) await sql`DELETE FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
   if (route[0] !== "sessions") return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
   return response({ id: route[1] ?? null, deletion: "mock-queued", private_content_included: false }, 202);
 }
