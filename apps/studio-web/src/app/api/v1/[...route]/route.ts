@@ -211,7 +211,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const name = String(form.get("name") ?? "").trim();
     const language = String(form.get("language") ?? "English (South Africa)").trim();
     const file = form.get("file");
-    if (!name || !(file instanceof Blob) || file.size === 0) {
+    if (!name || !(file instanceof Blob) || file.size === 0 || !file.type.startsWith("audio/")) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a name and an audio file." }, { status: 422 });
     }
     if (file.size > 8 * 1024 * 1024) {
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const form = await request.formData();
     const file = form.get("file");
-    if (!(file instanceof Blob) || file.size === 0) {
+    if (!(file instanceof Blob) || file.size === 0 || !file.type.startsWith("image/")) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Choose an image file." }, { status: 422 });
     }
     if (file.size > 8 * 1024 * 1024) {
