@@ -17,6 +17,13 @@ async function requireOrganisation(request: NextRequest): Promise<string | null>
   return user?.organisationId ?? null;
 }
 
+// postgres.js returns this driver's jsonb columns as raw text, not pre-parsed objects.
+function audioObjectKeyFromSettings(settings: unknown): string | null {
+  const parsed = typeof settings === "string" ? JSON.parse(settings) : settings;
+  const key = (parsed as { audio_object_key?: unknown } | null)?.audio_object_key;
+  return typeof key === "string" ? key : null;
+}
+
 // Gives proxyToGateway's 40s upstream timeout room to actually complete instead of
 // Vercel's own function timeout cutting it off first (Hobby default is 10s).
 export const maxDuration = 45;
@@ -82,7 +89,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (resource === "voices" && route[1] && route[2] === "sample") {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const [voice] = await sql<{ provider: string; provider_voice_id: string | null; settings: { audio_object_key?: string } }[]>`
+    const [voice] = await sql<{ provider: string; provider_voice_id: string | null; settings: unknown }[]>`
       SELECT provider, provider_voice_id, settings FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId}
     `;
     if (!voice) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
@@ -104,7 +111,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return new NextResponse(audio, { headers: { "content-type": "audio/mpeg", "cache-control": "private, max-age=3600" } });
     }
 
-    const objectKey = voice.settings?.audio_object_key;
+    const objectKey = audioObjectKeyFromSettings(voice.settings);
     if (!objectKey) return NextResponse.json({ success: false, code: "NO_AUDIO", message: "This voice has no stored audio yet." }, { status: 404 });
     const [blob] = await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}`;
     if (!blob) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
@@ -315,10 +322,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (route[0] === "voices" && route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const [deleted] = await sql<{ settings: { audio_object_key?: string } }[]>`
+    const [deleted] = await sql<{ settings: unknown }[]>`
       DELETE FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING settings
     `;
-    const objectKey = deleted?.settings?.audio_object_key;
+    const objectKey = deleted ? audioObjectKeyFromSettings(deleted.settings) : null;
     if (objectKey) await sql`DELETE FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}`;
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
