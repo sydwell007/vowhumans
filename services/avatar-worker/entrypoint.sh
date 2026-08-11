@@ -17,8 +17,26 @@ if [ ! -L "$MUSETALK_REPO_MODELS" ]; then
   ln -s "$WORKSPACE_MODELS" "$MUSETALK_REPO_MODELS"
 fi
 
-if [ ! -f "$WORKSPACE_MODELS/musetalkV15/unet.pth" ]; then
-  echo "[entrypoint] MuseTalk weights not found on the network volume — downloading now (first boot only, several GB, this will take a while)..."
+# download_weights.sh has no error checking of its own (confirmed live: it
+# printed a false "all weights downloaded" success banner while two files
+# silently failed), so check every file the pipeline actually needs, not just
+# one, before deciding the download can be skipped.
+WEIGHTS_COMPLETE=true
+for f in \
+  "musetalkV15/unet.pth" \
+  "whisper/config.json" \
+  "sd-vae/config.json" \
+  "face-parse-bisent/79999_iter.pth" \
+  "face-parse-bisent/resnet18-5c106cde.pth"
+do
+  if [ ! -f "$WORKSPACE_MODELS/$f" ]; then
+    WEIGHTS_COMPLETE=false
+    echo "[entrypoint] Missing weight file: $f"
+  fi
+done
+
+if [ "$WEIGHTS_COMPLETE" = false ]; then
+  echo "[entrypoint] MuseTalk weights incomplete or missing on the network volume — (re)downloading now (several GB, this will take a while)..."
   cd /opt/MuseTalk && bash download_weights.sh
   cd /app
 else

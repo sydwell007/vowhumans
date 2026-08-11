@@ -12,7 +12,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-venv python3-pip git ffmpeg libgl1 libglib2.0-0 \
+    python3.10 python3.10-venv python3-pip git ffmpeg libgl1 libglib2.0-0 curl wget \
     && rm -rf /var/lib/apt/lists/*
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 
@@ -24,6 +24,14 @@ WORKDIR /app
 # needs to run from within this checkout.
 RUN git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk
 ENV PYTHONPATH="/opt/MuseTalk:${PYTHONPATH:-}"
+
+# download_weights.sh calls `gdown --id <fileid> -O ...` for the face-parsing
+# checkpoint; current gdown dropped the --id flag (the ID is now a plain
+# positional argument). Confirmed live: "gdown: error: unrecognized arguments:
+# --id" — the script has no error checking, so it printed a false "all weights
+# downloaded" success banner while this file (and the resnet18 curl download,
+# fixed above by actually installing curl) silently failed.
+RUN sed -i 's/gdown --id /gdown /' /opt/MuseTalk/download_weights.sh
 
 RUN pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 RUN pip install --no-cache-dir -r /opt/MuseTalk/requirements.txt
