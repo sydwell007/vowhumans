@@ -23,7 +23,7 @@ WORKDIR /app
 # download_weights.sh (run at container startup, not build time — see entrypoint.sh)
 # needs to run from within this checkout.
 RUN git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk
-ENV PYTHONPATH=/opt/MuseTalk:$PYTHONPATH
+ENV PYTHONPATH="/opt/MuseTalk:${PYTHONPATH:-}"
 
 RUN pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 RUN pip install --no-cache-dir -r /opt/MuseTalk/requirements.txt
