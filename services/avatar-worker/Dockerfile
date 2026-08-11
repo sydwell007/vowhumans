@@ -33,6 +33,13 @@ RUN pip install --no-cache-dir -U openmim \
     && mim install "mmdet==3.1.0" \
     && mim install "mmpose==1.1.0"
 
+# MuseTalk's own requirements.txt doesn't pin huggingface-hub, so pip installs
+# whatever is newest — which breaks transformers' internal version check
+# (transformers requires huggingface-hub<1.0). Confirmed live on a real GPU pod:
+# "ImportError: huggingface-hub>=0.19.3,<1.0 is required ... but found
+# huggingface-hub==1.27.0". Pin it last so nothing upstream re-upgrades it.
+RUN pip install --no-cache-dir "huggingface-hub<1.0,>=0.20.0"
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
