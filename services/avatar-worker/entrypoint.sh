@@ -43,5 +43,13 @@ else
   echo "[entrypoint] MuseTalk weights already present on the network volume — skipping download."
 fi
 
+# download_weights.sh runs `pip install -U "huggingface_hub[cli]"` internally
+# (to make sure its own huggingface-cli calls work), which silently undoes the
+# huggingface-hub<1.0 pin from the image build — confirmed live: the exact
+# same ImportError kept recurring on every fresh pod despite the build-time
+# fix, because this runs every time weights need downloading, i.e. every fresh
+# volume. Re-pin unconditionally, after weight download, right before serving.
+pip install --no-cache-dir "huggingface-hub<1.0,>=0.20.0"
+
 export MUSETALK_MODELS_DIR="$WORKSPACE_MODELS"
 exec uvicorn main:app --host 0.0.0.0 --port 8000
