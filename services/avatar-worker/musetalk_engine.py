@@ -70,6 +70,16 @@ class MuseTalkEngine:
         from musetalk.utils.face_parsing import FaceParsing
         from musetalk.utils.utils import load_all_model
 
+        # MuseTalk's own load_all_model()/VAE loading resolves the vae_type
+        # ("sd-vae") as the *relative* path "models/sd-vae" internally — it
+        # assumes the process cwd is MuseTalk's own repo root. This service's
+        # cwd is /app (its own WORKDIR), so that relative path resolved to
+        # nowhere. Confirmed live: "OSError: models/sd-vae is not a local
+        # folder and is not a valid model identifier". /opt/MuseTalk/models is
+        # a symlink to MUSETALK_MODELS_DIR (entrypoint.sh), so this also picks
+        # up the real, persistent-volume weights correctly.
+        os.chdir("/opt/MuseTalk")
+
         unet_model_path = str(MODELS_DIR / "musetalkV15" / "unet.pth")
         unet_config_path = str(MODELS_DIR / "musetalkV15" / "musetalk.json")
         whisper_dir = str(MODELS_DIR / "whisper")
