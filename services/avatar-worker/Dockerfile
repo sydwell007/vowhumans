@@ -16,6 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 
+# The torch/mmcv/etc. installs below are multi-GB; a bare `pip install` gives
+# up on the first slow read or a single flaky chunk. Confirmed live: one build
+# failed on a corrupted-in-transit torch wheel (hash mismatch), the very next
+# retry failed on a plain read timeout fetching a different package. Raise the
+# timeout and let pip retry a flaky connection instead of failing the whole
+# build on one bad chunk.
+ENV PIP_DEFAULT_TIMEOUT=120
+ENV PIP_RETRIES=5
+
 WORKDIR /app
 
 # MuseTalk is a research repo, not a pip package — vendor it in and put it on
