@@ -27,7 +27,8 @@ for f in \
   "whisper/config.json" \
   "sd-vae/config.json" \
   "face-parse-bisent/79999_iter.pth" \
-  "face-parse-bisent/resnet18-5c106cde.pth"
+  "face-parse-bisent/resnet18-5c106cde.pth" \
+  "dwpose/dw-ll_ucoco_384.pth"
 do
   if [ ! -f "$WORKSPACE_MODELS/$f" ]; then
     WEIGHTS_COMPLETE=false

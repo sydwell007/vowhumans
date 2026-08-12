@@ -25,13 +25,27 @@ WORKDIR /app
 RUN git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk
 ENV PYTHONPATH="/opt/MuseTalk:${PYTHONPATH:-}"
 
-# download_weights.sh calls `gdown --id <fileid> -O ...` for the face-parsing
-# checkpoint; current gdown dropped the --id flag (the ID is now a plain
-# positional argument). Confirmed live: "gdown: error: unrecognized arguments:
-# --id" — the script has no error checking, so it printed a false "all weights
-# downloaded" success banner while this file (and the resnet18 curl download,
-# fixed above by actually installing curl) silently failed.
-RUN sed -i 's/gdown --id /gdown /' /opt/MuseTalk/download_weights.sh
+# download_weights.sh has three separate bugs, all silently swallowed by its
+# missing error checking (it always prints "all weights downloaded
+# successfully" regardless of what actually happened):
+#  1. `gdown --id <fileid> -O ...` — current gdown dropped the --id flag (the
+#     ID is now a plain positional argument). Confirmed live: "gdown: error:
+#     unrecognized arguments: --id".
+#  2. `export HF_ENDPOINT=https://hf-mirror.com` — routes every
+#     huggingface-cli download through a China-specific mirror, which appears
+#     unreachable/unreliable from a RunPod US pod. Removed so it uses the
+#     default huggingface.co directly.
+#  3. `huggingface-cli download ...` — huggingface-cli itself is deprecated;
+#     confirmed live in the pod's own log output: "huggingface-cli is
+#     deprecated and no longer works. Use hf instead." Every model this
+#     fetches (musetalk, musetalkV15, sd-vae, whisper, dwpose, syncnet) was
+#     silently not downloading. Renamed to the current `hf download` command,
+#     which takes the same arguments.
+RUN sed -i \
+    -e 's/gdown --id /gdown /' \
+    -e '/HF_ENDPOINT/d' \
+    -e 's/huggingface-cli download/hf download/g' \
+    /opt/MuseTalk/download_weights.sh
 
 RUN pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 RUN pip install --no-cache-dir -r /opt/MuseTalk/requirements.txt
