@@ -19,33 +19,20 @@ RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 WORKDIR /app
 
 # MuseTalk is a research repo, not a pip package — vendor it in and put it on
-# PYTHONPATH so musetalk_engine.py's `from musetalk...` imports resolve. Its
-# download_weights.sh (run at container startup, not build time — see entrypoint.sh)
-# needs to run from within this checkout.
+# PYTHONPATH so musetalk_engine.py's `from musetalk...` imports resolve.
 RUN git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk
 ENV PYTHONPATH="/opt/MuseTalk:${PYTHONPATH:-}"
 
-# download_weights.sh has three separate bugs, all silently swallowed by its
-# missing error checking (it always prints "all weights downloaded
-# successfully" regardless of what actually happened):
-#  1. `gdown --id <fileid> -O ...` — current gdown dropped the --id flag (the
-#     ID is now a plain positional argument). Confirmed live: "gdown: error:
-#     unrecognized arguments: --id".
-#  2. `export HF_ENDPOINT=https://hf-mirror.com` — routes every
-#     huggingface-cli download through a China-specific mirror, which appears
-#     unreachable/unreliable from a RunPod US pod. Removed so it uses the
-#     default huggingface.co directly.
-#  3. `huggingface-cli download ...` — huggingface-cli itself is deprecated;
-#     confirmed live in the pod's own log output: "huggingface-cli is
-#     deprecated and no longer works. Use hf instead." Every model this
-#     fetches (musetalk, musetalkV15, sd-vae, whisper, dwpose, syncnet) was
-#     silently not downloading. Renamed to the current `hf download` command,
-#     which takes the same arguments.
-RUN sed -i \
-    -e 's/gdown --id /gdown /' \
-    -e '/HF_ENDPOINT/d' \
-    -e 's/huggingface-cli download/hf download/g' \
-    /opt/MuseTalk/download_weights.sh
+# MuseTalk's own download_weights.sh has no error checking (it always prints
+# "all weights downloaded successfully" regardless of what actually happened)
+# and, confirmed live across three separate bugs, was silently fetching only
+# a subset of the required files: a dead China-mirror HF_ENDPOINT, the
+# deprecated `huggingface-cli` command, and `--include "a" "b"` syntax that
+# the current `hf` CLI silently narrows to just the first pattern. Patching
+# it incrementally cost several rebuild cycles: replaced entirely with our
+# own download_weights.sh (fails loudly, fetches only what this service's
+# inference path actually uses).
+RUN rm /opt/MuseTalk/download_weights.sh
 
 RUN pip install --no-cache-dir torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 RUN pip install --no-cache-dir -r /opt/MuseTalk/requirements.txt
@@ -65,8 +52,8 @@ RUN pip install --no-cache-dir "huggingface-hub<1.0,>=0.20.0"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py musetalk_engine.py entrypoint.sh ./
-RUN chmod +x entrypoint.sh
+COPY main.py musetalk_engine.py entrypoint.sh download_weights.sh ./
+RUN chmod +x entrypoint.sh download_weights.sh
 
 EXPOSE 8000
 ENTRYPOINT ["./entrypoint.sh"]

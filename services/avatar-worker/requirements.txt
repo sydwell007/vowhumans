@@ -3,4 +3,5 @@ uvicorn[standard]==0.35.0
 pydantic==2.11.7
 opencv-python-headless==4.10.0.84
 numpy<2
+gdown==5.2.0
 
