@@ -57,6 +57,16 @@ INTERNAL_KEY = os.getenv("VOWHUMANS_INTERNAL_KEY", "")
 AUDIO_SAMPLE_RATE = 16000
 AUDIO_CHANNELS = 1
 
+# A real, fixed publish resolution — NOT a 1x1 placeholder. Confirmed live: publishing
+# a video track backed by a VideoSource(width=1, height=1) crashed the whole worker
+# process (native LiveKit abort, "Check failed: width > 0 (0 vs. 0)" in
+# video_frame_buffer.cc) within seconds of startup, well before any real frame was
+# ever captured — almost certainly the publish path computing a downscaled simulcast
+# layer from the declared 1x1 source size, rounding to 0x0. Every captured frame is
+# resized to this exact size so it always matches what the source declared.
+PUBLISH_VIDEO_WIDTH = 512
+PUBLISH_VIDEO_HEIGHT = 512
+
 RENDER_TIMEOUT_SECONDS = float(os.getenv("AVATAR_RENDER_TIMEOUT_SECONDS", "8"))
 # How long the agent must be continuously silent before a buffered utterance is
 # considered finished and sent for rendering. Needs live tuning against real
@@ -140,7 +150,7 @@ class AvatarSession:
         self._ctx = ctx
         self._client = client
         self._avatar_id = avatar_id
-        self._video_source = rtc.VideoSource(width=1, height=1)
+        self._video_source = rtc.VideoSource(width=PUBLISH_VIDEO_WIDTH, height=PUBLISH_VIDEO_HEIGHT)
         self._audio_source = rtc.AudioSource(sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         self._agent_participant: rtc.RemoteParticipant | None = None
         self._buffer: list[rtc.AudioFrame] = []
@@ -257,9 +267,12 @@ class AvatarSession:
 
     async def _play_video_frames(self, frames: list[np.ndarray], interval: float) -> None:
         for bgr in frames:
-            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            height, width, _ = rgb.shape
-            self._video_source.capture_frame(rtc.VideoFrame(width, height, rtc.VideoBufferType.RGB24, rgb.tobytes()))
+            # avatar-worker's output size varies with the source photo's detected
+            # face bbox — always resize to the fixed size the VideoSource was
+            # constructed with, since captured frames must match it.
+            resized = cv2.resize(bgr, (PUBLISH_VIDEO_WIDTH, PUBLISH_VIDEO_HEIGHT))
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            self._video_source.capture_frame(rtc.VideoFrame(PUBLISH_VIDEO_WIDTH, PUBLISH_VIDEO_HEIGHT, rtc.VideoBufferType.RGB24, rgb.tobytes()))
             await asyncio.sleep(interval)
 
     async def _play_pcm(self, pcm_bytes: bytes) -> None:
