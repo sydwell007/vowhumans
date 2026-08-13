@@ -29,7 +29,7 @@ function InterviewDemo() {
       const sessionRes=await fetch('/api/v1/sessions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({digital_human_id:human.id,mode,job_context:context,transcript_consent:consent,recording_consent:consent})});
       const sessionBody=await sessionRes.json().catch(()=>null);
       if(sessionBody?.meta?.mode!=='live'||!sessionBody?.data?.id)return;
-      const tokenRes=await fetch('/api/v1/livekit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session_id:sessionBody.data.id})});
+      const tokenRes=await fetch('/api/v1/livekit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session_id:sessionBody.data.id,human_slug:human.id})});
       const tokenBody=await tokenRes.json().catch(()=>null);
       if(tokenBody?.meta?.mode==='live'&&tokenBody?.data?.url&&tokenBody?.data?.token) setLiveRoom({url:tokenBody.data.url,token:tokenBody.data.token});
     }catch{

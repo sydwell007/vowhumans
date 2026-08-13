@@ -26,6 +26,11 @@ services:
       # Must be the exact same value already set as VOWHUMANS_SERVICE_API_KEY in Vercel.
       - key: VOWHUMANS_SERVICE_API_KEY
         sync: false
+      # Gates whether tokens attach a RoomAgentDispatch for vowhumans-avatar-participant
+      # at all — leave unset/false until that worker (below) is deployed and healthy,
+      # so a half-configured avatar pipeline can't affect the working voice-only call.
+      - key: ENABLE_AVATAR_PARTICIPANT
+        value: "false"
 
   # The actual voice AI: stays connected to LiveKit and joins a room whenever a
   # session is created. Must run continuously — needs a paid worker plan, not free.
@@ -54,3 +59,37 @@ services:
         sync: false
       - key: OPENAI_REALTIME_MODEL
         value: gpt-realtime-2.1
+
+  # Joins the same room as vowhumans-realtime-agent (via explicit LiveKit agent
+  # dispatch — see services/api-gateway's RoomAgentDispatch), renders lip-synced
+  # video through the RunPod-hosted avatar-worker, and publishes it back. Separate
+  # process for the same reason realtime-agent needed the plan bump above: adding
+  # OpenCV/frame buffers/an HTTP client to that already memory-tight worker would
+  # risk the same crash taking the working voice path down with it.
+  - type: worker
+    name: vowhumans-avatar-participant
+    runtime: python
+    rootDir: services/avatar-participant
+    plan: standard
+    buildCommand: pip install -r requirements.txt
+    startCommand: python livekit_agent.py start
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      # RunPod GPU pod proxy URL — changes every time the pod is deleted and
+      # redeployed fresh (not on Stop/Start), so this needs a manual update after
+      # each redeploy until/unless the pod gets a stable ingress in front of it.
+      - key: AVATAR_WORKER_URL
+        sync: false
+      - key: STUDIO_WEB_URL
+        sync: false
+      # Must be the exact same value already set as VOWHUMANS_INTERNAL_KEY on
+      # avatar-worker (RunPod) and in Vercel (studio-web).
+      - key: VOWHUMANS_INTERNAL_KEY
+        sync: false

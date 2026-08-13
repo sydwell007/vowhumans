@@ -467,6 +467,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const proxied = await proxyToGateway("/api/v1/livekit/token", {
       session_id: body.session_id,
       participant_identity: body.participant_identity ?? `guest-${randomUUID().slice(0, 8)}`,
+      human_slug: body.human_slug,
     });
     if (proxied) return NextResponse.json({ success: true, data: proxied.data, meta: { mode: "live", request_id: randomUUID() } }, { status: proxied.status, headers: { "x-vowhumans-mode": "live" } });
     return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "LiveKit tokens are issued only by the configured server-side API gateway." }, { status: 503 });

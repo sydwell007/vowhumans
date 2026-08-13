@@ -48,6 +48,7 @@ services:
       LIVEKIT_URL: ws://livekit:7880
       LIVEKIT_API_KEY: devkey
       LIVEKIT_API_SECRET: secret
+      ENABLE_AVATAR_PARTICIPANT: "true"
     ports: ["8000:8000"]
     depends_on: [postgres, redis, minio]
 
@@ -87,6 +88,39 @@ services:
       ENABLE_MUSETALK: "false"
     ports: ["8010:8000"]
 
+  # Always talks to the local mock-avatar-worker (ENABLE_MUSETALK=false, so every
+  # prepare/render call fails and this exercises the audio-only fallback path) —
+  # validates room dispatch and track publish/subscribe cheaply, before ever
+  # touching the real GPU pod. See services/avatar-participant's own module
+  # docstring for what's confidently correct vs. still needs live verification.
+  avatar-participant:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/avatar-participant }
+    environment:
+      AVATAR_WORKER_URL: http://mock-avatar-worker:8000
+      STUDIO_WEB_URL: http://studio-web:3000
+      VOWHUMANS_INTERNAL_KEY: dev-only-change-me
+      ENABLE_AVATAR_PARTICIPANT: "true"
+    depends_on: [mock-avatar-worker, studio-web]
+
+  avatar-participant-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.python
+      args: { SERVICE_PATH: services/avatar-participant }
+    command: ["python", "/app/service/livekit_agent.py", "dev"]
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
+      AVATAR_WORKER_URL: http://mock-avatar-worker:8000
+      STUDIO_WEB_URL: http://studio-web:3000
+      VOWHUMANS_INTERNAL_KEY: dev-only-change-me
+      ENABLE_AVATAR_PARTICIPANT: "true"
+    depends_on: [livekit, mock-avatar-worker, studio-web]
+
   studio-web:
     build:
       context: .
@@ -94,6 +128,7 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
       API_GATEWAY_URL: http://api-gateway:8000
+      VOWHUMANS_INTERNAL_KEY: dev-only-change-me
     ports: ["3000:3000"]
     depends_on: [api-gateway]
 

@@ -8,9 +8,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
 log = logging.getLogger("avatar-worker")
 app = FastAPI(title="VowHumans Avatar Worker", version="1.0.0")
@@ -43,6 +42,13 @@ def _download(url: str, suffix: str) -> str:
     return path
 
 
+async def _save_upload(upload, suffix: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    with os.fdopen(fd, "wb") as f:
+        f.write(await upload.read())
+    return path
+
+
 @app.get("/health")
 def health():
     return {
@@ -55,16 +61,29 @@ def health():
     }
 
 
-class PrepareAvatarRequest(BaseModel):
-    image_url: str
-
-
 @app.post("/internal/v1/avatars", status_code=201)
-def prepare_avatar(body: PrepareAvatarRequest, x_internal_key: str | None = Header(default=None)):
+async def prepare_avatar(request: Request, x_internal_key: str | None = Header(default=None)):
     _require_internal_key(x_internal_key)
     if _engine is None:
         raise HTTPException(503, f"MuseTalk is not available ({_engine_error or 'ENABLE_MUSETALK is off'}).")
-    image_path = _download(body.image_url, ".png")
+
+    # Accepts either a multipart upload (a caller with raw bytes in hand — e.g. a face
+    # image behind session-cookie auth this pod can't present) or the original
+    # {image_url} JSON body (simple callers that do have a fetchable URL).
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        upload = form.get("image_file")
+        if upload is None:
+            raise HTTPException(422, "Missing multipart field 'image_file'.")
+        image_path = await _save_upload(upload, ".png")
+    else:
+        body = await request.json()
+        image_url = body.get("image_url")
+        if not image_url:
+            raise HTTPException(422, "Missing 'image_url' (or upload 'image_file' as multipart/form-data).")
+        image_path = _download(image_url, ".png")
+
     try:
         avatar = _engine.prepare_avatar(image_path)
     except Exception as exc:  # noqa: BLE001
@@ -83,20 +102,35 @@ def release_avatar(avatar_id: str, x_internal_key: str | None = Header(default=N
     return {"avatar_id": avatar_id, "released": True}
 
 
-class RenderRequest(BaseModel):
-    avatar_id: str
-    audio_url: str
-
-
 @app.post("/internal/v1/render")
-def render(body: RenderRequest, x_internal_key: str | None = Header(default=None)):
+async def render(request: Request, x_internal_key: str | None = Header(default=None)):
     _require_internal_key(x_internal_key)
     if _engine is None:
         raise HTTPException(503, f"MuseTalk is not available ({_engine_error or 'ENABLE_MUSETALK is off'}); caller should fall back to audio-only.")
-    avatar = _avatars.get(body.avatar_id)
+
+    # Same either-multipart-or-URL pattern as prepare_avatar — a caller with raw audio
+    # bytes in hand (e.g. PCM captured from a LiveKit track, muxed to WAV in memory) has
+    # no URL to give us at all.
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        avatar_id = form.get("avatar_id")
+        upload = form.get("audio_file")
+        if not avatar_id or upload is None:
+            raise HTTPException(422, "Multipart requests need both 'avatar_id' and 'audio_file'.")
+        audio_path = await _save_upload(upload, ".wav")
+    else:
+        body = await request.json()
+        avatar_id = body.get("avatar_id")
+        audio_url = body.get("audio_url")
+        if not avatar_id or not audio_url:
+            raise HTTPException(422, "Missing 'avatar_id'/'audio_url' (or upload 'audio_file' as multipart/form-data).")
+        audio_path = _download(audio_url, ".wav")
+
+    avatar = _avatars.get(avatar_id)
     if avatar is None:
+        Path(audio_path).unlink(missing_ok=True)
         raise HTTPException(404, "Unknown avatar_id — call /internal/v1/avatars first (or it may have been released).")
-    audio_path = _download(body.audio_url, ".wav")
     try:
         video_path = _engine.render(avatar, audio_path)
     except Exception as exc:  # noqa: BLE001

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64
+import datetime
 import hashlib
 import hmac
 import json
@@ -9,6 +9,7 @@ import uuid
 from typing import Annotated, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from livekit.api import AccessToken, RoomAgentDispatch, RoomConfiguration, VideoGrants
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="VowHumans API Gateway", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -77,18 +78,33 @@ class PresenterProjectRequest(BaseModel):
 class LiveKitTokenRequest(BaseModel):
     session_id: uuid.UUID
     participant_identity: str = Field(min_length=3, max_length=180)
+    # Which digital human this call is for — e.g. "thandi-mokoena", the same slug
+    # StudioView.tsx already uses when assigning a face/voice/gesture profile to a
+    # human. Optional: omitting it just means no avatar-participant is dispatched
+    # (audio-only), matching every call before this field existed.
+    human_slug: str | None = None
 
-def _b64url(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
+TOKEN_TTL = datetime.timedelta(seconds=600)
+AVATAR_AGENT_NAME = "vowhumans-avatar"
 
-def create_livekit_token(room: str, participant: str) -> str:
+def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None) -> str:
     api_key, secret = os.getenv("LIVEKIT_API_KEY", ""), os.getenv("LIVEKIT_API_SECRET", "")
     if not api_key or not secret: raise HTTPException(503, "LiveKit is not configured")
-    now = int(time.time())
-    header = _b64url(json.dumps({"alg":"HS256","typ":"JWT"},separators=(",",":")).encode())
-    payload = _b64url(json.dumps({"iss":api_key,"sub":participant,"nbf":now-5,"exp":now+600,"video":{"roomJoin":True,"room":room,"canPublish":True,"canSubscribe":True}},separators=(",",":")).encode())
-    signing = f"{header}.{payload}".encode()
-    return f"{header}.{payload}.{_b64url(hmac.new(secret.encode(), signing, hashlib.sha256).digest())}"
+    token = (
+        AccessToken(api_key, secret)
+        .with_identity(participant)
+        .with_ttl(TOKEN_TTL)
+        .with_grants(VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
+    )
+    # Explicit agent dispatch: rides on this same token rather than a separate Room
+    # Service call, so the room is created and the avatar-participant job dispatched
+    # atomically by the LiveKit server — no "does the room exist yet" ordering question.
+    # realtime-agent (the voice agent) is untouched and keeps joining every room via
+    # implicit/automatic dispatch; only this one named agent is explicit.
+    if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
+        metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
+        token = token.with_room_config(RoomConfiguration(agents=[RoomAgentDispatch(agent_name=AVATAR_AGENT_NAME, metadata=metadata)]))
+    return token.to_jwt()
 
 @app.get("/api/v1/health", tags=["health"])
 def health():
@@ -114,7 +130,8 @@ def create_presenter_project(body: PresenterProjectRequest, auth: Auth):
 @app.post("/api/v1/livekit/token", tags=["livekit"])
 def livekit_token(body: LiveKitTokenRequest, auth: Auth):
     room=f"vhm_{auth.organisation_id.hex[:10]}_{body.session_id.hex[:16]}"
-    return {"url":os.getenv("LIVEKIT_URL"),"room":room,"token":create_livekit_token(room,body.participant_identity),"expires_in":600}
+    token = create_livekit_token(room, body.participant_identity, auth.organisation_id, body.human_slug)
+    return {"url":os.getenv("LIVEKIT_URL"),"room":room,"token":token,"expires_in":int(TOKEN_TTL.total_seconds())}
 
 @app.get("/api/v1/usage", tags=["usage"])
 def usage(auth: Auth):
