@@ -16,13 +16,13 @@ This imports MuseTalk's own modules rather than reimplementing the model — the
 MuseTalk repo must be present on PYTHONPATH (the Dockerfile clones it) with model
 weights downloaded to ./models per TMElyralab/MuseTalk's own setup instructions.
 
-NOT YET RUN AGAINST REAL HARDWARE. This was written from MuseTalk's documented
-module layout and public source, not verified against a live GPU, since none was
-available while writing it. The exact import paths, function signatures, and
-tensor shapes are very likely to need at least one round of correction once run
-for real — same as every other backend piece in this project needed real-log-driven
-fixes before it worked. Treat the first deploy as a debugging session, not a
-finished feature.
+Verified against MuseTalk's actual source (musetalk/utils/*.py) and its reference
+scripts/realtime_inference.py after the first live run surfaced several signature
+mismatches from writing this against docs alone: get_landmark_and_bbox()'s real
+parameter is upperbondrange (not bbox_shift) and its "no face" sentinel is
+(0.0, 0.0, 0.0, 0.0) (not None); get_whisper_chunk() needs the actual WhisperModel
+plus a librosa_length argument neither of which this originally passed (self.pe,
+a PositionalEncoding module, is unrelated to the whisper encoder).
 """
 from __future__ import annotations
 
@@ -66,6 +66,8 @@ class MuseTalkEngine:
         # cloned onto PYTHONPATH by the Dockerfile, and importing them eagerly at
         # module load time would break `main.py --help`-style usage / local dev
         # without the weights present.
+        from transformers import WhisperModel
+
         from musetalk.utils.audio_processor import AudioProcessor
         from musetalk.utils.face_parsing import FaceParsing
         from musetalk.utils.utils import load_all_model
@@ -96,7 +98,15 @@ class MuseTalkEngine:
         self.weight_dtype = torch.float16
 
         self.audio_processor = AudioProcessor(feature_extractor_path=whisper_dir)
+        # AudioProcessor only wraps the feature *extractor* (mel-spectrogram prep) —
+        # get_whisper_chunk() separately needs the actual Whisper encoder model to turn
+        # those features into hidden states. Confirmed against MuseTalk's own
+        # scripts/realtime_inference.py: this is loaded as a second, separate object,
+        # not something AudioProcessor or load_all_model() already provides.
+        self.whisper = WhisperModel.from_pretrained(whisper_dir).to(device=DEVICE, dtype=self.weight_dtype).eval()
+        self.whisper.requires_grad_(False)
         self.face_parser = FaceParsing()
+        self._timesteps = torch.tensor([0], device=DEVICE)
 
     def prepare_avatar(self, image_path: str) -> PreparedAvatar:
         from musetalk.utils.blending import get_image_prepare_material
@@ -106,9 +116,12 @@ class MuseTalkEngine:
         if frame is None:
             raise ValueError(f"Could not read image at {image_path}")
 
-        coord_list, frame_list = get_landmark_and_bbox([image_path], bbox_shift=0)
+        # MuseTalk's real parameter name is upperbondrange, not bbox_shift (confirmed live:
+        # "get_landmark_and_bbox() got an unexpected keyword argument 'bbox_shift'"). It also
+        # signals "no face detected" with the placeholder (0.0, 0.0, 0.0, 0.0), not None.
+        coord_list, frame_list = get_landmark_and_bbox([image_path], upperbondrange=0)
         bbox = coord_list[0]
-        if bbox == coord_list[0] and bbox is None:
+        if bbox == (0.0, 0.0, 0.0, 0.0):
             raise ValueError("No face detected in the supplied image.")
         x1, y1, x2, y2 = bbox
 
@@ -131,9 +144,15 @@ class MuseTalkEngine:
         frames_dir = Path(out_dir) / "frames"
         frames_dir.mkdir(parents=True, exist_ok=True)
 
-        whisper_input = self.audio_processor.get_audio_feature(audio_path, weight_dtype=self.weight_dtype)
+        # get_audio_feature() returns (features, sample_count) — both required by
+        # get_whisper_chunk() below (librosa_length has no default and was previously
+        # omitted entirely; whisper here must be the WhisperModel, not self.pe, which
+        # is an unrelated PositionalEncoding module). Confirmed against MuseTalk's own
+        # scripts/realtime_inference.py.
+        whisper_input_features, librosa_length = self.audio_processor.get_audio_feature(audio_path, weight_dtype=self.weight_dtype)
         whisper_chunks = self.audio_processor.get_whisper_chunk(
-            whisper_input, DEVICE, self.weight_dtype, self.pe, fps=FPS, audio_padding_length_left=2, audio_padding_length_right=2,
+            whisper_input_features, DEVICE, self.weight_dtype, self.whisper, librosa_length,
+            fps=FPS, audio_padding_length_left=2, audio_padding_length_right=2,
         )
         frame_count = len(whisper_chunks)
         if frame_count == 0:
@@ -145,12 +164,13 @@ class MuseTalkEngine:
         frame_index = 0
         for whisper_batch, latent_batch in gen:
             with torch.no_grad():
-                audio_feature_batch = self.pe(whisper_batch.to(DEVICE, dtype=self.weight_dtype))
+                audio_feature_batch = self.pe(whisper_batch.to(DEVICE))
                 pred_latents = self.unet.model(
                     latent_batch.to(DEVICE, dtype=self.weight_dtype),
-                    torch.tensor([0], device=DEVICE),
+                    self._timesteps,
                     encoder_hidden_states=audio_feature_batch,
                 ).sample
+                pred_latents = pred_latents.to(device=DEVICE, dtype=self.vae.vae.dtype)
                 recon_frames = self.vae.decode_latents(pred_latents)
 
             for generated in recon_frames:
