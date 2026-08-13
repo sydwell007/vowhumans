@@ -173,9 +173,15 @@ class MuseTalkEngine:
                 pred_latents = pred_latents.to(device=DEVICE, dtype=self.vae.vae.dtype)
                 recon_frames = self.vae.decode_latents(pred_latents)
 
+            x1, y1, x2, y2 = avatar.bbox
             for generated in recon_frames:
+                # The VAE always decodes at a fixed 256x256 working resolution — the
+                # generated crop must be resized back to the original detected face
+                # bbox size before blending, or PIL's paste raises "images do not
+                # match" (confirmed live). Matches MuseTalk's own process_frames().
+                resized = cv2.resize(generated.astype(np.uint8), (x2 - x1, y2 - y1))
                 blended = get_image_blending(
-                    copy.deepcopy(avatar.original_frame), generated, avatar.bbox, avatar.mask, avatar.mask_crop_box,
+                    copy.deepcopy(avatar.original_frame), resized, avatar.bbox, avatar.mask, avatar.mask_crop_box,
                 )
                 cv2.imwrite(str(frames_dir / f"{frame_index:06d}.png"), blended)
                 frame_index += 1
