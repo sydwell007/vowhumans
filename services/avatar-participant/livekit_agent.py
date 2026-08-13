@@ -41,6 +41,12 @@ import numpy as np
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli
 
+# None of this module's own log lines appeared anywhere in the logs during the
+# first live test, even in cases that must have fired (e.g. every job at minimum
+# passes through entrypoint()) — explicitly configuring a handler here rather than
+# assuming livekit.agents' own setup propagates ours, so this is actually visible
+# for the next attempt.
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("avatar-participant")
 
 AGENT_NAME = "vowhumans-avatar"
@@ -77,6 +83,7 @@ SPEAKING_POLL_INTERVAL_SECONDS = 0.1
 
 
 async def entrypoint(ctx: JobContext) -> None:
+    log.info("entrypoint: job received, raw metadata=%r", ctx.job.metadata)
     metadata = json.loads(ctx.job.metadata) if ctx.job.metadata else {}
     organisation_id = metadata.get("organisation_id")
     human_slug = metadata.get("human_slug")
@@ -85,23 +92,27 @@ async def entrypoint(ctx: JobContext) -> None:
         return
 
     await ctx.connect()
+    log.info("entrypoint: connected to room %s as %s", ctx.room.name, ctx.room.local_participant.identity)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         avatar_id = await _prepare_avatar(client, organisation_id, human_slug)
         if avatar_id is None:
             log.info("No usable face for %s/%s — this call stays audio-only.", organisation_id, human_slug)
             return
+        log.info("entrypoint: avatar prepared, avatar_id=%s", avatar_id)
 
         # Sent as soon as an avatar is ready to render, not on the first successful
         # render — every turn from here on (lip-synced or, on a render failure, the
         # raw-audio fallback) publishes through vhm-avatar-audio, so it's safe for
         # the frontend to commit to that track the moment this arrives.
         await ctx.room.local_participant.publish_data(json.dumps({"type": "vhm_avatar_ready"}), reliable=True)
+        log.info("entrypoint: published vhm_avatar_ready")
 
         session = AvatarSession(ctx, client, avatar_id)
         try:
             await session.run()
         finally:
+            log.info("entrypoint: session.run() returned, releasing avatar")
             await _release_avatar(client, avatar_id)
 
 
@@ -164,10 +175,21 @@ class AvatarSession:
         audio_track = rtc.LocalAudioTrack.create_audio_track(AVATAR_AUDIO_TRACK, self._audio_source)
         await self._ctx.room.local_participant.publish_track(video_track)
         await self._ctx.room.local_participant.publish_track(audio_track)
+        log.info("AvatarSession.run: published %s and %s", AVATAR_VIDEO_TRACK, AVATAR_AUDIO_TRACK)
 
         self._ctx.room.on("track_subscribed", self._on_track_subscribed)
         self._ctx.room.on("active_speakers_changed", self._on_active_speakers_changed)
         self._ctx.room.on("disconnected", lambda *_: self._stop.set())
+
+        # In case the agent's track was already subscribed before these listeners
+        # were attached (a real possibility — publish_track above has no ordering
+        # guarantee relative to when the voice agent joined and published its own
+        # track), check what's already in the room right now too.
+        for participant in self._ctx.room.remote_participants.values():
+            log.info("AvatarSession.run: existing participant identity=%s kind=%s publications=%s", participant.identity, participant.kind, list(participant.track_publications.keys()))
+            for publication in participant.track_publications.values():
+                if publication.track is not None:
+                    self._on_track_subscribed(publication.track, publication, participant)
 
         watcher = asyncio.create_task(self._watch_for_silence())
         try:
@@ -176,24 +198,35 @@ class AvatarSession:
             watcher.cancel()
 
     def _on_track_subscribed(self, track: rtc.Track, publication: rtc.TrackPublication, participant: rtc.RemoteParticipant) -> None:
+        log.info("track_subscribed: participant identity=%s kind=%s track.kind=%s track.name=%r", participant.identity, participant.kind, track.kind, publication.name)
         if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT or track.kind != rtc.TrackKind.KIND_AUDIO:
             return
         if self._agent_participant is not None:
             return  # Already tracking one agent track; ignore any further ones.
         self._agent_participant = participant
+        log.info("track_subscribed: tracking agent participant %s for audio", participant.identity)
         asyncio.create_task(self._consume_agent_audio(track))
 
     def _on_active_speakers_changed(self, speakers: list[rtc.Participant]) -> None:
         if self._agent_participant is None:
             return
+        was_speaking = self._speaking
         self._speaking = any(p.sid == self._agent_participant.sid for p in speakers)
+        if self._speaking != was_speaking:
+            log.info("active_speakers_changed: agent speaking=%s (speakers=%s)", self._speaking, [p.identity for p in speakers])
 
     async def _consume_agent_audio(self, track: rtc.Track) -> None:
+        log.info("_consume_agent_audio: starting to consume audio frames")
+        frame_count = 0
         stream = rtc.AudioStream.from_track(track=track, sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         try:
             async for event in stream:
                 self._buffer.append(event.frame)
+                frame_count += 1
+                if frame_count % 200 == 0:
+                    log.info("_consume_agent_audio: %d frames received so far (buffer=%d)", frame_count, len(self._buffer))
         finally:
+            log.info("_consume_agent_audio: stream ended after %d frames", frame_count)
             await stream.aclose()
 
     async def _watch_for_silence(self) -> None:
@@ -208,6 +241,7 @@ class AvatarSession:
             if self._silence_elapsed >= SILENCE_HOLD_SECONDS:
                 self._silence_elapsed = 0.0
                 frames, self._buffer = self._buffer, []
+                log.info("_watch_for_silence: utterance finalized, %d frames, dispatching render", len(frames))
                 asyncio.create_task(self._handle_turn(frames))
 
     async def _handle_turn(self, frames: list[rtc.AudioFrame]) -> None:
@@ -223,10 +257,12 @@ class AvatarSession:
             if video_bytes is None:
                 await self._play_frames(frames)
                 return
+            log.info("_handle_turn: render succeeded, %d bytes, playing rendered clip", len(video_bytes))
             await self._play_rendered_clip(video_bytes)
 
     async def _render(self, frames: list[rtc.AudioFrame]) -> bytes | None:
         wav_bytes = _frames_to_wav(frames)
+        log.info("_render: sending %d bytes of WAV audio to avatar-worker", len(wav_bytes))
         resp = await self._client.post(
             f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/render",
             headers={"x-internal-key": INTERNAL_KEY},
