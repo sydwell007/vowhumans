@@ -28,7 +28,6 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import logging
 import os
 import subprocess
 import tempfile
@@ -41,13 +40,16 @@ import numpy as np
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli
 
-# None of this module's own log lines appeared anywhere in the logs during the
-# first live test, even in cases that must have fired (e.g. every job at minimum
-# passes through entrypoint()) — explicitly configuring a handler here rather than
-# assuming livekit.agents' own setup propagates ours, so this is actually visible
-# for the next attempt.
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("avatar-participant")
+
+def _log(msg: str) -> None:
+    # Plain print(flush=True), not the logging module: none of this module's own
+    # log.*() lines appeared anywhere in the logs during the first live test, even
+    # in paths that must have fired every single job. logging.basicConfig() is a
+    # silent no-op once the root logger already has handlers, and livekit.agents'
+    # own startup (which runs before any job reaches this module) already installs
+    # one — so our calls were being swallowed. print() bypasses that class of
+    # problem entirely, the same fix MuseTalk's own buffered prints needed earlier.
+    print(f"[avatar-participant] {msg}", flush=True)
 
 AGENT_NAME = "vowhumans-avatar"
 AVATAR_AUDIO_TRACK = "vhm-avatar-audio"
@@ -83,42 +85,42 @@ SPEAKING_POLL_INTERVAL_SECONDS = 0.1
 
 
 async def entrypoint(ctx: JobContext) -> None:
-    log.info("entrypoint: job received, raw metadata=%r", ctx.job.metadata)
+    _log(f"entrypoint: job received, raw metadata={ctx.job.metadata!r}")
     metadata = json.loads(ctx.job.metadata) if ctx.job.metadata else {}
     organisation_id = metadata.get("organisation_id")
     human_slug = metadata.get("human_slug")
     if not organisation_id or not human_slug:
-        log.info("No organisation_id/human_slug on this job — nothing to do.")
+        _log("No organisation_id/human_slug on this job — nothing to do.")
         return
 
     await ctx.connect()
-    log.info("entrypoint: connected to room %s as %s", ctx.room.name, ctx.room.local_participant.identity)
+    _log(f"entrypoint: connected to room {ctx.room.name} as {ctx.room.local_participant.identity}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         avatar_id = await _prepare_avatar(client, organisation_id, human_slug)
         if avatar_id is None:
-            log.info("No usable face for %s/%s — this call stays audio-only.", organisation_id, human_slug)
+            _log(f"No usable face for {organisation_id}/{human_slug} — this call stays audio-only.")
             return
-        log.info("entrypoint: avatar prepared, avatar_id=%s", avatar_id)
+        _log(f"entrypoint: avatar prepared, avatar_id={avatar_id}")
 
         # Sent as soon as an avatar is ready to render, not on the first successful
         # render — every turn from here on (lip-synced or, on a render failure, the
         # raw-audio fallback) publishes through vhm-avatar-audio, so it's safe for
         # the frontend to commit to that track the moment this arrives.
         await ctx.room.local_participant.publish_data(json.dumps({"type": "vhm_avatar_ready"}), reliable=True)
-        log.info("entrypoint: published vhm_avatar_ready")
+        _log("entrypoint: published vhm_avatar_ready")
 
         session = AvatarSession(ctx, client, avatar_id)
         try:
             await session.run()
         finally:
-            log.info("entrypoint: session.run() returned, releasing avatar")
+            _log("entrypoint: session.run() returned, releasing avatar")
             await _release_avatar(client, avatar_id)
 
 
 async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> str | None:
     if not (AVATAR_WORKER_URL and STUDIO_WEB_URL and INTERNAL_KEY):
-        log.warning("AVATAR_WORKER_URL / STUDIO_WEB_URL / VOWHUMANS_INTERNAL_KEY not fully configured.")
+        _log("AVATAR_WORKER_URL / STUDIO_WEB_URL / VOWHUMANS_INTERNAL_KEY not fully configured.")
         return None
     try:
         face_resp = await client.get(
@@ -127,7 +129,7 @@ async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human
             params={"human_slug": human_slug},
         )
         if face_resp.status_code != 200:
-            log.info("No face assigned for %s/%s (studio-web returned %s).", organisation_id, human_slug, face_resp.status_code)
+            _log(f"No face assigned for {organisation_id}/{human_slug} (studio-web returned {face_resp.status_code}).")
             return None
 
         prepare_resp = await client.post(
@@ -136,11 +138,11 @@ async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human
             files={"image_file": ("face", face_resp.content, face_resp.headers.get("content-type", "image/png"))},
         )
         if prepare_resp.status_code != 201:
-            log.warning("avatar-worker prepare failed: %s %s", prepare_resp.status_code, prepare_resp.text)
+            _log(f"avatar-worker prepare failed: {prepare_resp.status_code} {prepare_resp.text}")
             return None
         return prepare_resp.json()["avatar_id"]
     except httpx.HTTPError as exc:
-        log.warning("Could not reach studio-web/avatar-worker to prepare an avatar: %s", exc)
+        _log(f"Could not reach studio-web/avatar-worker to prepare an avatar: {exc}")
         return None
 
 
@@ -175,7 +177,7 @@ class AvatarSession:
         audio_track = rtc.LocalAudioTrack.create_audio_track(AVATAR_AUDIO_TRACK, self._audio_source)
         await self._ctx.room.local_participant.publish_track(video_track)
         await self._ctx.room.local_participant.publish_track(audio_track)
-        log.info("AvatarSession.run: published %s and %s", AVATAR_VIDEO_TRACK, AVATAR_AUDIO_TRACK)
+        _log(f"AvatarSession.run: published {AVATAR_VIDEO_TRACK} and {AVATAR_AUDIO_TRACK}")
 
         self._ctx.room.on("track_subscribed", self._on_track_subscribed)
         self._ctx.room.on("active_speakers_changed", self._on_active_speakers_changed)
@@ -186,7 +188,7 @@ class AvatarSession:
         # guarantee relative to when the voice agent joined and published its own
         # track), check what's already in the room right now too.
         for participant in self._ctx.room.remote_participants.values():
-            log.info("AvatarSession.run: existing participant identity=%s kind=%s publications=%s", participant.identity, participant.kind, list(participant.track_publications.keys()))
+            _log(f"AvatarSession.run: existing participant identity={participant.identity} kind={participant.kind} publications={list(participant.track_publications.keys())}")
             for publication in participant.track_publications.values():
                 if publication.track is not None:
                     self._on_track_subscribed(publication.track, publication, participant)
@@ -198,13 +200,13 @@ class AvatarSession:
             watcher.cancel()
 
     def _on_track_subscribed(self, track: rtc.Track, publication: rtc.TrackPublication, participant: rtc.RemoteParticipant) -> None:
-        log.info("track_subscribed: participant identity=%s kind=%s track.kind=%s track.name=%r", participant.identity, participant.kind, track.kind, publication.name)
+        _log(f"track_subscribed: participant identity={participant.identity} kind={participant.kind} track.kind={track.kind} track.name={publication.name!r}")
         if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT or track.kind != rtc.TrackKind.KIND_AUDIO:
             return
         if self._agent_participant is not None:
             return  # Already tracking one agent track; ignore any further ones.
         self._agent_participant = participant
-        log.info("track_subscribed: tracking agent participant %s for audio", participant.identity)
+        _log(f"track_subscribed: tracking agent participant {participant.identity} for audio")
         asyncio.create_task(self._consume_agent_audio(track))
 
     def _on_active_speakers_changed(self, speakers: list[rtc.Participant]) -> None:
@@ -213,10 +215,10 @@ class AvatarSession:
         was_speaking = self._speaking
         self._speaking = any(p.sid == self._agent_participant.sid for p in speakers)
         if self._speaking != was_speaking:
-            log.info("active_speakers_changed: agent speaking=%s (speakers=%s)", self._speaking, [p.identity for p in speakers])
+            _log(f"active_speakers_changed: agent speaking={self._speaking} (speakers={[p.identity for p in speakers]})")
 
     async def _consume_agent_audio(self, track: rtc.Track) -> None:
-        log.info("_consume_agent_audio: starting to consume audio frames")
+        _log("_consume_agent_audio: starting to consume audio frames")
         frame_count = 0
         stream = rtc.AudioStream.from_track(track=track, sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         try:
@@ -224,9 +226,9 @@ class AvatarSession:
                 self._buffer.append(event.frame)
                 frame_count += 1
                 if frame_count % 200 == 0:
-                    log.info("_consume_agent_audio: %d frames received so far (buffer=%d)", frame_count, len(self._buffer))
+                    _log(f"_consume_agent_audio: {frame_count} frames received so far (buffer={len(self._buffer)})")
         finally:
-            log.info("_consume_agent_audio: stream ended after %d frames", frame_count)
+            _log(f"_consume_agent_audio: stream ended after {frame_count} frames")
             await stream.aclose()
 
     async def _watch_for_silence(self) -> None:
@@ -241,7 +243,7 @@ class AvatarSession:
             if self._silence_elapsed >= SILENCE_HOLD_SECONDS:
                 self._silence_elapsed = 0.0
                 frames, self._buffer = self._buffer, []
-                log.info("_watch_for_silence: utterance finalized, %d frames, dispatching render", len(frames))
+                _log(f"_watch_for_silence: utterance finalized, {len(frames)} frames, dispatching render")
                 asyncio.create_task(self._handle_turn(frames))
 
     async def _handle_turn(self, frames: list[rtc.AudioFrame]) -> None:
@@ -251,18 +253,18 @@ class AvatarSession:
             try:
                 video_bytes = await asyncio.wait_for(self._render(frames), timeout=RENDER_TIMEOUT_SECONDS)
             except (TimeoutError, asyncio.TimeoutError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
-                log.warning("Render failed or timed out (%s) — falling back to raw audio for this turn.", exc)
+                _log(f"Render failed or timed out ({exc}) — falling back to raw audio for this turn.")
                 await self._play_frames(frames)
                 return
             if video_bytes is None:
                 await self._play_frames(frames)
                 return
-            log.info("_handle_turn: render succeeded, %d bytes, playing rendered clip", len(video_bytes))
+            _log(f"_handle_turn: render succeeded, {len(video_bytes)} bytes, playing rendered clip")
             await self._play_rendered_clip(video_bytes)
 
     async def _render(self, frames: list[rtc.AudioFrame]) -> bytes | None:
         wav_bytes = _frames_to_wav(frames)
-        log.info("_render: sending %d bytes of WAV audio to avatar-worker", len(wav_bytes))
+        _log(f"_render: sending {len(wav_bytes)} bytes of WAV audio to avatar-worker")
         resp = await self._client.post(
             f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/render",
             headers={"x-internal-key": INTERNAL_KEY},
@@ -270,7 +272,7 @@ class AvatarSession:
             files={"audio_file": ("turn.wav", wav_bytes, "audio/wav")},
         )
         if resp.status_code != 200:
-            log.warning("avatar-worker render failed: %s %s", resp.status_code, resp.text)
+            _log(f"avatar-worker render failed: {resp.status_code} {resp.text}")
             return None
         return resp.content
 
