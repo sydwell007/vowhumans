@@ -7,26 +7,22 @@
 # fails loudly (set -e) and only fetches what musetalk_engine.py actually uses
 # (skips MuseTalk's V1.0 weights and SyncNet, neither of which this service's
 # inference path touches).
+#
+# The Hugging Face Hub files are fetched via download_weights.py, which calls
+# huggingface_hub's Python API directly rather than shelling out to the `hf` /
+# `huggingface-cli` console script — confirmed live that the script can be
+# missing from PATH at runtime even when the package it ships from installed
+# fine at build time (MuseTalk's own original script only worked around this
+# by force-reinstalling "huggingface_hub[cli]" immediately before every call,
+# which is exactly the kind of runtime-fragile behavior this rewrite exists to
+# get away from).
 set -e
 
 CheckpointsDir="${1:-models}"
+ScriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$CheckpointsDir"/{musetalkV15,sd-vae,whisper,dwpose,face-parse-bisent}
 
-echo "[download_weights] MuseTalk V1.5 (unet)..."
-hf download TMElyralab/MuseTalk --local-dir "$CheckpointsDir" \
-  --include "musetalkV15/musetalk.json" --include "musetalkV15/unet.pth"
-
-echo "[download_weights] SD VAE..."
-hf download stabilityai/sd-vae-ft-mse --local-dir "$CheckpointsDir/sd-vae" \
-  --include "config.json" --include "diffusion_pytorch_model.bin"
-
-echo "[download_weights] Whisper (tiny)..."
-hf download openai/whisper-tiny --local-dir "$CheckpointsDir/whisper" \
-  --include "config.json" --include "pytorch_model.bin" --include "preprocessor_config.json"
-
-echo "[download_weights] DWPose..."
-hf download yzd-v/DWPose --local-dir "$CheckpointsDir/dwpose" \
-  --include "dw-ll_ucoco_384.pth"
+python3 "$ScriptDir/download_weights.py" "$CheckpointsDir"
 
 echo "[download_weights] Face parsing (BiSeNet, via Google Drive)..."
 gdown 154JgKpzCPW82qINcVieuPH3fZ2e0P812 -O "$CheckpointsDir/face-parse-bisent/79999_iter.pth"
