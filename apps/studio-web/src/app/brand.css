@@ -1795,6 +1795,37 @@ body {
   color: #b7f7d9 !important;
 }
 
+.studio-shell .chip-toggle {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .chip-toggle:hover {
+  border-color: var(--vh-border-strong) !important;
+  background: var(--vh-surface-hover) !important;
+  color: var(--vh-text) !important;
+}
+.studio-shell .chip-toggle.active {
+  border-color: rgba(52, 211, 153, 0.22) !important;
+  background: rgba(52, 211, 153, 0.1) !important;
+  color: #b7f7d9 !important;
+}
+
+.studio-shell .doc-mini-row {
+  border-color: var(--vh-border) !important;
+}
+.studio-shell .doc-mini-row > button {
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+
+.studio-shell .citation-row {
+  border: 1px solid var(--vh-border) !important;
+  background: var(--vh-midnight-2) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .citation-row b { color: var(--vh-text) !important; }
+
 .studio-shell .immutable-note {
   border: 1px solid var(--vh-border);
   background: rgba(148, 163, 184, 0.07) !important;

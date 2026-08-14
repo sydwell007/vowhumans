@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   output: process.env.VERCEL ? undefined : "standalone",
   turbopack: { root: path.resolve(__dirname, "../..") },
   transpilePackages: ["@vowhumans/commercial-core", "@vowhumans/persona-schema"],
+  // pdf-parse in particular has a known bundler-import gotcha (a debug harness in its
+  // own index.js that misfires under tree-shaking) — keep these as plain Node externals.
+  serverExternalPackages: ["pdf-parse", "mammoth", "exceljs"],
   poweredByHeader: false,
   async redirects() {
     return ["dashboard","personas","knowledge","voices","faces","gesture-profiles","live-sessions","presenter-studio","applications","usage","identity-consent","api-keys","safety","audit-logs","settings"].map((section) => ({ source: `/${section}`, destination: `/studio/${section}`, permanent: false }));

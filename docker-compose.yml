@@ -1,7 +1,11 @@
 name: vowhumans
 services:
   postgres:
-    image: postgres:17-alpine
+    # pgvector's own image, not plain postgres — 007_knowledge_personas_library.sql
+    # needs the vector extension, which plain postgres:17-alpine doesn't ship.
+    # Existing local volumes predate this and won't have it: `docker compose down -v`
+    # before bringing this up fresh.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: vowhumans
       POSTGRES_USER: vowhumans

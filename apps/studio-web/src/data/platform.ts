@@ -116,14 +116,6 @@ export const identityRecords = [
 
 export const identityAlertCount = identityRecords.filter((record) => record.status === "Blocked").length;
 
-export const personas = [
-  { name: "Professional Practice Interviewer", role: "Talent Partner", version: "v3", state: "Published", updated: "2 Aug 2026" },
-  { name: "GoalVow Course Tutor", role: "Course Facilitator", version: "v5", state: "Published", updated: "1 Aug 2026" },
-  { name: "Career Coach", role: "Career Adviser", version: "v1", state: "Draft", updated: "30 Jul 2026" },
-  { name: "Learning Mentor", role: "Learning Companion", version: "v2", state: "Published", updated: "28 Jul 2026" },
-  { name: "Support Adviser", role: "Customer Support", version: "v1", state: "Draft", updated: "25 Jul 2026" },
-];
-
 export const navigation = [
   {
     label: "Workspace",

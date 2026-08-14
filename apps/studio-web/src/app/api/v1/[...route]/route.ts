@@ -1,15 +1,26 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
-import { applications, humans, personas } from "@/data/platform";
+import { NextRequest, NextResponse, after } from "next/server";
+import { applications, humans } from "@/data/platform";
 import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
+import { chatComplete, embedBatch } from "@/lib/openai";
+import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","knowledge","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
+
+// Seeded onto every newly created persona (blank or AI-generated) so the editor's
+// guardrail toggles are never empty — mirrors the three static chips the old mock UI
+// always showed, but now as real, per-persona, editable rows.
+const DEFAULT_GUARDRAILS = [
+  { code: "no_employer_access", instruction: "Never share candidate or learner responses with employers or third parties without explicit consent.", enforcement: "prompt" },
+  { code: "no_appearance_scoring", instruction: "Never evaluate or comment on a person's physical appearance.", enforcement: "prompt" },
+  { code: "disclose_ai", instruction: "Always disclose that you are an AI-generated digital human when asked or at the start of a session.", enforcement: "prompt" },
+];
 
 const GESTURE_FEATURES: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string }> = {
   blinking: { label: "Blinking", hasRange: true, defaultEnabled: true, defaultRange: "4–7s" },
@@ -80,6 +91,66 @@ async function proxyToGateway(path: string, body: unknown): Promise<{ status: nu
     return { status: upstream.status, data };
   } catch {
     return null;
+  }
+}
+
+// Shared tail of every ingestion path (upload / website / AI-generated): chunk the
+// extracted text, embed each chunk, store it, then flip the document live. Runs inside
+// after() so the upload response returns immediately — a document sits in 'draft'
+// until this completes, which the frontend polls for.
+async function storeChunks(organisationId: string, documentId: string, text: string) {
+  const chunks = chunkText(text);
+  if (chunks.length === 0) {
+    await sql`UPDATE knowledge_documents SET state = 'active' WHERE id = ${documentId} AND organisation_id = ${organisationId}`;
+    return;
+  }
+  const embedded = await embedBatch(chunks);
+  if (!embedded.ok) {
+    console.error("[knowledge-ingest] embedding failed:", embedded.message);
+    return;
+  }
+  for (let i = 0; i < chunks.length; i += 1) {
+    const vector = `[${embedded.data[i].join(",")}]`;
+    await sql`
+      INSERT INTO knowledge_chunks (organisation_id, document_id, ordinal, content, embedding_provider, embedding_model, embedding, citation)
+      VALUES (${organisationId}, ${documentId}, ${i}, ${chunks[i]}, 'openai', 'text-embedding-3-small', ${vector}::vector, ${JSON.stringify({ ordinal: i })}::jsonb)
+    `;
+  }
+  await sql`UPDATE knowledge_documents SET state = 'active' WHERE id = ${documentId} AND organisation_id = ${organisationId}`;
+}
+
+async function ingestUploadedDocument(organisationId: string, documentId: string, bytes: Buffer, sourceType: string) {
+  try {
+    const text = await extractText(bytes, sourceType);
+    await storeChunks(organisationId, documentId, text);
+  } catch (err) {
+    console.error("[knowledge-ingest:upload]", err);
+  }
+}
+
+async function ingestWebsiteDocument(organisationId: string, documentId: string, url: string) {
+  try {
+    const text = await fetchWebsiteText(url);
+    await storeChunks(organisationId, documentId, text);
+  } catch (err) {
+    console.error("[knowledge-ingest:website]", err);
+  }
+}
+
+async function ingestGeneratedDocument(organisationId: string, documentId: string, topic: string) {
+  try {
+    const generated = await chatComplete({
+      system: "You are a meticulous subject-matter expert writing an internal knowledge-base article for an AI assistant to reference. Write clearly, factually and comprehensively in well-structured prose with headings. Do not invent statistics, citations or sources.",
+      messages: [{ role: "user", content: `Write a thorough knowledge-base article covering: ${topic}` }],
+      maxOutputTokens: 2000,
+    });
+    if (!generated.ok) {
+      console.error("[knowledge-ingest:generated]", generated.message);
+      return;
+    }
+    await storeChunks(organisationId, documentId, generated.data);
+  } catch (err) {
+    console.error("[knowledge-ingest:generated]", err);
   }
 }
 
@@ -187,7 +258,82 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const rows = await sql`SELECT human_slug, gesture_profile_id FROM human_gesture_assignments WHERE organisation_id = ${organisationId}`;
     return response({ items: rows });
   }
-  if (resource === "personas") return response({ items: personas });
+  if (resource === "knowledge-bases" && route[1] && !route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [base] = await sql`SELECT id, name, description, state, created_at FROM knowledge_bases WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!base) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const documents = await sql`
+      SELECT d.id, d.title, d.source_type, d.approved_url, d.state, d.language, d.created_at, COUNT(c.id)::int AS chunk_count
+      FROM knowledge_documents d LEFT JOIN knowledge_chunks c ON c.document_id = d.id
+      WHERE d.knowledge_base_id = ${route[1]} AND d.organisation_id = ${organisationId} AND d.deleted_at IS NULL
+      GROUP BY d.id ORDER BY d.created_at DESC
+    `;
+    return response({ base, documents });
+  }
+
+  if (resource === "knowledge-bases" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT b.id, b.name, b.description, b.state, b.created_at,
+        COUNT(DISTINCT d.id)::int AS document_count,
+        COUNT(c.id)::int AS chunk_count,
+        COUNT(DISTINCT d.language) FILTER (WHERE d.language IS NOT NULL)::int AS language_count
+      FROM knowledge_bases b
+      LEFT JOIN knowledge_documents d ON d.knowledge_base_id = b.id AND d.deleted_at IS NULL
+      LEFT JOIN knowledge_chunks c ON c.document_id = d.id
+      WHERE b.organisation_id = ${organisationId}
+      GROUP BY b.id ORDER BY b.created_at DESC
+    `;
+    return response({ items: rows });
+  }
+
+  if (resource === "knowledge-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT human_slug, knowledge_base_id FROM human_knowledge_assignments WHERE organisation_id = ${organisationId}`;
+    return response({ items: rows });
+  }
+
+  if (resource === "personas" && route[1] && !route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [persona] = await sql`SELECT id, name, description, created_at FROM personas WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!persona) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const versions = await sql`SELECT * FROM persona_versions WHERE persona_id = ${route[1]} AND organisation_id = ${organisationId} ORDER BY version DESC`;
+    const guardrails = await sql`SELECT id, code, instruction, enforcement FROM guardrails WHERE persona_id = ${route[1]} AND organisation_id = ${organisationId} ORDER BY created_at`;
+    return response({ persona, versions, guardrails });
+  }
+
+  if (resource === "personas" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT DISTINCT ON (p.id) p.id, p.name, p.description, p.created_at,
+        pv.id AS version_id, pv.version, pv.state, pv.role, pv.conversation_style, pv.opening_message,
+        pv.language, pv.speaking_rate, pv.max_response_words, pv.knowledge_base_ids, pv.published_at
+      FROM personas p
+      LEFT JOIN persona_versions pv ON pv.persona_id = p.id AND pv.organisation_id = p.organisation_id
+      WHERE p.organisation_id = ${organisationId}
+      ORDER BY p.id, pv.version DESC NULLS LAST
+    `;
+    return response({ items: rows });
+  }
+
+  if (resource === "persona-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT a.human_slug, a.persona_version_id, pv.persona_id, pv.version, p.name AS persona_name
+      FROM human_persona_assignments a
+      JOIN persona_versions pv ON pv.id = a.persona_version_id
+      JOIN personas p ON p.id = pv.persona_id
+      WHERE a.organisation_id = ${organisationId}
+    `;
+    return response({ items: rows });
+  }
+
   if (resource === "applications") return response({ items: applications });
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
   if (resource === "integrations") return response({ items: integrations });
@@ -214,8 +360,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!name || !(file instanceof Blob) || file.size === 0 || !file.type.startsWith("audio/")) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a name and an audio file." }, { status: 422 });
     }
-    if (file.size > 8 * 1024 * 1024) {
-      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Audio file must be 8MB or smaller." }, { status: 422 });
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Audio file must be 4MB or smaller." }, { status: 422 });
     }
     const bytes = Buffer.from(await file.arrayBuffer());
     const objectKey = `voice-${randomUUID()}`;
@@ -237,8 +383,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!(file instanceof Blob) || file.size === 0 || !file.type.startsWith("image/")) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Choose an image file." }, { status: 422 });
     }
-    if (file.size > 8 * 1024 * 1024) {
-      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Image file must be 8MB or smaller." }, { status: 422 });
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Image file must be 4MB or smaller." }, { status: 422 });
     }
     const bytes = Buffer.from(await file.arrayBuffer());
     const objectKey = `face-${randomUUID()}`;
@@ -250,6 +396,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       RETURNING id, media_type, detector_provider, preprocessing_state, state, created_at
     `;
     return NextResponse.json({ success: true, data: faceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "knowledge-documents" && !route[1] && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const form = await request.formData();
+    const knowledgeBaseId = String(form.get("knowledge_base_id") ?? "").trim();
+    const title = String(form.get("title") ?? "").trim();
+    const language = String(form.get("language") ?? "").trim() || null;
+    const file = form.get("file");
+    if (!knowledgeBaseId || !(file instanceof Blob) || file.size === 0) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Choose a knowledge base and a file." }, { status: 422 });
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "File must be 4MB or smaller." }, { status: 422 });
+    }
+    const [base] = await sql`SELECT id FROM knowledge_bases WHERE id = ${knowledgeBaseId} AND organisation_id = ${organisationId}`;
+    if (!base) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "Knowledge base not found." }, { status: 404 });
+    const filename = file instanceof File ? file.name : "document";
+    const ext = filename.toLowerCase().split(".").pop() ?? "";
+    const sourceType = ext === "pdf" ? "pdf" : ext === "docx" ? "docx" : ext === "xlsx" || ext === "xls" ? "xlsx" : ext === "md" || ext === "markdown" ? "markdown" : "text";
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const objectKey = `knowledge-${randomUUID()}`;
+    await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, ${file.type || "application/octet-stream"}, ${bytes}, ${bytes.length})`;
+    const [docRow] = await sql`
+      INSERT INTO knowledge_documents (organisation_id, knowledge_base_id, title, source_type, object_key, sha256, language, state)
+      VALUES (${organisationId}, ${knowledgeBaseId}, ${title || filename}, ${sourceType}, ${objectKey}, ${createHash("sha256").update(bytes).digest("hex")}, ${language}, 'draft')
+      RETURNING id, title, source_type, state, language, created_at
+    `;
+    after(() => ingestUploadedDocument(organisationId, docRow.id, bytes, sourceType));
+    return NextResponse.json({ success: true, data: docRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -463,6 +640,242 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { human_slug: humanSlug, gesture_profile_id: gestureProfileId }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  if (resource === "knowledge-documents" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const knowledgeBaseId = typeof body.knowledge_base_id === "string" ? body.knowledge_base_id : "";
+    const sourceType = typeof body.source_type === "string" ? body.source_type : "";
+    if (!knowledgeBaseId || (sourceType !== "website" && sourceType !== "generated")) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a knowledge base and a valid source type." }, { status: 422 });
+    }
+    const [base] = await sql`SELECT id FROM knowledge_bases WHERE id = ${knowledgeBaseId} AND organisation_id = ${organisationId}`;
+    if (!base) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "Knowledge base not found." }, { status: 404 });
+
+    if (sourceType === "website") {
+      const url = typeof body.url === "string" ? body.url.trim() : "";
+      if (!url) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a URL." }, { status: 422 });
+      const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : url;
+      const [docRow] = await sql`
+        INSERT INTO knowledge_documents (organisation_id, knowledge_base_id, title, source_type, approved_url, state)
+        VALUES (${organisationId}, ${knowledgeBaseId}, ${title}, 'website', ${url}, 'draft')
+        RETURNING id, title, source_type, state, language, created_at
+      `;
+      after(() => ingestWebsiteDocument(organisationId, docRow.id, url));
+      return NextResponse.json({ success: true, data: docRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+    }
+
+    const topic = typeof body.topic === "string" ? body.topic.trim() : "";
+    if (!topic || topic.length < 5) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the topic, skill or expertise to generate (at least 5 characters)." }, { status: 422 });
+    }
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : topic;
+    const [docRow] = await sql`
+      INSERT INTO knowledge_documents (organisation_id, knowledge_base_id, title, source_type, language, state)
+      VALUES (${organisationId}, ${knowledgeBaseId}, ${title}, 'generated', 'en-ZA', 'draft')
+      RETURNING id, title, source_type, state, language, created_at
+    `;
+    after(() => ingestGeneratedDocument(organisationId, docRow.id, topic));
+    return NextResponse.json({ success: true, data: docRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "knowledge-bases" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    if (!name) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the knowledge base a name." }, { status: 422 });
+    const [baseRow] = await sql`
+      INSERT INTO knowledge_bases (organisation_id, name, description, state)
+      VALUES (${organisationId}, ${name}, ${description}, 'active')
+      RETURNING id, name, description, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: baseRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "knowledge-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const knowledgeBaseId = typeof body.knowledge_base_id === "string" ? body.knowledge_base_id : "";
+    const assigned = Boolean(body.assigned);
+    if (!humanSlug || !knowledgeBaseId) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug and knowledge_base_id are required." }, { status: 422 });
+    if (assigned) {
+      await sql`
+        INSERT INTO human_knowledge_assignments (organisation_id, human_slug, knowledge_base_id) VALUES (${organisationId}, ${humanSlug}, ${knowledgeBaseId})
+        ON CONFLICT (organisation_id, human_slug, knowledge_base_id) DO NOTHING
+      `;
+    } else {
+      await sql`DELETE FROM human_knowledge_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${humanSlug} AND knowledge_base_id = ${knowledgeBaseId}`;
+    }
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, knowledge_base_id: knowledgeBaseId, assigned }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "personas" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const mode = body.mode === "generate" || body.mode === "duplicate" ? body.mode : "blank";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the persona a name." }, { status: 422 });
+
+    if (mode === "duplicate") {
+      const sourcePersonaId = typeof body.source_persona_id === "string" ? body.source_persona_id : "";
+      const [source] = await sql`SELECT * FROM persona_versions WHERE persona_id = ${sourcePersonaId} AND organisation_id = ${organisationId} ORDER BY version DESC LIMIT 1`;
+      if (!source) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "Source persona not found." }, { status: 404 });
+      const sourceGuardrails = await sql`SELECT code, instruction, enforcement FROM guardrails WHERE persona_id = ${sourcePersonaId} AND organisation_id = ${organisationId}`;
+      const result = await sql.begin(async (tx) => {
+        const [persona] = await tx`INSERT INTO personas (organisation_id, name, description) VALUES (${organisationId}, ${name}, ${typeof body.description === "string" ? body.description.trim() : ""}) RETURNING id, name, description, created_at`;
+        const [version] = await tx`
+          INSERT INTO persona_versions (organisation_id, persona_id, version, state, role, system_instructions, conversation_style, opening_message, language, speaking_rate, max_response_words, knowledge_base_ids)
+          VALUES (${organisationId}, ${persona.id}, 1, 'draft', ${source.role}, ${source.system_instructions}, ${source.conversation_style}, ${source.opening_message}, ${source.language}, ${source.speaking_rate}, ${source.max_response_words}, ${source.knowledge_base_ids})
+          RETURNING *
+        `;
+        for (const g of sourceGuardrails) await tx`INSERT INTO guardrails (organisation_id, persona_id, code, instruction, enforcement) VALUES (${organisationId}, ${persona.id}, ${g.code}, ${g.instruction}, ${g.enforcement})`;
+        return { persona, version };
+      });
+      return NextResponse.json({ success: true, data: result, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+    }
+
+    let role = typeof body.role === "string" ? body.role.trim() : "";
+    let systemInstructions = "Be helpful, honest and concise. Always disclose that you are an AI-generated digital human.";
+    let conversationStyle = "Warm, professional and concise";
+    let openingMessage = "Hello, I'm an AI-generated assistant. How can I help today?";
+    let language = "English (South Africa)";
+    let speakingRate = 1;
+    let maxResponseWords = 150;
+
+    if (mode === "generate") {
+      if (!role || role.length < 5) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the VowHuman's role (at least 5 characters)." }, { status: 422 });
+      const generated = await chatComplete({
+        system: "You design conversational AI persona configurations for VowHumans, a platform for disclosed, consent-first AI digital humans. Given a role description, respond ONLY with a JSON object with keys: system_instructions (string, detailed behavioural instructions, including that the assistant must always disclose it is AI and never claim to be human), conversation_style (short string), opening_message (string), language (label like 'English (South Africa)'), max_response_words (integer 60-200), speaking_rate (number 0.85-1.15).",
+        messages: [{ role: "user", content: `Role: ${role}` }],
+        jsonMode: true,
+        maxOutputTokens: 900,
+      });
+      if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
+      try {
+        const parsed = JSON.parse(generated.data) as Record<string, unknown>;
+        systemInstructions = String(parsed.system_instructions ?? systemInstructions);
+        conversationStyle = String(parsed.conversation_style ?? conversationStyle);
+        openingMessage = String(parsed.opening_message ?? openingMessage);
+        language = String(parsed.language ?? language);
+        speakingRate = Number(parsed.speaking_rate) || speakingRate;
+        maxResponseWords = Number(parsed.max_response_words) || maxResponseWords;
+      } catch {
+        return NextResponse.json({ success: false, code: "GENERATION_FAILED", message: "The model returned an unexpected format." }, { status: 502 });
+      }
+    } else if (!role) {
+      role = "New role";
+    }
+
+    const result = await sql.begin(async (tx) => {
+      const [persona] = await tx`INSERT INTO personas (organisation_id, name, description) VALUES (${organisationId}, ${name}, ${typeof body.description === "string" ? body.description.trim() : role}) RETURNING id, name, description, created_at`;
+      const [version] = await tx`
+        INSERT INTO persona_versions (organisation_id, persona_id, version, state, role, system_instructions, conversation_style, opening_message, language, speaking_rate, max_response_words)
+        VALUES (${organisationId}, ${persona.id}, 1, 'draft', ${role}, ${systemInstructions}, ${conversationStyle}, ${openingMessage}, ${language}, ${speakingRate}, ${maxResponseWords})
+        RETURNING *
+      `;
+      for (const g of DEFAULT_GUARDRAILS) await tx`INSERT INTO guardrails (organisation_id, persona_id, code, instruction, enforcement) VALUES (${organisationId}, ${persona.id}, ${g.code}, ${g.instruction}, ${g.enforcement})`;
+      return { persona, version };
+    });
+    return NextResponse.json({ success: true, data: result, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "guardrails" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const personaId = typeof body.persona_id === "string" ? body.persona_id : "";
+    const code = typeof body.code === "string" ? body.code.trim() : "";
+    const instruction = typeof body.instruction === "string" ? body.instruction.trim() : "";
+    if (!personaId || !code || !instruction) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "persona_id, code and instruction are required." }, { status: 422 });
+    }
+    const [persona] = await sql`SELECT id FROM personas WHERE id = ${personaId} AND organisation_id = ${organisationId}`;
+    if (!persona) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const [row] = await sql`
+      INSERT INTO guardrails (organisation_id, persona_id, code, instruction, enforcement) VALUES (${organisationId}, ${personaId}, ${code}, ${instruction}, 'prompt')
+      RETURNING id, code, instruction, enforcement
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "persona-versions" && route[1] && route[2] === "publish") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [version] = await sql`
+      UPDATE persona_versions SET state = 'published', published_at = now()
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId} AND state = 'draft'
+      RETURNING *
+    `;
+    if (!version) return NextResponse.json({ success: false, code: "CONFLICT", message: "Only a draft version can be published." }, { status: 409 });
+    return NextResponse.json({ success: true, data: version, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "persona-versions" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const personaId = typeof body.persona_id === "string" ? body.persona_id : "";
+    if (!personaId) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "persona_id is required." }, { status: 422 });
+    const [latest] = await sql`SELECT * FROM persona_versions WHERE persona_id = ${personaId} AND organisation_id = ${organisationId} ORDER BY version DESC LIMIT 1`;
+    if (!latest) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const pick = (key: string) => (key in body ? body[key] : undefined);
+    const role = typeof pick("role") === "string" ? (pick("role") as string) : latest.role;
+    const systemInstructions = typeof pick("system_instructions") === "string" ? (pick("system_instructions") as string) : latest.system_instructions;
+    const conversationStyle = typeof pick("conversation_style") === "string" ? (pick("conversation_style") as string) : latest.conversation_style;
+    const openingMessage = typeof pick("opening_message") === "string" ? (pick("opening_message") as string) : latest.opening_message;
+    const language = typeof pick("language") === "string" ? (pick("language") as string) : latest.language;
+    const speakingRate = typeof pick("speaking_rate") === "number" ? (pick("speaking_rate") as number) : latest.speaking_rate;
+    const maxResponseWords = typeof pick("max_response_words") === "number" ? (pick("max_response_words") as number) : latest.max_response_words;
+    const knowledgeBaseIds = Array.isArray(pick("knowledge_base_ids")) ? (pick("knowledge_base_ids") as string[]) : latest.knowledge_base_ids;
+    const [version] = await sql`
+      INSERT INTO persona_versions (organisation_id, persona_id, version, state, role, system_instructions, conversation_style, opening_message, language, speaking_rate, max_response_words, knowledge_base_ids)
+      VALUES (${organisationId}, ${personaId}, ${latest.version + 1}, 'draft', ${role}, ${systemInstructions}, ${conversationStyle}, ${openingMessage}, ${language}, ${speakingRate}, ${maxResponseWords}, ${knowledgeBaseIds}::uuid[])
+      RETURNING *
+    `;
+    return NextResponse.json({ success: true, data: version, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "persona-assignments" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const personaVersionId = typeof body.persona_version_id === "string" ? body.persona_version_id : null;
+    if (!humanSlug) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug is required." }, { status: 422 });
+    if (personaVersionId) {
+      await sql`
+        INSERT INTO human_persona_assignments (organisation_id, human_slug, persona_version_id) VALUES (${organisationId}, ${humanSlug}, ${personaVersionId})
+        ON CONFLICT (organisation_id, human_slug) DO UPDATE SET persona_version_id = EXCLUDED.persona_version_id, assigned_at = now()
+      `;
+    } else {
+      await sql`DELETE FROM human_persona_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${humanSlug}`;
+    }
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, persona_version_id: personaVersionId }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "personas" && route[1] && route[2] === "test") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!message) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Enter a test message." }, { status: 422 });
+    const [version] = await sql`SELECT * FROM persona_versions WHERE persona_id = ${route[1]} AND organisation_id = ${organisationId} ORDER BY version DESC LIMIT 1`;
+    if (!version) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const knowledgeBaseIds: string[] = Array.isArray(version.knowledge_base_ids) ? version.knowledge_base_ids : [];
+    const cited = await retrieveChunks(organisationId, knowledgeBaseIds, message, 5);
+    const context = cited.length > 0
+      ? `\n\nGrounding context from the organisation's knowledge base (cite naturally, don't invent facts beyond this):\n${cited.map((c, i) => `[${i + 1}] (${c.documentTitle}) ${c.content}`).join("\n\n")}`
+      : "";
+    const generated = await chatComplete({
+      system: `${version.system_instructions}\n\nConversation style: ${version.conversation_style}\nRespond in ${version.language}. Keep responses under ${version.max_response_words} words.${context}`,
+      messages: [{ role: "user", content: message }],
+      maxOutputTokens: Math.min(800, version.max_response_words * 6),
+    });
+    if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
+    return NextResponse.json({
+      success: true,
+      data: { reply: generated.data, citations: cited.map((c) => ({ document_title: c.documentTitle, content: c.content.slice(0, 240), similarity: c.similarity })) },
+      meta: { mode: "live", request_id: randomUUID() },
+    });
+  }
+
   if (resource === "livekit") {
     const proxied = await proxyToGateway("/api/v1/livekit/token", {
       session_id: body.session_id,
@@ -504,6 +917,80 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const [deleted] = await sql`DELETE FROM gesture_profiles WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
+  if (route[0] === "knowledge-documents" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql<{ object_key: string | null }[]>`
+      DELETE FROM knowledge_documents WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING object_key
+    `;
+    if (deleted?.object_key) await sql`DELETE FROM media_blobs WHERE object_key = ${deleted.object_key} AND organisation_id = ${organisationId}`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
+  if (route[0] === "knowledge-bases" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const deleted = await sql.begin(async (tx) => {
+      const objectKeys = await tx<{ object_key: string | null }[]>`SELECT object_key FROM knowledge_documents WHERE knowledge_base_id = ${route[1]} AND organisation_id = ${organisationId}`;
+      const [base] = await tx`DELETE FROM knowledge_bases WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+      if (base) {
+        const keys = objectKeys.map((row) => row.object_key).filter((key): key is string => Boolean(key));
+        if (keys.length > 0) await tx`DELETE FROM media_blobs WHERE object_key = ANY(${keys}) AND organisation_id = ${organisationId}`;
+      }
+      return Boolean(base);
+    });
+    return response({ id: route[1], deleted }, 202);
+  }
+  if (route[0] === "personas" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM personas WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
+  if (route[0] === "guardrails" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM guardrails WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
   if (route[0] !== "sessions") return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
   return response({ id: route[1] ?? null, deletion: "mock-queued", private_content_included: false }, 202);
+}
+
+// New draft-only edit path — publishing forks a new version (POST persona-versions)
+// instead of allowing in-place mutation, keeping the audit trail promise real.
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
+  const { route } = await params;
+  const organisationId = await requireOrganisation(request);
+  if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+
+  if (route[0] === "guardrails" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const enforcement = typeof body.enforcement === "string" ? body.enforcement : null;
+    if (!enforcement) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "enforcement is required." }, { status: 422 });
+    const [row] = await sql`UPDATE guardrails SET enforcement = ${enforcement} WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id, code, instruction, enforcement`;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] !== "persona-versions" || !route[1]) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const [current] = await sql<{ state: string }[]>`SELECT state FROM persona_versions WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+  if (!current) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+  if (current.state !== "draft") {
+    return NextResponse.json({ success: false, code: "CONFLICT", message: "Published versions are immutable. Create a new draft version instead." }, { status: 409 });
+  }
+  const [version] = await sql`
+    UPDATE persona_versions SET
+      role = COALESCE(${typeof body.role === "string" ? body.role : null}, role),
+      system_instructions = COALESCE(${typeof body.system_instructions === "string" ? body.system_instructions : null}, system_instructions),
+      conversation_style = COALESCE(${typeof body.conversation_style === "string" ? body.conversation_style : null}, conversation_style),
+      opening_message = COALESCE(${typeof body.opening_message === "string" ? body.opening_message : null}, opening_message),
+      language = COALESCE(${typeof body.language === "string" ? body.language : null}, language),
+      speaking_rate = COALESCE(${typeof body.speaking_rate === "number" ? body.speaking_rate : null}, speaking_rate),
+      max_response_words = COALESCE(${typeof body.max_response_words === "number" ? body.max_response_words : null}, max_response_words),
+      knowledge_base_ids = COALESCE(${Array.isArray(body.knowledge_base_ids) ? (body.knowledge_base_ids as string[]) : null}::uuid[], knowledge_base_ids)
+    WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+    RETURNING *
+  `;
+  return NextResponse.json({ success: true, data: version, meta: { mode: "live", request_id: randomUUID() } });
 }

@@ -41,7 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { applications, humans, identityAlertCount, identityRecords, personas } from "@/data/platform";
+import { applications, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 
 const readiness = [
@@ -221,60 +221,634 @@ function TestDrawer({ humanId, onClose }: { humanId: string; onClose: () => void
   return <div className="drawer-scrim"><aside className="test-drawer"><button className="icon-button drawer-close" aria-label="Close test panel" onClick={onClose}><X size={19} /></button><p className="eyebrow">Safe test console</p><h2>Meet {human.name}</h2><div className="drawer-portrait"><Image src={human.image} alt={`AI-generated portrait of ${human.name}`} fill sizes="320px" /><span className="image-disclosure"><Sparkles size={13} /> AI-generated</span></div><StatusPill tone="warn">Mock conversation</StatusPill><p>{human.disclosure}. The live provider is not configured, so this test will not access your microphone.</p><Link href="/demos/interview" className="primary-button"><Play size={17} />Open interview demo</Link></aside></div>;
 }
 
+type PersonaSummary = {
+  id: string; name: string; description: string; created_at: string;
+  version_id: string | null; version: number | null; state: string | null; role: string | null;
+  conversation_style: string | null; opening_message: string | null; language: string | null;
+  speaking_rate: string | null; max_response_words: number | null;
+  knowledge_base_ids: string[] | null; published_at: string | null;
+};
+type PersonaVersionDetail = {
+  id: string; persona_id: string; version: number; state: string; role: string; system_instructions: string;
+  conversation_style: string; opening_message: string; language: string; speaking_rate: string;
+  max_response_words: number; knowledge_base_ids: string[]; published_at: string | null; created_at: string;
+};
+type Guardrail = { id: string; code: string; instruction: string; enforcement: string };
+type PersonaDetail = { persona: { id: string; name: string; description: string; created_at: string }; versions: PersonaVersionDetail[]; guardrails: Guardrail[] };
+type PersonaAssignment = { human_slug: string; persona_version_id: string; persona_id: string; version: number; persona_name: string };
+type KnowledgeBaseSummary = { id: string; name: string; description: string; state: string; created_at: string; document_count: number; chunk_count: number; language_count: number };
+
 function Personas() {
-  const [selected, setSelected] = useState(personas[0]);
-  const [message, setMessage] = useState("Tell me about a time you solved a difficult problem.");
-  const [tested, setTested] = useState(false);
+  const [items, setItems] = useState<PersonaSummary[]>([]);
+  const [assignments, setAssignments] = useState<PersonaAssignment[]>([]);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PersonaDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const [editRole, setEditRole] = useState('');
+  const [editSystemInstructions, setEditSystemInstructions] = useState('');
+  const [editConversationStyle, setEditConversationStyle] = useState('');
+  const [editOpeningMessage, setEditOpeningMessage] = useState('');
+  const [editLanguage, setEditLanguage] = useState('');
+  const [editSpeakingRate, setEditSpeakingRate] = useState('1');
+  const [editMaxResponseWords, setEditMaxResponseWords] = useState('150');
+  const [editKnowledgeBaseIds, setEditKnowledgeBaseIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
+  const [createMode, setCreateMode] = useState<'blank' | 'generate' | 'duplicate'>('generate');
+  const [createName, setCreateName] = useState('');
+  const [createRole, setCreateRole] = useState('');
+  const [createSourceId, setCreateSourceId] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const [newGuardrailCode, setNewGuardrailCode] = useState('');
+  const [newGuardrailInstruction, setNewGuardrailInstruction] = useState('');
+  const [addingGuardrail, setAddingGuardrail] = useState(false);
+
+  const [testMessage, setTestMessage] = useState("Tell me about a time you solved a difficult problem.");
+  const [testTurns, setTestTurns] = useState<{ role: 'user' | 'agent'; content: string; citations?: { document_title: string; content: string }[] }[]>([]);
+  const [testing, setTesting] = useState(false);
+
+  async function refreshList() {
+    const [personasRes, assignmentsRes, basesRes] = await Promise.all([
+      fetch('/api/v1/personas').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/persona-assignments').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/knowledge-bases').then(r => r.json()).catch(() => null),
+    ]);
+    if (personasRes?.success) {
+      setItems(personasRes.data.items);
+      setSelectedId((prev) => prev ?? personasRes.data.items[0]?.id ?? null);
+    }
+    if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    if (basesRes?.success) setKnowledgeBases(basesRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refreshList()/loadDetail() are also reused by user-triggered handlers below
+  useEffect(() => { refreshList(); }, []);
+
+  async function loadDetail(personaId: string) {
+    setDetailLoading(true);
+    const res = await fetch(`/api/v1/personas/${personaId}`).then(r => r.json()).catch(() => null);
+    if (res?.success) {
+      const loadedDetail = res.data as PersonaDetail;
+      setDetail(loadedDetail);
+      const latest = loadedDetail.versions[0];
+      if (latest) {
+        setEditRole(latest.role);
+        setEditSystemInstructions(latest.system_instructions);
+        setEditConversationStyle(latest.conversation_style);
+        setEditOpeningMessage(latest.opening_message);
+        setEditLanguage(latest.language);
+        setEditSpeakingRate(String(latest.speaking_rate));
+        setEditMaxResponseWords(String(latest.max_response_words));
+        setEditKnowledgeBaseIds(latest.knowledge_base_ids ?? []);
+      }
+    } else {
+      setDetail(null);
+    }
+    setTestTurns([]);
+    setDetailLoading(false);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads the selected persona's editable detail; re-runs whenever the library selection changes
+  useEffect(() => { if (selectedId) loadDetail(selectedId); }, [selectedId]);
+
+  const latestVersion = detail?.versions[0] ?? null;
+  const isDraft = latestVersion?.state === 'draft';
+
+  async function saveDraft() {
+    if (!detail || !latestVersion) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        role: editRole, system_instructions: editSystemInstructions, conversation_style: editConversationStyle,
+        opening_message: editOpeningMessage, language: editLanguage, speaking_rate: Number(editSpeakingRate) || 1,
+        max_response_words: Number(editMaxResponseWords) || 150, knowledge_base_ids: editKnowledgeBaseIds,
+      };
+      const res = isDraft
+        ? await fetch(`/api/v1/persona-versions/${latestVersion.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+        : await fetch('/api/v1/persona-versions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ persona_id: detail.persona.id, ...payload }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not save this persona.');
+      await loadDetail(detail.persona.id);
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save this persona.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishDraft() {
+    if (!latestVersion || latestVersion.state !== 'draft') return;
+    setPublishing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/persona-versions/${latestVersion.id}/publish`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not publish this version.');
+      if (detail) await loadDetail(detail.persona.id);
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not publish this version.');
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function duplicateAsDraft() {
+    if (!detail) return;
+    setDuplicating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/persona-versions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ persona_id: detail.persona.id }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not duplicate this version.');
+      await loadDetail(detail.persona.id);
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not duplicate this version.');
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
+  async function deletePersona(id: string) {
+    setBusy(id);
+    await fetch(`/api/v1/personas/${id}`, { method: 'DELETE' }).catch(() => {});
+    if (selectedId === id) { setSelectedId(null); setDetail(null); }
+    await refreshList();
+    setBusy(null);
+  }
+
+  async function assignPersona(humanSlug: string, personaVersionId: string) {
+    setBusy(`assign:${humanSlug}`);
+    await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, persona_version_id: personaVersionId || null }) }).catch(() => {});
+    await refreshList();
+    setBusy(null);
+  }
+
+  async function toggleGuardrail(guardrailId: string, currentlyOn: boolean) {
+    setBusy(`guardrail:${guardrailId}`);
+    await fetch(`/api/v1/guardrails/${guardrailId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enforcement: currentlyOn ? 'off' : 'prompt' }) }).catch(() => {});
+    if (detail) await loadDetail(detail.persona.id);
+    setBusy(null);
+  }
+
+  async function submitGuardrail(event: React.FormEvent) {
+    event.preventDefault();
+    if (!detail || !newGuardrailCode.trim() || !newGuardrailInstruction.trim()) return;
+    setAddingGuardrail(true);
+    try {
+      await fetch('/api/v1/guardrails', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ persona_id: detail.persona.id, code: newGuardrailCode.trim(), instruction: newGuardrailInstruction.trim() }) });
+      setNewGuardrailCode(''); setNewGuardrailInstruction('');
+      await loadDetail(detail.persona.id);
+    } catch {
+      setError('Could not add this guardrail.');
+    } finally {
+      setAddingGuardrail(false);
+    }
+  }
+
+  async function submitCreate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!createName.trim()) { setError('Give the persona a name.'); return; }
+    if (createMode === 'generate' && createRole.trim().length < 5) { setError("Describe the VowHuman's role (at least 5 characters)."); return; }
+    if (createMode === 'duplicate' && !createSourceId) { setError('Choose a persona to duplicate.'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = { mode: createMode, name: createName.trim() };
+      if (createMode === 'generate') payload.role = createRole.trim();
+      else if (createMode === 'blank' && createRole.trim()) payload.role = createRole.trim();
+      else if (createMode === 'duplicate') payload.source_persona_id = createSourceId;
+      const res = await fetch('/api/v1/personas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this persona.');
+      setCreateName(''); setCreateRole('');
+      await refreshList();
+      setSelectedId(body.data.persona.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this persona.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function runTest(event: React.FormEvent) {
+    event.preventDefault();
+    if (!detail || !testMessage.trim() || testing) return;
+    setTesting(true);
+    setError(null);
+    const outgoing = testMessage.trim();
+    setTestTurns((prev) => [...prev, { role: 'user', content: outgoing }]);
+    setTestMessage('');
+    try {
+      const res = await fetch(`/api/v1/personas/${detail.persona.id}/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: outgoing }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not run this test.');
+      setTestTurns((prev) => [...prev, { role: 'agent', content: body.data.reply, citations: body.data.citations }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not run this test.');
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <div className="content-stack">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && items.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><BrainCircuit size={24} /></span><p className="eyebrow">No personas yet</p><h2>Create your first persona</h2><p>Describe a VowHuman&rsquo;s role and let AI draft its conversational behaviour, or start from a blank template using the form below.</p></section>
+      )}
       <section className="split-grid persona-layout">
         <div className="panel persona-list-panel">
-          <PanelTitle title="Persona library" eyebrow={`${personas.length} configurations`} />
-          <div className="persona-list">{personas.map((persona) => <button key={persona.name} className={selected.name===persona.name ? "selected" : ""} onClick={() => {setSelected(persona);setTested(false);}}><span className="persona-glyph"><BrainCircuit size={19} /></span><span><strong>{persona.name}</strong><small>{persona.role}</small></span><StatusPill tone={persona.state === "Draft" ? "warn" : "good"}>{persona.state}</StatusPill></button>)}</div>
+          <PanelTitle title="Persona library" eyebrow={`${items.length} configuration${items.length === 1 ? '' : 's'}`} />
+          <div className="persona-list">
+            {items.map((persona) => (
+              <button key={persona.id} className={selectedId === persona.id ? 'selected' : ''} onClick={() => { setSelectedId(persona.id); setError(null); }}>
+                <span className="persona-glyph"><BrainCircuit size={19} /></span>
+                <span><strong>{persona.name}</strong><small>{persona.role ?? 'No draft yet'}</small></span>
+                <StatusPill tone={persona.state === 'draft' ? 'warn' : persona.state === 'published' ? 'good' : 'muted'}>{persona.state ?? 'empty'}</StatusPill>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="panel persona-editor">
-          <div className="editor-top"><div><p className="eyebrow">{selected.version} · {selected.state}</p><h2>{selected.name}</h2><p>{selected.role}</p></div><InlineAction className="secondary-button" idleLabel="Duplicate as draft" doneLabel="Duplicated locally" /></div>
-          <div className="form-grid two"><label>Conversation style<input value="Warm, professional and concise" readOnly /></label><label>Language<select defaultValue="English (South Africa)"><option>English (South Africa)</option><option>isiZulu</option><option>Sesotho</option></select></label><label className="full">Opening message<textarea value="Hello, I’m your AI-generated practice partner. I’ll help you prepare in a private, supportive session." readOnly /></label><label>Maximum response length<input value="120 words" readOnly /></label><label>Speaking rate<input value="0.96 × natural" readOnly /></label></div>
-          <div className="guardrail-tags"><span><ShieldCheck size={14} />No employer access</span><span><ShieldCheck size={14} />No appearance scoring</span><span><ShieldCheck size={14} />Disclose AI</span></div>
-          <div className="immutable-note"><LockKeyhole size={18} /><span><strong>Published versions are immutable.</strong> Changes create a new draft version with a complete audit trail.</span></div>
+          {detailLoading && <p className="panel-note">Loading persona…</p>}
+          {!detailLoading && detail && latestVersion && (
+            <>
+              <div className="editor-top">
+                <div><p className="eyebrow">v{latestVersion.version} · {latestVersion.state}</p><h2>{detail.persona.name}</h2><p>{latestVersion.role}</p></div>
+                <div className="editor-actions">
+                  <button className="secondary-button" onClick={duplicateAsDraft} disabled={duplicating}>{duplicating ? <RefreshCw size={14} className="spin" /> : null}Duplicate as draft</button>
+                  <button className="icon-button" aria-label="Delete persona" onClick={() => deletePersona(detail.persona.id)} disabled={busy === detail.persona.id}><Trash2 size={16} /></button>
+                </div>
+              </div>
+              <div className="form-grid two">
+                <label>Role<input value={editRole} onChange={(e) => setEditRole(e.target.value)} /></label>
+                <label>Language
+                  <select value={editLanguage} onChange={(e) => setEditLanguage(e.target.value)}>
+                    <option>English (South Africa)</option><option>isiZulu</option><option>Sesotho</option><option>Afrikaans</option>
+                  </select>
+                </label>
+                <label className="full">System instructions<textarea value={editSystemInstructions} onChange={(e) => setEditSystemInstructions(e.target.value)} /></label>
+                <label className="full">Opening message<textarea value={editOpeningMessage} onChange={(e) => setEditOpeningMessage(e.target.value)} /></label>
+                <label>Conversation style<input value={editConversationStyle} onChange={(e) => setEditConversationStyle(e.target.value)} /></label>
+                <label>Maximum response length (words)<input type="number" min={20} max={400} value={editMaxResponseWords} onChange={(e) => setEditMaxResponseWords(e.target.value)} /></label>
+                <label>Speaking rate<input type="number" min={0.7} max={1.3} step={0.01} value={editSpeakingRate} onChange={(e) => setEditSpeakingRate(e.target.value)} /></label>
+                <label>Assign to VowHuman
+                  <select
+                    value={assignments.find((a) => a.persona_version_id === latestVersion.id)?.human_slug ?? ''}
+                    onChange={(e) => {
+                      const slug = e.target.value;
+                      const currentSlug = assignments.find((a) => a.persona_version_id === latestVersion.id)?.human_slug;
+                      if (slug) assignPersona(slug, latestVersion.id);
+                      else if (currentSlug) assignPersona(currentSlug, '');
+                    }}
+                  >
+                    <option value="">Not assigned</option>
+                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
+                  </select>
+                </label>
+                <label className="full">Knowledge bases
+                  <div className="chip-toggle-row">
+                    {knowledgeBases.length === 0 && <small>No knowledge libraries yet — add one on the Knowledge page.</small>}
+                    {knowledgeBases.map((base) => {
+                      const active = editKnowledgeBaseIds.includes(base.id);
+                      return (
+                        <button type="button" key={base.id} className={`chip-toggle${active ? ' active' : ''}`} onClick={() => setEditKnowledgeBaseIds((prev) => active ? prev.filter((id) => id !== base.id) : [...prev, base.id])}>
+                          {active ? <Check size={11} /> : null}{base.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+                <label className="full">Guardrails
+                  <div className="chip-toggle-row">
+                    {detail.guardrails.map((g) => {
+                      const on = g.enforcement !== 'off';
+                      return (
+                        <button type="button" key={g.id} className={`chip-toggle${on ? ' active' : ''}`} onClick={() => toggleGuardrail(g.id, on)} disabled={busy === `guardrail:${g.id}`} title={g.instruction}>
+                          <ShieldCheck size={11} />{g.code.replace(/_/g, ' ')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+              </div>
+              <form className="form-grid two" onSubmit={submitGuardrail}>
+                <label>New guardrail code<input value={newGuardrailCode} onChange={(e) => setNewGuardrailCode(e.target.value)} placeholder="e.g. no_medical_advice" /></label>
+                <label>Instruction<input value={newGuardrailInstruction} onChange={(e) => setNewGuardrailInstruction(e.target.value)} placeholder="What must never happen" /></label>
+                <button className="secondary-button" type="submit" disabled={addingGuardrail}>Add guardrail</button>
+              </form>
+              {isDraft ? (
+                <div className="immutable-note"><LockKeyhole size={18} /><span><strong>This is a draft.</strong> Changes save in place until you publish.</span></div>
+              ) : (
+                <div className="immutable-note"><LockKeyhole size={18} /><span><strong>Published versions are immutable.</strong> Saving changes creates a new draft version with a complete audit trail.</span></div>
+              )}
+              <div className="editor-actions" style={{ marginTop: 14 }}>
+                <button className="primary-button" onClick={saveDraft} disabled={saving}>{saving ? <RefreshCw size={17} className="spin" /> : <Check size={17} />}{saving ? 'Saving…' : isDraft ? 'Save draft' : 'Save as new draft'}</button>
+                {isDraft && <button className="secondary-button" onClick={publishDraft} disabled={publishing}>{publishing ? <RefreshCw size={17} className="spin" /> : <BadgeCheck size={17} />}{publishing ? 'Publishing…' : 'Publish'}</button>}
+              </div>
+            </>
+          )}
+          {!detailLoading && !detail && <p className="panel-note">Select a persona from the library, or create one below.</p>}
         </div>
       </section>
       <section className="panel test-console">
-        <PanelTitle title="Persona test console" eyebrow="Mock provider · no microphone" action={<StatusPill tone="warn">Development</StatusPill>} />
-        <div className="console-grid"><div className="console-chat"><div className="chat-message agent"><span>VH</span><p>Hello, I’m your disclosed AI practice interviewer. I’ll ask one question at a time and keep your answers private.</p></div>{tested && <div className="chat-message user"><span>YOU</span><p>{message}</p></div>}{tested && <div className="chat-message agent"><span>VH</span><p>Take a moment to structure your answer with the situation, your actions and the result. What made the problem especially difficult?</p></div>}</div><div className="console-controls"><label>Test message<textarea value={message} onChange={(e)=>setMessage(e.target.value)} /></label><button className="primary-button" onClick={()=>setTested(true)}><MessageSquareText size={17} />Run Persona test</button><p><ShieldCheck size={14} /> Deterministic mock response. No provider cost.</p></div></div>
+        <PanelTitle title="Persona test console" eyebrow={detail ? `Live · ${detail.persona.name}` : 'Select a persona to test'} action={<StatusPill tone="good">Live</StatusPill>} />
+        <div className="console-grid">
+          <div className="console-chat">
+            {latestVersion && <div className="chat-message agent"><span>VH</span><p>{latestVersion.opening_message}</p></div>}
+            {testTurns.map((turn, index) => (
+              <div className={`chat-message ${turn.role === 'user' ? 'user' : 'agent'}`} key={index}>
+                <span>{turn.role === 'user' ? 'YOU' : 'VH'}</span>
+                <div>
+                  <p>{turn.content}</p>
+                  {turn.citations && turn.citations.length > 0 && (
+                    <div className="citation-list">
+                      {turn.citations.map((c, i) => <div className="citation-row" key={i}><b>{c.document_title}</b><span>{c.content}</span></div>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <form className="console-controls" onSubmit={runTest}>
+            <label>Test message<textarea value={testMessage} onChange={(e) => setTestMessage(e.target.value)} /></label>
+            <button className="primary-button" type="submit" disabled={testing || !detail}>{testing ? <RefreshCw size={17} className="spin" /> : <MessageSquareText size={17} />}{testing ? 'Thinking…' : 'Run Persona test'}</button>
+            <p><ShieldCheck size={14} /> Live response from your organisation&rsquo;s OpenAI account, grounded in this persona&rsquo;s assigned knowledge.</p>
+          </form>
+        </div>
+      </section>
+      <section className="panel">
+        <PanelTitle title="Create a persona" eyebrow="Blank, AI-generated or duplicated" />
+        <form className="form-grid two" onSubmit={submitCreate}>
+          <label>Name<input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="e.g. Interview Coach" /></label>
+          <label>Mode
+            <select value={createMode} onChange={(e) => setCreateMode(e.target.value as 'blank' | 'generate' | 'duplicate')}>
+              <option value="generate">Generate with AI</option>
+              <option value="blank">Start blank</option>
+              <option value="duplicate">Duplicate an existing persona</option>
+            </select>
+          </label>
+          {createMode === 'generate' && <label className="full">Describe the VowHuman&rsquo;s role<textarea value={createRole} onChange={(e) => setCreateRole(e.target.value)} placeholder="e.g. A warm, encouraging interview coach for first-time job seekers in South Africa" /></label>}
+          {createMode === 'blank' && <label className="full">Role (optional)<input value={createRole} onChange={(e) => setCreateRole(e.target.value)} placeholder="e.g. Support agent" /></label>}
+          {createMode === 'duplicate' && (
+            <label className="full">Source persona
+              <select value={createSourceId} onChange={(e) => setCreateSourceId(e.target.value)}>
+                <option value="" disabled>Choose a persona</option>
+                {items.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          )}
+          <button className="primary-button" type="submit" disabled={creating}>{creating ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{creating ? 'Creating…' : 'Create persona'}</button>
+        </form>
       </section>
     </div>
   );
 }
 
+const KNOWLEDGE_SOURCE_LABEL: Record<string, string> = { pdf: 'PDF', docx: 'DOCX', xlsx: 'Excel', markdown: 'Markdown', website: 'Website', text: 'Text', generated: 'AI-generated', course: 'Course', job_context: 'Job context' };
+type KnowledgeAssignment = { human_slug: string; knowledge_base_id: string };
+type KnowledgeDocument = { id: string; title: string; source_type: string; approved_url: string | null; state: string; language: string | null; created_at: string; chunk_count: number };
+
 function Knowledge() {
-  const [indexed, setIndexed] = useState(false);
-  const documents = [
-    { name: "Interview Fundamentals", type: "PDF", scope: "PlugConnect", chunks: 42, state: "Indexed", updated: "Today, 19:44" },
-    { name: "Customer Service Essentials", type: "DOCX", scope: "GoalVow Academies", chunks: 68, state: "Indexed", updated: "Yesterday" },
-    { name: "Career Readiness: Module 2", type: "Markdown", scope: "VowLMS", chunks: 31, state: "Indexed", updated: "30 Jul" },
-    { name: "Support escalation guide", type: "Website", scope: "VowSupport", chunks: 0, state: "Draft", updated: "28 Jul" },
-  ];
-  const scopes = ["All sources", ...Array.from(new Set(documents.map((d) => d.scope)))];
-  const [scopeIndex, setScopeIndex] = useState(0);
-  const activeScope = scopes[scopeIndex];
-  const visibleDocuments = activeScope === "All sources" ? documents : documents.filter((d) => d.scope === activeScope);
+  const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
+  const [assignments, setAssignments] = useState<KnowledgeAssignment[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+
+  const [addSourceMode, setAddSourceMode] = useState<'upload' | 'website' | 'generate'>('upload');
+  const [addTargetBase, setAddTargetBase] = useState('');
+  const [addTitle, setAddTitle] = useState('');
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [addUrl, setAddUrl] = useState('');
+  const [addTopic, setAddTopic] = useState('');
+  const [addLanguage, setAddLanguage] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const [newBaseName, setNewBaseName] = useState('');
+  const [newBaseDescription, setNewBaseDescription] = useState('');
+  const [creatingBase, setCreatingBase] = useState(false);
+
+  async function refresh() {
+    const [basesRes, assignmentsRes] = await Promise.all([
+      fetch('/api/v1/knowledge-bases').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/knowledge-assignments').then(r => r.json()).catch(() => null),
+    ]);
+    if (basesRes?.success) {
+      setBases(basesRes.data.items);
+      setAddTargetBase((prev) => prev || basesRes.data.items[0]?.id || '');
+    }
+    if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
+  useEffect(() => { refresh(); }, []);
+
+  async function loadDocuments(baseId: string) {
+    setDocsLoading(true);
+    const res = await fetch(`/api/v1/knowledge-bases/${baseId}`).then(r => r.json()).catch(() => null);
+    if (res?.success) setDocuments(res.data.documents);
+    setDocsLoading(false);
+  }
+
+  function toggleExpand(baseId: string) {
+    if (expandedId === baseId) { setExpandedId(null); setDocuments([]); return; }
+    setExpandedId(baseId);
+    loadDocuments(baseId);
+  }
+
+  // Polls while any visible document is still indexing, so the UI reflects the
+  // after()-deferred ingestion completing without a manual refresh.
+  useEffect(() => {
+    if (!expandedId || !documents.some((d) => d.state !== 'active')) return;
+    const timer = window.setInterval(() => loadDocuments(expandedId), 4000);
+    return () => window.clearInterval(timer);
+  }, [expandedId, documents]);
+
+  async function toggleAssignment(humanSlug: string, baseId: string, assigned: boolean) {
+    setBusyId(`${humanSlug}:${baseId}`);
+    await fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, knowledge_base_id: baseId, assigned }) }).catch(() => {});
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function deleteBase(id: string) {
+    setBusyId(id);
+    await fetch(`/api/v1/knowledge-bases/${id}`, { method: 'DELETE' }).catch(() => {});
+    if (expandedId === id) { setExpandedId(null); setDocuments([]); }
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function deleteDocument(id: string) {
+    setBusyId(id);
+    await fetch(`/api/v1/knowledge-documents/${id}`, { method: 'DELETE' }).catch(() => {});
+    if (expandedId) await loadDocuments(expandedId);
+    await refresh();
+    setBusyId(null);
+  }
+
+  async function submitCreateBase(event: React.FormEvent) {
+    event.preventDefault();
+    if (!newBaseName.trim()) { setError('Give the library a name.'); return; }
+    setCreatingBase(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/knowledge-bases', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: newBaseName.trim(), description: newBaseDescription.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this library.');
+      setNewBaseName(''); setNewBaseDescription('');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this library.');
+    } finally {
+      setCreatingBase(false);
+    }
+  }
+
+  async function submitAddSource(event: React.FormEvent) {
+    event.preventDefault();
+    if (!addTargetBase) { setError('Choose which library to add this source to.'); return; }
+    setAdding(true);
+    setError(null);
+    try {
+      let res: Response;
+      if (addSourceMode === 'upload') {
+        if (!addFile) { setError('Choose a file to upload.'); setAdding(false); return; }
+        const form = new FormData();
+        form.set('knowledge_base_id', addTargetBase);
+        form.set('title', addTitle);
+        form.set('language', addLanguage);
+        form.set('file', addFile);
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', body: form });
+      } else if (addSourceMode === 'website') {
+        if (!addUrl.trim()) { setError('Enter a URL.'); setAdding(false); return; }
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'website', url: addUrl.trim(), title: addTitle.trim() }) });
+      } else {
+        if (addTopic.trim().length < 5) { setError('Describe the topic, skill or expertise to generate (at least 5 characters).'); setAdding(false); return; }
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'generated', topic: addTopic.trim(), title: addTitle.trim() }) });
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not add this source.');
+      setAddFile(null); setAddUrl(''); setAddTopic(''); setAddTitle('');
+      setExpandedId(addTargetBase);
+      await loadDocuments(addTargetBase);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add this source.');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const totalDocuments = bases.reduce((sum, b) => sum + b.document_count, 0);
+  const totalChunks = bases.reduce((sum, b) => sum + b.chunk_count, 0);
+  const totalLanguages = bases.reduce((max, b) => Math.max(max, b.language_count), 0);
+
   return (
     <div className="content-stack">
       <section className="metric-grid compact-metrics">
-        {[['Approved sources','4',BookOpenText],['Indexed chunks','141',Sparkles],['Languages','3',Languages],['Citation coverage','98.7%',BadgeCheck]].map(([label,value,Icon]) => <article className="metric-card" key={String(label)}><span className="metric-icon cyan"><Icon size={20} /></span><p>{String(label)}</p><strong>{String(value)}</strong></article>)}
+        {[['Libraries', String(bases.length), BookOpenText], ['Approved sources', String(totalDocuments), UploadCloud], ['Indexed chunks', String(totalChunks), Sparkles], ['Languages', String(totalLanguages), Languages]].map(([label, value, Icon]) => (
+          <article className="metric-card" key={String(label)}><span className="metric-icon cyan"><Icon size={20} /></span><p>{String(label)}</p><strong>{String(value)}</strong></article>
+        ))}
+      </section>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && bases.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><BookOpenText size={24} /></span><p className="eyebrow">No knowledge libraries yet</p><h2>Create your first library</h2><p>A library groups related documents, websites and AI-generated articles into one knowledge base your VowHumans can draw on — create one below.</p></section>
+      )}
+      <section className="asset-card-grid">
+        {bases.map((base) => {
+          const assignedHumans = assignments.filter((a) => a.knowledge_base_id === base.id).map((a) => a.human_slug);
+          return (
+            <article className="panel asset-card" key={base.id}>
+              <div className="asset-card-top">
+                <StatusPill tone={base.document_count > 0 ? 'good' : 'muted'}>{base.document_count > 0 ? 'Active' : 'Empty'}</StatusPill>
+                <button className="icon-button" aria-label={`Delete ${base.name}`} onClick={() => deleteBase(base.id)} disabled={busyId === base.id}><Trash2 size={16} /></button>
+              </div>
+              <h2>{base.name}</h2>
+              {base.description && <p>{base.description}</p>}
+              <div className="asset-detail">
+                <span>{base.document_count} source{base.document_count === 1 ? '' : 's'} · {base.chunk_count} chunks</span>
+                <button className="secondary-button" onClick={() => toggleExpand(base.id)}>{expandedId === base.id ? 'Hide' : 'View sources'}</button>
+              </div>
+              {expandedId === base.id && (
+                <div className="doc-mini-list">
+                  {docsLoading && documents.length === 0 && <p className="panel-note">Loading sources…</p>}
+                  {!docsLoading && documents.length === 0 && <p className="panel-note">No sources in this library yet.</p>}
+                  {documents.map((doc) => (
+                    <div className="doc-mini-row" key={doc.id}>
+                      <span className="source-cell"><i><FileText size={14} /></i><b>{doc.title}<small>{KNOWLEDGE_SOURCE_LABEL[doc.source_type] ?? doc.source_type}</small></b></span>
+                      <StatusPill tone={doc.state === 'active' ? 'good' : 'warn'}>{doc.state === 'active' ? `${doc.chunk_count} chunks` : 'Indexing…'}</StatusPill>
+                      <button aria-label={`Delete ${doc.title}`} onClick={() => deleteDocument(doc.id)} disabled={busyId === doc.id}><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="full">Assign to VowHumans
+                <div className="chip-toggle-row">
+                  {humans.map((human) => {
+                    const active = assignedHumans.includes(human.id);
+                    return (
+                      <button type="button" key={human.id} className={`chip-toggle${active ? ' active' : ''}`} onClick={() => toggleAssignment(human.id, base.id, !active)} disabled={busyId === `${human.id}:${base.id}`}>
+                        {active ? <Check size={11} /> : null}{human.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </label>
+            </article>
+          );
+        })}
       </section>
       <section className="panel">
-        <PanelTitle title="Knowledge sources" eyebrow="Organisation-owned" action={<div className="table-tools"><button onClick={() => setScopeIndex((i) => (i + 1) % scopes.length)}>{activeScope}</button><InlineAction idleLabel={<><RefreshCw size={15} />Sync</>} doneLabel="Synced locally" /></div>} />
-        <div className="data-table knowledge-table">
-          <div className="table-row table-head"><span>Source</span><span>Scope</span><span>Chunks</span><span>Status</span><span>Updated</span></div>
-          {visibleDocuments.map((doc) => <div className="table-row" key={doc.name}><span className="source-cell"><i><FileText size={17} /></i><b>{doc.name}<small>{doc.type}</small></b></span><span>{doc.scope}</span><span>{doc.chunks || '—'}</span><span><StatusPill tone={doc.state==='Draft'?'warn':'good'}>{doc.state}</StatusPill></span><span>{doc.updated}</span></div>)}
-          {indexed && (activeScope === "All sources" || activeScope === "GoalVow Academies") && <div className="table-row"><span className="source-cell"><i><FileText size={17} /></i><b>New approved curriculum<small>Text</small></b></span><span>GoalVow Academies</span><span>12</span><span><StatusPill>Indexed</StatusPill></span><span>Just now</span></div>}
-        </div>
+        <PanelTitle title="Create a new library" eyebrow="Group related knowledge together" />
+        <form className="form-grid two" onSubmit={submitCreateBase}>
+          <label className="full">Library name<input value={newBaseName} onChange={(e) => setNewBaseName(e.target.value)} placeholder="e.g. Interview Preparation" /></label>
+          <label className="full">Description<textarea value={newBaseDescription} onChange={(e) => setNewBaseDescription(e.target.value)} placeholder="What this library is for" /></label>
+          <button className="primary-button" type="submit" disabled={creatingBase}>{creatingBase ? <RefreshCw size={17} className="spin" /> : <BookOpenText size={17} />}{creatingBase ? 'Creating…' : 'Create library'}</button>
+        </form>
       </section>
-      <section className="split-grid">
-        <div className="panel ingestion-card"><span className="empty-icon"><UploadCloud size={24} /></span><p className="eyebrow">Trusted ingestion</p><h2>Add approved knowledge</h2><p>PDF, DOCX, Markdown, text or administrator-approved website content. Uploaded text stays separated from system instructions.</p><button className="primary-button" onClick={()=>setIndexed(true)}>{indexed?<Check size={17}/>:<UploadCloud size={17}/>} {indexed?'Sample indexed':'Choose sample document'}</button></div>
-        <div className="panel safety-checklist"><PanelTitle title="Retrieval safeguards" eyebrow="Always on" />{['Organisation ownership required','Source access checked before retrieval','Prompt injection patterns isolated','Every grounded answer carries citations','Deletion removes chunks and embeddings'].map(item=><div key={item}><CircleCheck size={17}/><span>{item}</span></div>)}</div>
+      <section className="panel">
+        <PanelTitle title="Add approved knowledge" eyebrow="Upload, import or generate with AI" />
+        <form className="form-grid two" onSubmit={submitAddSource}>
+          <label>Library
+            <select value={addTargetBase} onChange={(e) => setAddTargetBase(e.target.value)}>
+              <option value="" disabled>Choose a library</option>
+              {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+            </select>
+          </label>
+          <label>Source
+            <select value={addSourceMode} onChange={(e) => setAddSourceMode(e.target.value as 'upload' | 'website' | 'generate')}>
+              <option value="upload">Upload a document</option>
+              <option value="website">Import a website</option>
+              <option value="generate">Generate with AI</option>
+            </select>
+          </label>
+          {addSourceMode !== 'generate' && <label className="full">Title (optional)<input value={addTitle} onChange={(e) => setAddTitle(e.target.value)} placeholder="Defaults to the file name or URL" /></label>}
+          {addSourceMode === 'upload' && <label className="full">File — PDF, DOCX, Excel, Markdown or text (max 4MB)<input type="file" accept=".pdf,.docx,.xlsx,.xls,.md,.markdown,.txt" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} /></label>}
+          {addSourceMode === 'website' && <label className="full">Approved website URL<input value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="https://example.com/guide" /></label>}
+          {addSourceMode === 'generate' && <label className="full">Topic, skill, knowledge base or expertise to generate<textarea value={addTopic} onChange={(e) => setAddTopic(e.target.value)} placeholder="e.g. South African labour law basics for a first-time job seeker" /></label>}
+          {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
+          <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add source'}</button>
+        </form>
+      </section>
+      <section className="panel safety-checklist">
+        <PanelTitle title="Retrieval safeguards" eyebrow="Always on" />
+        {['Organisation ownership required', 'Source access checked before retrieval', 'Uploaded text stays separated from system instructions', 'Every grounded answer carries citations', 'Deletion removes chunks and embeddings'].map((item) => <div key={item}><CircleCheck size={17} /><span>{item}</span></div>)}
       </section>
     </div>
   );

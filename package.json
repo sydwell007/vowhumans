@@ -21,6 +21,7 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@types/html-to-text": "^9.0.4",
     "prettier": "^3.6.2",
     "turbo": "^2.8.0",
     "typescript": "^5.9.2",
