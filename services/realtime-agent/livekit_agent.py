@@ -27,5 +27,14 @@ async def entrypoint(ctx: JobContext):
     await session.generate_reply(instructions="Disclose that you are AI, then deliver the approved opening message.")
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    # Explicit agent_name, not automatic/implicit dispatch (the previous default).
+    # Confirmed live via LiveKit Cloud's own session records: once api-gateway
+    # started attaching an explicit RoomAgentDispatch for the avatar participant to
+    # a room's token, this worker's automatic dispatch stopped firing for that same
+    # room entirely — LiveKit Cloud only shows the avatar participant and the human,
+    # never this agent. Undocumented interaction, but reproduced across 6 separate
+    # test rooms. Naming this worker too, and having api-gateway always dispatch it
+    # explicitly (services/api-gateway/main.py), avoids ever mixing automatic and
+    # explicit dispatch in the same room again.
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="vowhumans-voice"))
 

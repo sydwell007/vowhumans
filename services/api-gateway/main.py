@@ -85,25 +85,35 @@ class LiveKitTokenRequest(BaseModel):
     human_slug: str | None = None
 
 TOKEN_TTL = datetime.timedelta(seconds=600)
+VOICE_AGENT_NAME = "vowhumans-voice"
 AVATAR_AGENT_NAME = "vowhumans-avatar"
 
 def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None) -> str:
     api_key, secret = os.getenv("LIVEKIT_API_KEY", ""), os.getenv("LIVEKIT_API_SECRET", "")
     if not api_key or not secret: raise HTTPException(503, "LiveKit is not configured")
+
+    # Explicit agent dispatch for BOTH agents, always — rides on this same token
+    # rather than a separate Room Service call, so the room is created and both jobs
+    # dispatched atomically by the LiveKit server. realtime-agent used to rely on
+    # implicit/automatic dispatch (no agent_name) and this only listed the avatar
+    # participant explicitly — confirmed live via LiveKit Cloud's own session
+    # records that doing so silently stopped the voice agent's automatic dispatch
+    # from firing in the same room (undocumented interaction, reproduced across 6
+    # separate test rooms: every one showed only the avatar participant and the
+    # human, never the voice agent). realtime-agent now also has an explicit
+    # agent_name, so every token must list it, or no voice agent joins at all.
+    room_agents = [RoomAgentDispatch(agent_name=VOICE_AGENT_NAME)]
+    if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
+        metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
+        room_agents.append(RoomAgentDispatch(agent_name=AVATAR_AGENT_NAME, metadata=metadata))
+
     token = (
         AccessToken(api_key, secret)
         .with_identity(participant)
         .with_ttl(TOKEN_TTL)
         .with_grants(VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
+        .with_room_config(RoomConfiguration(agents=room_agents))
     )
-    # Explicit agent dispatch: rides on this same token rather than a separate Room
-    # Service call, so the room is created and the avatar-participant job dispatched
-    # atomically by the LiveKit server — no "does the room exist yet" ordering question.
-    # realtime-agent (the voice agent) is untouched and keeps joining every room via
-    # implicit/automatic dispatch; only this one named agent is explicit.
-    if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
-        metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
-        token = token.with_room_config(RoomConfiguration(agents=[RoomAgentDispatch(agent_name=AVATAR_AGENT_NAME, metadata=metadata)]))
     return token.to_jwt()
 
 @app.get("/api/v1/health", tags=["health"])
