@@ -45,9 +45,11 @@ function audioObjectKeyFromSettings(settings: unknown): string | null {
   return typeof key === "string" ? key : null;
 }
 
-// Gives proxyToGateway's 40s upstream timeout room to actually complete instead of
-// Vercel's own function timeout cutting it off first (Hobby default is 10s).
-export const maxDuration = 45;
+// Gives proxyToGateway's 40s upstream timeout room to actually complete, and gives
+// after()-deferred knowledge ingestion (which shares this same budget) room for an
+// embeddings call plus per-chunk inserts. 60 is the practical ceiling on Vercel's
+// Hobby tier — raise it if the plan changes.
+export const maxDuration = 60;
 
 function response(data: unknown, status = 200) {
   return NextResponse.json({ success: true, data, meta: { mode: "development-mock", request_id: randomUUID() } }, { status, headers: { "x-vowhumans-mode": "development-mock" } });
@@ -94,6 +96,17 @@ async function proxyToGateway(path: string, body: unknown): Promise<{ status: nu
   }
 }
 
+// Records why an ingestion attempt didn't finish, using the already-existing (and
+// otherwise unused-by-us) access_policy column rather than adding another migration.
+// Without this, a failure (bad API key, rate limit, malformed upload) left a document
+// silently stuck in 'draft' forever with the UI reporting "Indexing…" indefinitely.
+async function markIngestFailed(organisationId: string, documentId: string, message: string) {
+  await sql`
+    UPDATE knowledge_documents SET access_policy = ${JSON.stringify({ ingest_error: message.slice(0, 500) })}::jsonb
+    WHERE id = ${documentId} AND organisation_id = ${organisationId}
+  `.catch((err) => console.error("[knowledge-ingest] could not record failure:", err));
+}
+
 // Shared tail of every ingestion path (upload / website / AI-generated): chunk the
 // extracted text, embed each chunk, store it, then flip the document live. Runs inside
 // after() so the upload response returns immediately — a document sits in 'draft'
@@ -106,7 +119,7 @@ async function storeChunks(organisationId: string, documentId: string, text: str
   }
   const embedded = await embedBatch(chunks);
   if (!embedded.ok) {
-    console.error("[knowledge-ingest] embedding failed:", embedded.message);
+    await markIngestFailed(organisationId, documentId, embedded.message);
     return;
   }
   for (let i = 0; i < chunks.length; i += 1) {
@@ -125,6 +138,7 @@ async function ingestUploadedDocument(organisationId: string, documentId: string
     await storeChunks(organisationId, documentId, text);
   } catch (err) {
     console.error("[knowledge-ingest:upload]", err);
+    await markIngestFailed(organisationId, documentId, err instanceof Error ? err.message : "Could not process this document.");
   }
 }
 
@@ -134,23 +148,16 @@ async function ingestWebsiteDocument(organisationId: string, documentId: string,
     await storeChunks(organisationId, documentId, text);
   } catch (err) {
     console.error("[knowledge-ingest:website]", err);
+    await markIngestFailed(organisationId, documentId, err instanceof Error ? err.message : "Could not import this page.");
   }
 }
 
-async function ingestGeneratedDocument(organisationId: string, documentId: string, topic: string) {
+async function ingestGeneratedDocument(organisationId: string, documentId: string, precomposedContent: string) {
   try {
-    const generated = await chatComplete({
-      system: "You are a meticulous subject-matter expert writing an internal knowledge-base article for an AI assistant to reference. Write clearly, factually and comprehensively in well-structured prose with headings. Do not invent statistics, citations or sources.",
-      messages: [{ role: "user", content: `Write a thorough knowledge-base article covering: ${topic}` }],
-      maxOutputTokens: 2000,
-    });
-    if (!generated.ok) {
-      console.error("[knowledge-ingest:generated]", generated.message);
-      return;
-    }
-    await storeChunks(organisationId, documentId, generated.data);
+    await storeChunks(organisationId, documentId, precomposedContent);
   } catch (err) {
     console.error("[knowledge-ingest:generated]", err);
+    await markIngestFailed(organisationId, documentId, err instanceof Error ? err.message : "Could not index this article.");
   }
 }
 
@@ -263,12 +270,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const [base] = await sql`SELECT id, name, description, state, created_at FROM knowledge_bases WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
     if (!base) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
-    const documents = await sql`
-      SELECT d.id, d.title, d.source_type, d.approved_url, d.state, d.language, d.created_at, COUNT(c.id)::int AS chunk_count
+    const documentRows = await sql`
+      SELECT d.id, d.title, d.source_type, d.approved_url, d.state, d.language, d.created_at, d.access_policy, COUNT(c.id)::int AS chunk_count
       FROM knowledge_documents d LEFT JOIN knowledge_chunks c ON c.document_id = d.id
       WHERE d.knowledge_base_id = ${route[1]} AND d.organisation_id = ${organisationId} AND d.deleted_at IS NULL
       GROUP BY d.id ORDER BY d.created_at DESC
     `;
+    // postgres.js returns jsonb columns as raw text, not pre-parsed objects.
+    const documents = documentRows.map((row) => ({ ...row, access_policy: typeof row.access_policy === "string" ? JSON.parse(row.access_policy) : row.access_policy }));
     return response({ base, documents });
   }
 
@@ -640,6 +649,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { human_slug: humanSlug, gesture_profile_id: gestureProfileId }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  // Generates the article text synchronously and returns it without writing anything —
+  // lets the user review it in the UI before committing. Also keeps the slow chatComplete
+  // call out of the after()-deferred background job entirely, so that job (now just
+  // embedding + inserts) comfortably fits the maxDuration budget instead of risking the
+  // combined chat+embed latency exceeding it and leaving a document stuck in 'draft' forever.
+  if (resource === "knowledge-documents" && route[1] === "preview") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const topic = typeof body.topic === "string" ? body.topic.trim() : "";
+    if (!topic || topic.length < 5) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the topic, skill or expertise to generate (at least 5 characters)." }, { status: 422 });
+    }
+    const generated = await chatComplete({
+      system: "You are a meticulous subject-matter expert writing an internal knowledge-base article for an AI assistant to reference. Write clearly, factually and comprehensively in well-structured prose with headings. Do not invent statistics, citations or sources.",
+      messages: [{ role: "user", content: `Write a thorough knowledge-base article covering: ${topic}` }],
+      maxOutputTokens: 2000,
+    });
+    if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
+    return NextResponse.json({ success: true, data: { content: generated.data }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (resource === "knowledge-documents" && !route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -664,17 +694,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true, data: docRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
     }
 
+    const content = typeof body.content === "string" ? body.content.trim() : "";
     const topic = typeof body.topic === "string" ? body.topic.trim() : "";
-    if (!topic || topic.length < 5) {
-      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the topic, skill or expertise to generate (at least 5 characters)." }, { status: 422 });
+    if (!content) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Generate a preview before adding this source." }, { status: 422 });
     }
-    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : topic;
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : (topic || content.slice(0, 80));
     const [docRow] = await sql`
       INSERT INTO knowledge_documents (organisation_id, knowledge_base_id, title, source_type, language, state)
       VALUES (${organisationId}, ${knowledgeBaseId}, ${title}, 'generated', 'en-ZA', 'draft')
       RETURNING id, title, source_type, state, language, created_at
     `;
-    after(() => ingestGeneratedDocument(organisationId, docRow.id, topic));
+    after(() => ingestGeneratedDocument(organisationId, docRow.id, content));
     return NextResponse.json({ success: true, data: docRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 

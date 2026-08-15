@@ -52,8 +52,8 @@ const readiness = [
   { name: "3D avatar", state: "Planned", tone: "muted" },
 ];
 
-function StatusPill({ children, tone = "good" }: { children: React.ReactNode; tone?: string }) {
-  return <span className={`status-pill ${tone}`}><i />{children}</span>;
+function StatusPill({ children, tone = "good", title }: { children: React.ReactNode; tone?: string; title?: string }) {
+  return <span className={`status-pill ${tone}`} title={title}><i />{children}</span>;
 }
 
 function PanelTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: React.ReactNode }) {
@@ -618,7 +618,7 @@ function Personas() {
 
 const KNOWLEDGE_SOURCE_LABEL: Record<string, string> = { pdf: 'PDF', docx: 'DOCX', xlsx: 'Excel', markdown: 'Markdown', website: 'Website', text: 'Text', generated: 'AI-generated', course: 'Course', job_context: 'Job context' };
 type KnowledgeAssignment = { human_slug: string; knowledge_base_id: string };
-type KnowledgeDocument = { id: string; title: string; source_type: string; approved_url: string | null; state: string; language: string | null; created_at: string; chunk_count: number };
+type KnowledgeDocument = { id: string; title: string; source_type: string; approved_url: string | null; state: string; language: string | null; created_at: string; chunk_count: number; access_policy: { ingest_error?: string } | null };
 
 function Knowledge() {
   const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
@@ -638,6 +638,8 @@ function Knowledge() {
   const [addTopic, setAddTopic] = useState('');
   const [addLanguage, setAddLanguage] = useState('');
   const [adding, setAdding] = useState(false);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
 
   const [newBaseName, setNewBaseName] = useState('');
   const [newBaseDescription, setNewBaseDescription] = useState('');
@@ -671,10 +673,11 @@ function Knowledge() {
     loadDocuments(baseId);
   }
 
-  // Polls while any visible document is still indexing, so the UI reflects the
-  // after()-deferred ingestion completing without a manual refresh.
+  // Polls while any visible document is still genuinely in progress, so the UI reflects
+  // the after()-deferred ingestion completing without a manual refresh. Stops for a
+  // document that has failed (has an ingest_error) rather than polling it forever.
   useEffect(() => {
-    if (!expandedId || !documents.some((d) => d.state !== 'active')) return;
+    if (!expandedId || !documents.some((d) => d.state !== 'active' && !d.access_policy?.ingest_error)) return;
     const timer = window.setInterval(() => loadDocuments(expandedId), 4000);
     return () => window.clearInterval(timer);
   }, [expandedId, documents]);
@@ -720,6 +723,22 @@ function Knowledge() {
     }
   }
 
+  async function generatePreview() {
+    if (addTopic.trim().length < 5) { setError('Describe the topic, skill or expertise to generate (at least 5 characters).'); return; }
+    setGeneratingPreview(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/knowledge-documents/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: addTopic.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not generate this article.');
+      setPreviewContent(body.data.content);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate this article.');
+    } finally {
+      setGeneratingPreview(false);
+    }
+  }
+
   async function submitAddSource(event: React.FormEvent) {
     event.preventDefault();
     if (!addTargetBase) { setError('Choose which library to add this source to.'); return; }
@@ -739,12 +758,12 @@ function Knowledge() {
         if (!addUrl.trim()) { setError('Enter a URL.'); setAdding(false); return; }
         res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'website', url: addUrl.trim(), title: addTitle.trim() }) });
       } else {
-        if (addTopic.trim().length < 5) { setError('Describe the topic, skill or expertise to generate (at least 5 characters).'); setAdding(false); return; }
-        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'generated', topic: addTopic.trim(), title: addTitle.trim() }) });
+        if (!previewContent) { setError('Generate a preview first.'); setAdding(false); return; }
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'generated', topic: addTopic.trim(), title: addTitle.trim(), content: previewContent }) });
       }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not add this source.');
-      setAddFile(null); setAddUrl(''); setAddTopic(''); setAddTitle('');
+      setAddFile(null); setAddUrl(''); setAddTopic(''); setAddTitle(''); setPreviewContent(null);
       setExpandedId(addTargetBase);
       await loadDocuments(addTargetBase);
       await refresh();
@@ -789,13 +808,18 @@ function Knowledge() {
                 <div className="doc-mini-list">
                   {docsLoading && documents.length === 0 && <p className="panel-note">Loading sources…</p>}
                   {!docsLoading && documents.length === 0 && <p className="panel-note">No sources in this library yet.</p>}
-                  {documents.map((doc) => (
-                    <div className="doc-mini-row" key={doc.id}>
-                      <span className="source-cell"><i><FileText size={14} /></i><b>{doc.title}<small>{KNOWLEDGE_SOURCE_LABEL[doc.source_type] ?? doc.source_type}</small></b></span>
-                      <StatusPill tone={doc.state === 'active' ? 'good' : 'warn'}>{doc.state === 'active' ? `${doc.chunk_count} chunks` : 'Indexing…'}</StatusPill>
-                      <button aria-label={`Delete ${doc.title}`} onClick={() => deleteDocument(doc.id)} disabled={busyId === doc.id}><Trash2 size={14} /></button>
-                    </div>
-                  ))}
+                  {documents.map((doc) => {
+                    const failed = Boolean(doc.access_policy?.ingest_error);
+                    return (
+                      <div className="doc-mini-row" key={doc.id}>
+                        <span className="source-cell"><i><FileText size={14} /></i><b>{doc.title}<small>{KNOWLEDGE_SOURCE_LABEL[doc.source_type] ?? doc.source_type}</small></b></span>
+                        <StatusPill tone={doc.state === 'active' ? 'good' : failed ? 'danger' : 'warn'} title={failed ? doc.access_policy?.ingest_error : undefined}>
+                          {doc.state === 'active' ? `${doc.chunk_count} chunks` : failed ? 'Failed — remove and retry' : 'Indexing…'}
+                        </StatusPill>
+                        <button aria-label={`Delete ${doc.title}`} onClick={() => deleteDocument(doc.id)} disabled={busyId === doc.id}><Trash2 size={14} /></button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <label className="full">Assign to VowHumans
@@ -832,7 +856,7 @@ function Knowledge() {
             </select>
           </label>
           <label>Source
-            <select value={addSourceMode} onChange={(e) => setAddSourceMode(e.target.value as 'upload' | 'website' | 'generate')}>
+            <select value={addSourceMode} onChange={(e) => { setAddSourceMode(e.target.value as 'upload' | 'website' | 'generate'); setPreviewContent(null); }}>
               <option value="upload">Upload a document</option>
               <option value="website">Import a website</option>
               <option value="generate">Generate with AI</option>
@@ -841,9 +865,30 @@ function Knowledge() {
           {addSourceMode !== 'generate' && <label className="full">Title (optional)<input value={addTitle} onChange={(e) => setAddTitle(e.target.value)} placeholder="Defaults to the file name or URL" /></label>}
           {addSourceMode === 'upload' && <label className="full">File — PDF, DOCX, Excel, Markdown or text (max 4MB)<input type="file" accept=".pdf,.docx,.xlsx,.xls,.md,.markdown,.txt" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} /></label>}
           {addSourceMode === 'website' && <label className="full">Approved website URL<input value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="https://example.com/guide" /></label>}
-          {addSourceMode === 'generate' && <label className="full">Topic, skill, knowledge base or expertise to generate<textarea value={addTopic} onChange={(e) => setAddTopic(e.target.value)} placeholder="e.g. South African labour law basics for a first-time job seeker" /></label>}
+          {addSourceMode === 'generate' && (
+            <label className="full">Topic, skill, knowledge base or expertise to generate
+              <textarea value={addTopic} onChange={(e) => { setAddTopic(e.target.value); setPreviewContent(null); }} placeholder="e.g. South African labour law basics for a first-time job seeker" />
+            </label>
+          )}
+          {addSourceMode === 'generate' && previewContent && (
+            <div className="full generated-preview">
+              <p className="eyebrow">Generated preview — review before adding</p>
+              <div className="preview-scroll">{previewContent}</div>
+            </div>
+          )}
           {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
-          <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add source'}</button>
+          {addSourceMode === 'generate' && !previewContent && (
+            <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
+              {generatingPreview ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{generatingPreview ? 'Generating…' : 'Generate preview'}
+            </button>
+          )}
+          {addSourceMode === 'generate' && previewContent && (
+            <div className="full editor-actions">
+              <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add to library'}</button>
+              <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>{generatingPreview ? <RefreshCw size={17} className="spin" /> : <RefreshCw size={17} />}Regenerate</button>
+            </div>
+          )}
+          {addSourceMode !== 'generate' && <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add source'}</button>}
         </form>
       </section>
       <section className="panel safety-checklist">
