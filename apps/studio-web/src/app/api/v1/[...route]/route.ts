@@ -666,7 +666,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const generated = await chatComplete({
       system: "You are a meticulous subject-matter expert writing an internal knowledge-base article for an AI assistant to reference. Write clearly, factually and comprehensively in well-structured prose with headings. Do not invent statistics, citations or sources.",
       messages: [{ role: "user", content: `Write a thorough knowledge-base article covering: ${topic}` }],
-      maxOutputTokens: 2000,
+      maxOutputTokens: 4000,
+      reasoningEffort: "none",
     });
     if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
     return NextResponse.json({ success: true, data: { content: generated.data }, meta: { mode: "live", request_id: randomUUID() } });
@@ -782,7 +783,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         system: "You design conversational AI persona configurations for VowHumans, a platform for disclosed, consent-first AI digital humans. Given a role description, respond ONLY with a JSON object with keys: system_instructions (string, detailed behavioural instructions, including that the assistant must always disclose it is AI and never claim to be human), conversation_style (short string), opening_message (string), language (label like 'English (South Africa)'), max_response_words (integer 60-200), speaking_rate (number 0.85-1.15).",
         messages: [{ role: "user", content: `Role: ${role}` }],
         jsonMode: true,
-        maxOutputTokens: 900,
+        maxOutputTokens: 1500,
+        reasoningEffort: "none",
       });
       if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
       try {
@@ -900,6 +902,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       system: `${version.system_instructions}\n\nConversation style: ${version.conversation_style}\nRespond in ${version.language}. Keep responses under ${version.max_response_words} words.${context}`,
       messages: [{ role: "user", content: message }],
       maxOutputTokens: Math.min(800, version.max_response_words * 6),
+      reasoningEffort: "none",
     });
     if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
     return NextResponse.json({

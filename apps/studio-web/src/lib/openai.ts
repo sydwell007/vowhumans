@@ -30,6 +30,13 @@ export async function chatComplete(args: {
   jsonMode?: boolean;
   maxOutputTokens?: number;
   model?: string;
+  // Reasoning-capable models (confirmed present in this deployment: reasoning_effort
+  // accepts none/low/medium/high/xhigh) count hidden reasoning tokens against the same
+  // max_completion_tokens budget as the visible answer — on a plain writing/drafting
+  // task with no real reasoning to do, that budget can be entirely consumed by reasoning
+  // with zero tokens left for output, which reads to the caller as "empty response".
+  // Only sent when a caller opts in, since a non-reasoning model may reject the param.
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
 }): Promise<OpenAIResult<string>> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return notConfigured();
@@ -41,6 +48,7 @@ export async function chatComplete(args: {
         model: args.model || CHAT_MODEL,
         messages: [...(args.system ? [{ role: "system", content: args.system }] : []), ...args.messages],
         ...(args.jsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(args.reasoningEffort ? { reasoning_effort: args.reasoningEffort } : {}),
         max_completion_tokens: args.maxOutputTokens ?? 1200,
       }),
       signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
@@ -49,9 +57,13 @@ export async function chatComplete(args: {
       const detail = await upstream.text().catch(() => "");
       return { ok: false, status: 502, code: "GENERATION_FAILED", message: detail.slice(0, 300) || "Could not generate a response." };
     }
-    const body = (await upstream.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = body.choices?.[0]?.message?.content;
-    if (!content) return { ok: false, status: 502, code: "GENERATION_FAILED", message: "The model returned an empty response." };
+    const body = (await upstream.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+    const choice = body.choices?.[0];
+    const content = choice?.message?.content;
+    if (!content) {
+      const reasonHint = choice?.finish_reason === "length" ? " (ran out of tokens — try again with reasoning effort lowered or a larger token budget)" : "";
+      return { ok: false, status: 502, code: "GENERATION_FAILED", message: `The model returned an empty response${reasonHint}.` };
+    }
     return { ok: true, data: content };
   } catch (err) {
     return { ok: false, status: 502, code: "GENERATION_FAILED", message: err instanceof Error ? err.message : "Could not reach OpenAI." };
