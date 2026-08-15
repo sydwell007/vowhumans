@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Activity,
+  ArrowLeft,
   ArrowRight,
   AudioLines,
   BadgeCheck,
@@ -20,7 +21,6 @@ import {
   FileText,
   Fingerprint,
   Gauge,
-  Globe2,
   KeyRound,
   Languages,
   LockKeyhole,
@@ -31,11 +31,11 @@ import {
   Radio,
   RefreshCw,
   ShieldCheck,
+  SkipForward,
   Sparkles,
   Trash2,
   UploadCloud,
   UserCheck,
-  Video,
   WandSparkles,
   Webhook,
   X,
@@ -178,47 +178,627 @@ function Dashboard() {
   );
 }
 
+type DigitalHumanSummary = { id: string; name: string; role: string; disclosure: string; state: string; created_at: string; updated_at: string };
+type DigitalHumanProfile = {
+  human: DigitalHumanSummary;
+  face: { id: string; media_type: string; detector_provider: string | null; preprocessing_state: string; state: string } | null;
+  voice: { id: string; name: string; provider: string; provider_voice_id: string | null; language: string; is_custom: boolean } | null;
+  gesture_profile: { id: string; name: string; state_config: { features: Record<string, { enabled: boolean; range: string }> } } | null;
+  persona: { persona_id: string; persona_name: string; version_id: string; version: number; role: string; state: string } | null;
+  knowledge_bases: { id: string; name: string }[];
+};
+
 function DigitalHumans() {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "ready" | "draft">("all");
-  const readyCount = humans.filter((h) => h.status === "Ready").length;
-  const draftCount = humans.filter((h) => h.status === "Draft").length;
-  const visibleHumans = humans.filter((h) => filter === "all" || (filter === "ready" ? h.status === "Ready" : h.status === "Draft"));
+  const [items, setItems] = useState<DigitalHumanSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<DigitalHumanProfile | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editDisclosure, setEditDisclosure] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardHumanId, setWizardHumanId] = useState<string | null>(null);
+  const [wizardStartStep, setWizardStartStep] = useState(1);
+
+  async function refresh() {
+    const res = await fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null);
+    if (res?.success) {
+      setItems(res.data.items);
+      setSelectedId((prev) => prev ?? res.data.items[0]?.id ?? null);
+    }
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh()/loadDetail() reused by handlers below
+  useEffect(() => { refresh(); }, []);
+
+  async function loadDetail(id: string) {
+    setDetailLoading(true);
+    const res = await fetch(`/api/v1/digital-humans/${id}`).then(r => r.json()).catch(() => null);
+    if (res?.success) {
+      const loadedDetail = res.data as DigitalHumanProfile;
+      setDetail(loadedDetail);
+      setEditName(loadedDetail.human.name);
+      setEditRole(loadedDetail.human.role);
+      setEditDisclosure(loadedDetail.human.disclosure);
+    } else {
+      setDetail(null);
+    }
+    setDetailLoading(false);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads the selected human's profile; re-runs when the list selection changes
+  useEffect(() => { if (selectedId) loadDetail(selectedId); }, [selectedId]);
+
+  function openWizard(resumeId: string | null, startStep: number) {
+    setWizardHumanId(resumeId);
+    setWizardStartStep(startStep);
+    setWizardOpen(true);
+  }
+
+  // Wires StudioShell's top-bar "+ New digital human" button, which lives outside this
+  // component tree — a CustomEvent avoids prop-drilling or a new context just for this.
+  useEffect(() => {
+    function handleNew() { openWizard(null, 1); }
+    window.addEventListener('studio:new-digital-human', handleNew);
+    return () => window.removeEventListener('studio:new-digital-human', handleNew);
+  }, []);
+
+  function closeWizard(refreshNeeded: boolean) {
+    const resumedId = wizardHumanId;
+    setWizardOpen(false);
+    if (refreshNeeded) {
+      refresh();
+      if (resumedId) loadDetail(resumedId);
+    }
+  }
+
+  async function saveIdentity() {
+    if (!detail) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/digital-humans/${detail.human.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: editName.trim(), role: editRole.trim(), disclosure: editDisclosure.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not save changes.');
+      await loadDetail(detail.human.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save changes.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteHuman(id: string) {
+    setBusy(true);
+    await fetch(`/api/v1/digital-humans/${id}`, { method: 'DELETE' }).catch(() => {});
+    if (selectedId === id) { setSelectedId(null); setDetail(null); }
+    await refresh();
+    setBusy(false);
+  }
+
   return (
     <div className="content-stack">
-      <div className="filter-row"><div className="segmented"><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>All <b>{humans.length}</b></button><button className={filter === "ready" ? "selected" : ""} onClick={() => setFilter("ready")}>Ready <b>{readyCount}</b></button><button className={filter === "draft" ? "selected" : ""} onClick={() => setFilter("draft")}>Draft <b>{draftCount}</b></button></div><span className="filter-note"><ShieldCheck size={16} /> Every live surface discloses AI</span></div>
-      <section className="human-card-grid">
-        {visibleHumans.map((human) => (
-          <article className="human-card" key={human.id}>
-            <div className="human-card-visual">
-              <Image src={human.image} alt={`Original fictional AI-generated portrait of ${human.name}`} fill sizes="(max-width: 800px) 100vw, 33vw" />
-              <span className="image-disclosure"><Sparkles size={13} /> AI-generated</span>
-              <IconMenuButton className="image-menu" label={human.name} />
-              <div className="voice-wave" aria-hidden="true">{[2,5,8,4,11,7,3,9,5,2].map((v,i)=><i key={i} style={{height: `${v + 4}px`}} />)}</div>
-            </div>
-            <div className="human-card-body">
-              <div className="human-card-head"><div><h2>{human.name}</h2><p>{human.role}</p></div><StatusPill>{human.status}</StatusPill></div>
-              <div className="human-meta"><span><BrainCircuit size={15} />{human.persona}</span><span><AppWindowIcon />{human.applications.join(" · ")}</span><span><Video size={15} />{human.mode}</span></div>
-              <div className="human-card-actions"><button className="secondary-button" onClick={() => setSelected(human.id)}><Play size={15} />Test</button><InlineAction className="plain-button" idleLabel={<>Edit <ArrowRight size={15} /></>} doneLabel="Editor pending" /></div>
-            </div>
-          </article>
-        ))}
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && items.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><Bot size={24} /></span><p className="eyebrow">No digital humans yet</p><h2>Build your first VowHuman</h2><p>Start from one of the demo templates or from scratch — face, voice, knowledge, persona and gestures are assembled step by step, and you can always finish a piece later.</p></section>
+      )}
+      <section className="split-grid persona-layout">
+        <div className="panel persona-list-panel">
+          <PanelTitle title="Your digital humans" eyebrow={`${items.length} VowHuman${items.length === 1 ? '' : 's'}`} action={<button className="secondary-button" onClick={() => openWizard(null, 1)}><Bot size={15} />New</button>} />
+          <div className="persona-list">
+            {items.map((human) => (
+              <button key={human.id} className={selectedId === human.id ? 'selected' : ''} onClick={() => { setSelectedId(human.id); setError(null); }}>
+                <span className="persona-glyph"><Bot size={19} /></span>
+                <span><strong>{human.name}</strong><small>{human.role}</small></span>
+                <StatusPill tone={human.state === 'active' ? 'good' : human.state === 'draft' ? 'warn' : 'muted'}>{human.state}</StatusPill>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="panel persona-editor">
+          {detailLoading && <p className="panel-note">Loading profile…</p>}
+          {!detailLoading && detail && (
+            <>
+              <div className="editor-top">
+                <div><p className="eyebrow">{detail.human.state}</p><h2>{detail.human.name}</h2><p>{detail.human.role}</p></div>
+                <div className="editor-actions">
+                  <button className="icon-button" aria-label="Delete digital human" onClick={() => deleteHuman(detail.human.id)} disabled={busy}><Trash2 size={16} /></button>
+                </div>
+              </div>
+              <div className="form-grid two">
+                <label>Name<input value={editName} onChange={(e) => setEditName(e.target.value)} /></label>
+                <label>Role<input value={editRole} onChange={(e) => setEditRole(e.target.value)} /></label>
+                <label className="full">Disclosure<textarea value={editDisclosure} onChange={(e) => setEditDisclosure(e.target.value)} /></label>
+              </div>
+              <div className="editor-actions" style={{ marginTop: 14 }}>
+                <button className="primary-button" onClick={saveIdentity} disabled={saving}>{saving ? <RefreshCw size={17} className="spin" /> : <Check size={17} />}{saving ? 'Saving…' : 'Save'}</button>
+              </div>
+              <section className="profile-slot-grid">
+                <ProfileSlot icon={Fingerprint} label="Face" filled={Boolean(detail.face)}
+                  content={detail.face && <div className="face-asset-preview"><Image src={`/api/v1/faces/${detail.face.id}/image`} alt="" fill sizes="140px" unoptimized /></div>}
+                  meta={detail.face ? (detail.face.detector_provider === 'gpt-image-1' ? 'AI-generated' : 'Uploaded') : undefined}
+                  onSetup={() => openWizard(detail.human.id, 2)} />
+                <ProfileSlot icon={AudioLines} label="Voice" filled={Boolean(detail.voice)} meta={detail.voice?.name} onSetup={() => openWizard(detail.human.id, 3)} />
+                <ProfileSlot icon={BookOpenText} label="Knowledge" filled={detail.knowledge_bases.length > 0} meta={detail.knowledge_bases.map((k) => k.name).join(', ') || undefined} onSetup={() => openWizard(detail.human.id, 4)} />
+                <ProfileSlot icon={BrainCircuit} label="Persona" filled={Boolean(detail.persona)} meta={detail.persona ? `${detail.persona.persona_name} · v${detail.persona.version}` : undefined} onSetup={() => openWizard(detail.human.id, 5)} />
+                <ProfileSlot icon={Sparkles} label="Gestures" filled={Boolean(detail.gesture_profile)} meta={detail.gesture_profile?.name} onSetup={() => openWizard(detail.human.id, 6)} />
+              </section>
+            </>
+          )}
+          {!detailLoading && !detail && <p className="panel-note">Select a digital human, or create a new one.</p>}
+        </div>
       </section>
-      <section className="panel identity-primer">
-        <span className="primer-icon"><Fingerprint size={24} /></span>
-        <div><p className="eyebrow">Keep the layers clear</p><h2>A face is not a Persona.</h2><p>Visual identity, voice identity, behaviour and application permissions are governed independently—then assembled into one disclosed experience.</p></div>
-        <div className="layer-flow"><span>Face</span><i>+</i><span>Voice</span><i>+</i><span>Persona</span><i>→</i><strong>Digital human</strong></div>
-      </section>
-      {selected && <TestDrawer humanId={selected} onClose={() => setSelected(null)} />}
+      {wizardOpen && <DigitalHumanWizard humanId={wizardHumanId} startStep={wizardStartStep} onClose={closeWizard} />}
     </div>
   );
 }
 
-function AppWindowIcon() { return <Globe2 size={15} />; }
+function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { icon: typeof Bot; label: string; filled: boolean; meta?: string; content?: React.ReactNode; onSetup: () => void }) {
+  return (
+    <article className={`profile-slot${filled ? '' : ' empty'}`}>
+      {content}
+      <span className="empty-icon"><Icon size={20} /></span>
+      <strong>{label}</strong>
+      {filled ? <p>{meta ?? 'Assigned'}</p> : (
+        <>
+          <p>Not set up yet</p>
+          <button className="secondary-button" onClick={onSetup}>Set up {label.toLowerCase()}</button>
+        </>
+      )}
+    </article>
+  );
+}
 
-function TestDrawer({ humanId, onClose }: { humanId: string; onClose: () => void }) {
-  const human = humans.find((item) => item.id === humanId)!;
-  return <div className="drawer-scrim"><aside className="test-drawer"><button className="icon-button drawer-close" aria-label="Close test panel" onClick={onClose}><X size={19} /></button><p className="eyebrow">Safe test console</p><h2>Meet {human.name}</h2><div className="drawer-portrait"><Image src={human.image} alt={`AI-generated portrait of ${human.name}`} fill sizes="320px" /><span className="image-disclosure"><Sparkles size={13} /> AI-generated</span></div><StatusPill tone="warn">Mock conversation</StatusPill><p>{human.disclosure}. The live provider is not configured, so this test will not access your microphone.</p><Link href="/demos/interview" className="primary-button"><Play size={17} />Open interview demo</Link></aside></div>;
+const WIZARD_STEP_LABELS = ['Identity', 'Face', 'Voice', 'Knowledge', 'Persona', 'Gesture'];
+
+function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string | null; startStep: number; onClose: (refreshNeeded: boolean) => void }) {
+  const [step, setStep] = useState(startStep);
+  const [activeHumanId, setActiveHumanId] = useState<string | null>(humanId);
+  const [changed, setChanged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const minStep = humanId ? startStep : 1;
+
+  const [templateIndex, setTemplateIndex] = useState<number | null>(null);
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+  const [disclosure, setDisclosure] = useState('AI-generated digital human. Not a real person.');
+  const [creatingIdentity, setCreatingIdentity] = useState(false);
+
+  function pickTemplate(index: number | null) {
+    setTemplateIndex(index);
+    if (index === null) { setName(''); setRole(''); return; }
+    const template = humans[index];
+    setName(template.name);
+    setRole(template.role);
+    setDisclosure(template.disclosure);
+  }
+
+  async function submitIdentity(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim() || !role.trim()) { setError('Give this VowHuman a name and a role.'); return; }
+    setCreatingIdentity(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/digital-humans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), role: role.trim(), disclosure: disclosure.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this digital human.');
+      setActiveHumanId(body.data.id);
+      setChanged(true);
+      setStep(2);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this digital human.');
+    } finally {
+      setCreatingIdentity(false);
+    }
+  }
+
+  async function finish() {
+    if (activeHumanId) await fetch(`/api/v1/digital-humans/${activeHumanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: 'active' }) }).catch(() => {});
+    onClose(true);
+  }
+
+  function advance() { setChanged(true); if (step >= 6) finish(); else setStep(step + 1); }
+  function skip() { if (step >= 6) finish(); else setStep(step + 1); }
+
+  return (
+    <div className="drawer-scrim">
+      <aside className="wizard-panel">
+        <button className="icon-button drawer-close" aria-label="Close" onClick={() => onClose(changed)}><X size={19} /></button>
+        <p className="eyebrow">Build a VowHuman</p>
+        <div className="wizard-steps">
+          {WIZARD_STEP_LABELS.map((label, index) => {
+            const n = index + 1;
+            return <div key={label} className={n < step ? 'done' : n === step ? 'active' : ''}><span>{n < step ? <Check size={12} /> : n}</span><small>{label}</small></div>;
+          })}
+        </div>
+        {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+        <div className="wizard-body">
+          {step === 1 && (
+            <form onSubmit={submitIdentity}>
+              <p className="panel-note">Start from a demo template, or build from scratch.</p>
+              <div className="interviewer-picker">
+                <button type="button" className={templateIndex === null ? 'selected' : ''} onClick={() => pickTemplate(null)}>
+                  <span className="template-blank"><WandSparkles size={22} /></span><strong>Start blank</strong>
+                </button>
+                {humans.map((human, index) => (
+                  <button type="button" key={human.id} className={templateIndex === index ? 'selected' : ''} onClick={() => pickTemplate(index)}>
+                    <span><Image src={human.image} alt="" fill sizes="140px" /></span>
+                    <strong>{human.name}</strong><small>{human.role}</small>
+                  </button>
+                ))}
+              </div>
+              <div className="form-grid two">
+                <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Naledi Support" /></label>
+                <label>Role<input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Onboarding Guide" /></label>
+                <label className="full">Disclosure<textarea value={disclosure} onChange={(e) => setDisclosure(e.target.value)} /></label>
+              </div>
+              <button className="primary-button" type="submit" disabled={creatingIdentity}>{creatingIdentity ? <RefreshCw size={17} className="spin" /> : <ArrowRight size={17} />}{creatingIdentity ? 'Creating…' : 'Continue'}</button>
+            </form>
+          )}
+          {step === 2 && activeHumanId && <WizardFaceStep humanId={activeHumanId} onDone={advance} />}
+          {step === 3 && activeHumanId && <WizardVoiceStep humanId={activeHumanId} onDone={advance} />}
+          {step === 4 && activeHumanId && <WizardKnowledgeStep humanId={activeHumanId} onDone={advance} />}
+          {step === 5 && activeHumanId && <WizardPersonaStep humanId={activeHumanId} role={role} onDone={advance} />}
+          {step === 6 && activeHumanId && <WizardGestureStep humanId={activeHumanId} onDone={advance} />}
+        </div>
+        {step > 1 && (
+          <div className="wizard-footer editor-actions">
+            {step > minStep && <button className="secondary-button" type="button" onClick={() => setStep(step - 1)}><ArrowLeft size={16} />Back</button>}
+            <button className="plain-button" type="button" onClick={skip}><SkipForward size={16} />{step >= 6 ? 'Skip & finish' : 'Skip for now'}</button>
+          </div>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [faces, setFaces] = useState<FaceAsset[]>([]);
+  const [selectedFaceId, setSelectedFaceId] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { fetch('/api/v1/faces').then((r) => r.json()).then((res) => { if (res?.success) setFaces(res.data.items); }).catch(() => {}); }, []);
+
+  async function assignExisting() {
+    if (!selectedFaceId) { setError('Choose a face.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, face_asset_id: selectedFaceId }) });
+      if (!res.ok) throw new Error('Could not assign this face.');
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this face.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateAndAssign(event: React.FormEvent) {
+    event.preventDefault();
+    if (prompt.trim().length < 10) { setError('Describe the face you want generated (at least 10 characters).'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/faces', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: prompt.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not generate this face.');
+      await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, face_asset_id: body.data.id }) });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate this face.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Face</h3>
+      <p className="panel-note">Choose an existing face asset, or generate a new one.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {faces.length > 0 && (
+        <div className="form-grid two">
+          <label className="full">Existing face assets
+            <select value={selectedFaceId} onChange={(e) => setSelectedFaceId(e.target.value)}>
+              <option value="">Choose one</option>
+              {faces.map((f) => <option key={f.id} value={f.id}>{f.media_type} · {f.detector_provider === 'gpt-image-1' ? 'AI-generated' : 'Uploaded'}</option>)}
+            </select>
+          </label>
+          <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedFaceId}>Use this face</button>
+        </div>
+      )}
+      <form className="form-grid two" onSubmit={generateAndAssign}>
+        <label className="full">Or generate a new face with AI<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Warm, professional South African woman in her 30s" /></label>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{busy ? 'Working…' : 'Generate & use'}</button>
+      </form>
+    </div>
+  );
+}
+
+function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [voices, setVoices] = useState<Voice[]>([]);
+  const [providerVoices, setProviderVoices] = useState<string[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState('');
+  const [name, setName] = useState('');
+  const [providerVoice, setProviderVoice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/v1/voices').then((r) => r.json()).then((res) => {
+      if (res?.success) {
+        setVoices(res.data.items);
+        setProviderVoices(res.data.available_provider_voices ?? []);
+        if (res.data.available_provider_voices?.[0]) setProviderVoice(res.data.available_provider_voices[0]);
+      }
+    }).catch(() => {});
+  }, []);
+
+  async function assignExisting() {
+    if (!selectedVoiceId) { setError('Choose a voice.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: selectedVoiceId }) });
+      if (!res.ok) throw new Error('Could not assign this voice.');
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this voice.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAndAssign(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) { setError('Give the voice a name.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/voices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), language: 'English (South Africa)', provider_voice_id: providerVoice }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this voice.');
+      await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: body.data.id }) });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this voice.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Voice</h3>
+      <p className="panel-note">Choose an existing voice, or pick a provider voice to create a new one.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {voices.length > 0 && (
+        <div className="form-grid two">
+          <label className="full">Existing voices
+            <select value={selectedVoiceId} onChange={(e) => setSelectedVoiceId(e.target.value)}>
+              <option value="">Choose one</option>
+              {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </label>
+          <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedVoiceId}>Use this voice</button>
+        </div>
+      )}
+      <form className="form-grid two" onSubmit={createAndAssign}>
+        <label>Or create a new voice<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Warm and professional" /></label>
+        <label>Provider voice<select value={providerVoice} onChange={(e) => setProviderVoice(e.target.value)}>{providerVoices.map((pv) => <option key={pv}>{pv}</option>)}</select></label>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <Check size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
+      </form>
+    </div>
+  );
+}
+
+function WizardKnowledgeStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [newName, setNewName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { fetch('/api/v1/knowledge-bases').then((r) => r.json()).then((res) => { if (res?.success) setBases(res.data.items); }).catch(() => {}); }, []);
+
+  function toggle(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function assignSelected() {
+    if (selectedIds.length === 0) { setError('Choose at least one knowledge base.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      await Promise.all(selectedIds.map((id) => fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, knowledge_base_id: id, assigned: true }) })));
+      onDone();
+    } catch {
+      setError('Could not assign these knowledge bases.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAndAssign(event: React.FormEvent) {
+    event.preventDefault();
+    if (!newName.trim()) { setError('Give the library a name.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/knowledge-bases', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: newName.trim(), description: '' }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this library.');
+      await fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, knowledge_base_id: body.data.id, assigned: true }) });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this library.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Knowledge</h3>
+      <p className="panel-note">Attach one or more knowledge libraries — a VowHuman can combine several.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {bases.length > 0 && (
+        <>
+          <div className="chip-toggle-row">
+            {bases.map((b) => <button type="button" key={b.id} className={`chip-toggle${selectedIds.includes(b.id) ? ' active' : ''}`} onClick={() => toggle(b.id)}>{selectedIds.includes(b.id) ? <Check size={11} /> : null}{b.name}</button>)}
+          </div>
+          <button className="secondary-button" type="button" onClick={assignSelected} disabled={busy || selectedIds.length === 0} style={{ marginTop: 10 }}>Use selected libraries</button>
+        </>
+      )}
+      <form className="form-grid two" onSubmit={createAndAssign} style={{ marginTop: 14 }}>
+        <label className="full">Or create a new library<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Interview Preparation" /></label>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <BookOpenText size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
+      </form>
+    </div>
+  );
+}
+
+function WizardPersonaStep({ humanId, role, onDone }: { humanId: string; role: string; onDone: () => void }) {
+  const [personas, setPersonas] = useState<PersonaSummary[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState('');
+  const [name, setName] = useState('');
+  const [genRole, setGenRole] = useState(role);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { fetch('/api/v1/personas').then((r) => r.json()).then((res) => { if (res?.success) setPersonas(res.data.items); }).catch(() => {}); }, []);
+
+  async function assignExisting() {
+    if (!selectedVersionId) { setError('Choose a persona.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, persona_version_id: selectedVersionId }) });
+      if (!res.ok) throw new Error('Could not assign this persona.');
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this persona.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateAndAssign(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) { setError('Give the persona a name.'); return; }
+    if (genRole.trim().length < 5) { setError("Describe the VowHuman's role (at least 5 characters)."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/personas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'generate', name: name.trim(), role: genRole.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not generate this persona.');
+      await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, persona_version_id: body.data.version.id }) });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate this persona.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Persona</h3>
+      <p className="panel-note">Choose an existing persona, or generate one with AI from the role you gave this VowHuman.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {personas.length > 0 && (
+        <div className="form-grid two">
+          <label className="full">Existing personas
+            <select value={selectedVersionId} onChange={(e) => setSelectedVersionId(e.target.value)}>
+              <option value="">Choose one</option>
+              {personas.filter((p) => p.version_id).map((p) => <option key={p.id} value={p.version_id ?? ''}>{p.name}</option>)}
+            </select>
+          </label>
+          <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedVersionId}>Use this persona</button>
+        </div>
+      )}
+      <form className="form-grid two" onSubmit={generateAndAssign}>
+        <label>New persona name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Interview Coach" /></label>
+        <label>Role<input value={genRole} onChange={(e) => setGenRole(e.target.value)} /></label>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{busy ? 'Generating…' : 'Generate & use'}</button>
+      </form>
+    </div>
+  );
+}
+
+function WizardGestureStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [profiles, setProfiles] = useState<GestureProfile[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { fetch('/api/v1/gesture-profiles').then((r) => r.json()).then((res) => { if (res?.success) setProfiles(res.data.items); }).catch(() => {}); }, []);
+
+  async function assignExisting() {
+    if (!selectedId) { setError('Choose a gesture profile.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, gesture_profile_id: selectedId }) });
+      if (!res.ok) throw new Error('Could not assign this profile.');
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this profile.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAndAssign(event: React.FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) { setError('Give the gesture profile a name.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/gesture-profiles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not create this profile.');
+      await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, gesture_profile_id: body.data.id }) });
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create this profile.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Gesture profile</h3>
+      <p className="panel-note">Choose an existing profile, or create one with the default natural-movement set.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {profiles.length > 0 && (
+        <div className="form-grid two">
+          <label className="full">Existing profiles
+            <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+              <option value="">Choose one</option>
+              {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedId}>Use this profile</button>
+        </div>
+      )}
+      <form className="form-grid two" onSubmit={createAndAssign}>
+        <label className="full">Or create a new profile<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Calm and attentive" /></label>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
+      </form>
+    </div>
+  );
 }
 
 type PersonaSummary = {
@@ -242,6 +822,7 @@ function Personas() {
   const [items, setItems] = useState<PersonaSummary[]>([]);
   const [assignments, setAssignments] = useState<PersonaAssignment[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseSummary[]>([]);
+  const [realHumans, setRealHumans] = useState<DigitalHumanSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -276,10 +857,11 @@ function Personas() {
   const [testing, setTesting] = useState(false);
 
   async function refreshList() {
-    const [personasRes, assignmentsRes, basesRes] = await Promise.all([
+    const [personasRes, assignmentsRes, basesRes, humansRes] = await Promise.all([
       fetch('/api/v1/personas').then(r => r.json()).catch(() => null),
       fetch('/api/v1/persona-assignments').then(r => r.json()).catch(() => null),
       fetch('/api/v1/knowledge-bases').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
     ]);
     if (personasRes?.success) {
       setItems(personasRes.data.items);
@@ -287,6 +869,7 @@ function Personas() {
     }
     if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
     if (basesRes?.success) setKnowledgeBases(basesRes.data.items);
+    if (humansRes?.success) setRealHumans(humansRes.data.items);
     setLoaded(true);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refreshList()/loadDetail() are also reused by user-triggered handlers below
@@ -514,7 +1097,14 @@ function Personas() {
                     }}
                   >
                     <option value="">Not assigned</option>
-                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
+                    {realHumans.length > 0 && (
+                      <optgroup label="Digital humans">
+                        {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
+                      </optgroup>
+                    )}
+                    <optgroup label="Demo catalogue">
+                      {humans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
+                    </optgroup>
                   </select>
                 </label>
                 <label className="full">Knowledge bases
@@ -623,6 +1213,7 @@ type KnowledgeDocument = { id: string; title: string; source_type: string; appro
 function Knowledge() {
   const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
   const [assignments, setAssignments] = useState<KnowledgeAssignment[]>([]);
+  const [realHumans, setRealHumans] = useState<DigitalHumanSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -646,15 +1237,17 @@ function Knowledge() {
   const [creatingBase, setCreatingBase] = useState(false);
 
   async function refresh() {
-    const [basesRes, assignmentsRes] = await Promise.all([
+    const [basesRes, assignmentsRes, humansRes] = await Promise.all([
       fetch('/api/v1/knowledge-bases').then(r => r.json()).catch(() => null),
       fetch('/api/v1/knowledge-assignments').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
     ]);
     if (basesRes?.success) {
       setBases(basesRes.data.items);
       setAddTargetBase((prev) => prev || basesRes.data.items[0]?.id || '');
     }
     if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    if (humansRes?.success) setRealHumans(humansRes.data.items);
     setLoaded(true);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
@@ -824,7 +1417,7 @@ function Knowledge() {
               )}
               <label className="full">Assign to VowHumans
                 <div className="chip-toggle-row">
-                  {humans.map((human) => {
+                  {[...realHumans, ...humans].map((human) => {
                     const active = assignedHumans.includes(human.id);
                     return (
                       <button type="button" key={human.id} className={`chip-toggle${active ? ' active' : ''}`} onClick={() => toggleAssignment(human.id, base.id, !active)} disabled={busyId === `${human.id}:${base.id}`}>
@@ -984,6 +1577,7 @@ type FaceAssignment = { human_slug: string; face_asset_id: string };
 function FaceLibrary() {
   const [faces, setFaces] = useState<FaceAsset[]>([]);
   const [assignments, setAssignments] = useState<FaceAssignment[]>([]);
+  const [realHumans, setRealHumans] = useState<DigitalHumanSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -993,12 +1587,14 @@ function FaceLibrary() {
   const [adding, setAdding] = useState(false);
 
   async function refresh() {
-    const [facesRes, assignmentsRes] = await Promise.all([
+    const [facesRes, assignmentsRes, humansRes] = await Promise.all([
       fetch('/api/v1/faces').then(r => r.json()).catch(() => null),
       fetch('/api/v1/face-assignments').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
     ]);
     if (facesRes?.success) setFaces(facesRes.data.items);
     if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    if (humansRes?.success) setRealHumans(humansRes.data.items);
     setLoaded(true);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
@@ -1065,7 +1661,14 @@ function FaceLibrary() {
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignFace(slug, face.id); }} disabled={busyId === face.id}>
                   <option value="">Not assigned</option>
-                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
+                  {realHumans.length > 0 && (
+                    <optgroup label="Digital humans">
+                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Demo catalogue">
+                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
+                  </optgroup>
                 </select>
               </label>
             </article>
@@ -1099,6 +1702,7 @@ type GestureAssignment = { human_slug: string; gesture_profile_id: string };
 function GestureLibrary() {
   const [profiles, setProfiles] = useState<GestureProfile[]>([]);
   const [assignments, setAssignments] = useState<GestureAssignment[]>([]);
+  const [realHumans, setRealHumans] = useState<DigitalHumanSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -1109,12 +1713,14 @@ function GestureLibrary() {
   const [creating, setCreating] = useState(false);
 
   async function refresh() {
-    const [profilesRes, assignmentsRes] = await Promise.all([
+    const [profilesRes, assignmentsRes, humansRes] = await Promise.all([
       fetch('/api/v1/gesture-profiles').then(r => r.json()).catch(() => null),
       fetch('/api/v1/gesture-assignments').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
     ]);
     if (profilesRes?.success) setProfiles(profilesRes.data.items);
     if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    if (humansRes?.success) setRealHumans(humansRes.data.items);
     setLoaded(true);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
@@ -1176,7 +1782,14 @@ function GestureLibrary() {
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignProfile(slug, profile.id); }} disabled={busyId === profile.id}>
                   <option value="">Not assigned</option>
-                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
+                  {realHumans.length > 0 && (
+                    <optgroup label="Digital humans">
+                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Demo catalogue">
+                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
+                  </optgroup>
                 </select>
               </label>
             </article>
@@ -1221,6 +1834,7 @@ function VoiceLibrary() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [assignments, setAssignments] = useState<VoiceAssignment[]>([]);
   const [providerVoices, setProviderVoices] = useState<string[]>([]);
+  const [realHumans, setRealHumans] = useState<DigitalHumanSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -1234,9 +1848,10 @@ function VoiceLibrary() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   async function refresh() {
-    const [voicesRes, assignmentsRes] = await Promise.all([
+    const [voicesRes, assignmentsRes, humansRes] = await Promise.all([
       fetch('/api/v1/voices').then(r => r.json()).catch(() => null),
       fetch('/api/v1/voice-assignments').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
     ]);
     if (voicesRes?.success) {
       setVoices(voicesRes.data.items);
@@ -1244,6 +1859,7 @@ function VoiceLibrary() {
       if (!addProviderVoice && voicesRes.data.available_provider_voices?.[0]) setAddProviderVoice(voicesRes.data.available_provider_voices[0]);
     }
     if (assignmentsRes?.success) setAssignments(assignmentsRes.data.items);
+    if (humansRes?.success) setRealHumans(humansRes.data.items);
     setLoaded(true);
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by user-triggered handlers below
@@ -1340,7 +1956,14 @@ function VoiceLibrary() {
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignVoice(slug, voice.id); }} disabled={busyId === voice.id}>
                   <option value="">Not assigned</option>
-                  {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
+                  {realHumans.length > 0 && (
+                    <optgroup label="Digital humans">
+                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
+                    </optgroup>
+                  )}
+                  <optgroup label="Demo catalogue">
+                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
+                  </optgroup>
                 </select>
               </label>
             </article>

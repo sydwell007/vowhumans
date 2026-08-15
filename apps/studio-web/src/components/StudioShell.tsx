@@ -39,6 +39,12 @@ export function StudioShell({ section, children }: { section: string; children: 
   }, []);
 
   function quickAction() {
+    // DigitalHumans() owns the real wizard and listens for this event — every other
+    // section keeps the generic draft-toast fallback below, unchanged.
+    if (section === "digital-humans") {
+      window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
+      return;
+    }
     const outcome: Record<string, string> = {
       dashboard: "A safe digital-human draft is ready for identity and Persona setup.",
       "identity-consent": "Identity registration opened in draft mode; publication remains blocked.",

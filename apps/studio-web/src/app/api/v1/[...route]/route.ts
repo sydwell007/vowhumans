@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse, after } from "next/server";
-import { applications, humans } from "@/data/platform";
+import { applications } from "@/data/platform";
 import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
@@ -174,7 +174,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return response({ authenticated: true, user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role }, organisation: { id: user.organisationId, name: user.organisationName, slug: user.organisationSlug } });
   }
   if (resource === "health") return response({ status: "ok", persistence: false, providers: { afrihost_api: "not-verified", realtime: "mock", avatar: "static", gpu: "disabled", billing: "disabled", email: "disabled" } });
-  if (resource === "digital-humans") return response({ items: humans });
+
+  // Profile aggregate for one digital human — the 5 assignment tables (voice/face/
+  // gesture/knowledge/persona) key on human_slug text, not a real FK, so a real digital
+  // human's id just flows through them the same way the 5 static demo humans' string
+  // ids already do. The 5 demo humans themselves are never served from here — they're
+  // static and public, the client reads them straight from data/platform.ts.
+  if (resource === "digital-humans" && route[1] && !route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [human] = await sql`SELECT id, name, role, disclosure, state, created_at, updated_at FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const [[face], [voice], [gestureRow], [persona], knowledgeBases] = await Promise.all([
+      sql`SELECT fa.id, fa.media_type, fa.detector_provider, fa.preprocessing_state, fa.state FROM human_face_assignments hfa JOIN face_assets fa ON fa.id = hfa.face_asset_id WHERE hfa.organisation_id = ${organisationId} AND hfa.human_slug = ${route[1]}`,
+      sql`SELECT v.id, v.name, v.provider, v.provider_voice_id, v.language, v.is_custom FROM human_voice_assignments hva JOIN voices v ON v.id = hva.voice_id WHERE hva.organisation_id = ${organisationId} AND hva.human_slug = ${route[1]}`,
+      sql`SELECT gp.id, gp.name, gp.state_config FROM human_gesture_assignments hga JOIN gesture_profiles gp ON gp.id = hga.gesture_profile_id WHERE hga.organisation_id = ${organisationId} AND hga.human_slug = ${route[1]}`,
+      sql`SELECT p.id AS persona_id, p.name AS persona_name, pv.id AS version_id, pv.version, pv.role, pv.state FROM human_persona_assignments hpa JOIN persona_versions pv ON pv.id = hpa.persona_version_id JOIN personas p ON p.id = pv.persona_id WHERE hpa.organisation_id = ${organisationId} AND hpa.human_slug = ${route[1]}`,
+      sql`SELECT kb.id, kb.name FROM human_knowledge_assignments hka JOIN knowledge_bases kb ON kb.id = hka.knowledge_base_id WHERE hka.organisation_id = ${organisationId} AND hka.human_slug = ${route[1]}`,
+    ]);
+    const gestureProfile = gestureRow ? { ...gestureRow, state_config: typeof gestureRow.state_config === "string" ? JSON.parse(gestureRow.state_config) : gestureRow.state_config } : null;
+    return response({ human, face: face ?? null, voice: voice ?? null, gesture_profile: gestureProfile, persona: persona ?? null, knowledge_bases: knowledgeBases });
+  }
+
+  if (resource === "digital-humans" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT id, name, role, disclosure, state, created_at, updated_at FROM digital_humans WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    return response({ items: rows });
+  }
 
   if (resource === "voices" && route[1] && route[2] === "sample") {
     const organisationId = await requireOrganisation(request);
@@ -651,6 +678,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { human_slug: humanSlug, gesture_profile_id: gestureProfileId }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  if (resource === "digital-humans" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const role = typeof body.role === "string" ? body.role.trim() : "";
+    if (!name || !role) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give this VowHuman a name and a role." }, { status: 422 });
+    const disclosure = typeof body.disclosure === "string" && body.disclosure.trim() ? body.disclosure.trim() : "AI-generated digital human. Not a real person.";
+    const [humanRow] = await sql`
+      INSERT INTO digital_humans (organisation_id, name, role, disclosure)
+      VALUES (${organisationId}, ${name}, ${role}, ${disclosure})
+      RETURNING id, name, role, disclosure, state, created_at, updated_at
+    `;
+    return NextResponse.json({ success: true, data: humanRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
   // Generates the article text synchronously and returns it without writing anything —
   // lets the user review it in the UI before committing. Also keeps the slow chatComplete
   // call out of the after()-deferred background job entirely, so that job (now just
@@ -953,6 +995,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const [deleted] = await sql`DELETE FROM gesture_profiles WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
+  if (route[0] === "digital-humans" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    // human_slug in the 5 assignment tables is plain text, not a FK to digital_humans —
+    // nothing cascades automatically, so clean each one up explicitly before dropping
+    // the row itself. (sessions.digital_human_id and presenter_projects.digital_human_id
+    // do have a real FK with no cascade, but neither table is ever written to by this
+    // app yet, so they can't block this delete today — revisit if that changes.)
+    const deleted = await sql.begin(async (tx) => {
+      await tx`DELETE FROM human_voice_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      await tx`DELETE FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      await tx`DELETE FROM human_gesture_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      await tx`DELETE FROM human_knowledge_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      await tx`DELETE FROM human_persona_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      const [human] = await tx`DELETE FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+      return Boolean(human);
+    });
+    return response({ id: route[1], deleted }, 202);
+  }
   if (route[0] === "knowledge-documents" && route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -1004,6 +1065,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const enforcement = typeof body.enforcement === "string" ? body.enforcement : null;
     if (!enforcement) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "enforcement is required." }, { status: 422 });
     const [row] = await sql`UPDATE guardrails SET enforcement = ${enforcement} WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id, code, instruction, enforcement`;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "digital-humans" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const state = typeof body.state === "string" ? body.state : null;
+    if (state && !["draft", "active", "archived", "revoked"].includes(state)) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Invalid state." }, { status: 422 });
+    }
+    const [row] = await sql`
+      UPDATE digital_humans SET
+        name = COALESCE(${typeof body.name === "string" && body.name.trim() ? body.name.trim() : null}, name),
+        role = COALESCE(${typeof body.role === "string" && body.role.trim() ? body.role.trim() : null}, role),
+        disclosure = COALESCE(${typeof body.disclosure === "string" && body.disclosure.trim() ? body.disclosure.trim() : null}, disclosure),
+        state = COALESCE(${state}::lifecycle_state, state),
+        updated_at = now()
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+      RETURNING id, name, role, disclosure, state, created_at, updated_at
+    `;
     if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
   }

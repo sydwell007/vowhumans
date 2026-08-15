@@ -122,10 +122,10 @@ export const navigation = [
     items: [
       { slug: "", label: "Dashboard", icon: CircleGauge },
       { slug: "digital-humans", label: "Digital Humans", icon: Bot },
-      { slug: "personas", label: "Personas", icon: BrainCircuit },
-      { slug: "knowledge", label: "Knowledge", icon: LibraryBig },
-      { slug: "voices", label: "Voices", icon: AudioLines },
       { slug: "faces", label: "Faces", icon: Fingerprint },
+      { slug: "voices", label: "Voices", icon: AudioLines },
+      { slug: "knowledge", label: "Knowledge", icon: LibraryBig },
+      { slug: "personas", label: "Personas", icon: BrainCircuit },
       { slug: "gesture-profiles", label: "Gesture Profiles", icon: Sparkles },
     ],
   },

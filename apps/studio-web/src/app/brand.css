@@ -961,7 +961,7 @@ p { text-wrap: pretty; }
 .page-description { color: var(--vh-text-muted); font-size: 13px; }
 .studio-data-notice { border-color: rgba(0, 217, 255, 0.15); background: rgba(0, 217, 255, 0.05); color: var(--vh-text-secondary); }
 
-.studio-shell :where(.panel, .metric-card, .human-card, .application-card, .governance-card, .truth-card, .health-grid > article, .data-table, .session-overview, .safety-control-grid > article, .prohibited-panel, .review-card, .asset-detail, .presenter-preview, .test-drawer) {
+.studio-shell :where(.panel, .metric-card, .human-card, .application-card, .governance-card, .truth-card, .health-grid > article, .data-table, .session-overview, .safety-control-grid > article, .prohibited-panel, .review-card, .asset-detail, .presenter-preview, .test-drawer, .wizard-panel, .profile-slot) {
   border-color: var(--vh-border);
   background: var(--vh-surface);
   color: var(--vh-text);
@@ -1894,6 +1894,36 @@ body {
   background: var(--vh-spectrum) !important;
   color: #fff !important;
 }
+
+.studio-shell .wizard-steps > div {
+  color: var(--vh-text-muted) !important;
+}
+.studio-shell .wizard-steps > div::after { background: var(--vh-border) !important; }
+.studio-shell .wizard-steps span {
+  border-color: var(--vh-border) !important;
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-text-secondary) !important;
+}
+.studio-shell .wizard-steps .active span {
+  border-color: var(--vh-cyan) !important;
+  background: var(--vh-spectrum) !important;
+  color: #fff !important;
+}
+.studio-shell .wizard-steps .done span {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+  background: var(--vh-success) !important;
+  color: var(--vh-midnight) !important;
+}
+.studio-shell .wizard-footer { border-color: var(--vh-border) !important; }
+.studio-shell .template-blank {
+  background: var(--vh-surface-raised) !important;
+  color: var(--vh-cyan) !important;
+}
+.studio-shell .profile-slot.empty {
+  border-style: dashed !important;
+  background: var(--vh-midnight-2) !important;
+}
+.studio-shell .profile-slot p { color: var(--vh-text-muted) !important; }
 
 .studio-shell .preview-meta > div {
   border-color: var(--vh-border) !important;
