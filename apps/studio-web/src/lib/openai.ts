@@ -3,9 +3,16 @@
 // timeout/error-shape pattern, just shared instead of duplicated for chat/embeddings.
 export type OpenAIResult<T> = { ok: true; data: T } | { ok: false; status: number; code: string; message: string };
 
-const CHAT_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const EMBEDDING_MODEL = "text-embedding-3-small";
+// Per-purpose OPENAI_*_MODEL env vars are this codebase's established convention
+// (see OPENAI_REALTIME_MODEL in docker-compose.yml) — not the generic OPENAI_MODEL.
+const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
+export const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const EMBEDDING_BATCH_SIZE = 100;
+// knowledge_chunks.embedding is a fixed vector(1536) column. text-embedding-3's family
+// supports an explicit `dimensions` truncation (Matryoshka), so requesting 1536 here
+// keeps any of these models — small (native 1536) or large (native 3072) — compatible
+// with that fixed column without another migration.
+const EMBEDDING_DIMENSIONS = 1536;
 
 function notConfigured<T>(): OpenAIResult<T> {
   return { ok: false, status: 503, code: "PROVIDER_DISABLED", message: "OpenAI is not configured." };
@@ -56,7 +63,7 @@ export async function embedBatch(texts: string[]): Promise<OpenAIResult<number[]
       const upstream = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch }),
+        body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch, dimensions: EMBEDDING_DIMENSIONS }),
         signal: AbortSignal.timeout(45000),
       });
       if (!upstream.ok) {

@@ -5,7 +5,7 @@ import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
-import { chatComplete, embedBatch } from "@/lib/openai";
+import { EMBEDDING_MODEL, chatComplete, embedBatch } from "@/lib/openai";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 
 const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
@@ -126,7 +126,7 @@ async function storeChunks(organisationId: string, documentId: string, text: str
     const vector = `[${embedded.data[i].join(",")}]`;
     await sql`
       INSERT INTO knowledge_chunks (organisation_id, document_id, ordinal, content, embedding_provider, embedding_model, embedding, citation)
-      VALUES (${organisationId}, ${documentId}, ${i}, ${chunks[i]}, 'openai', 'text-embedding-3-small', ${vector}::vector, ${JSON.stringify({ ordinal: i })}::jsonb)
+      VALUES (${organisationId}, ${documentId}, ${i}, ${chunks[i]}, 'openai', ${EMBEDDING_MODEL}, ${vector}::vector, ${JSON.stringify({ ordinal: i })}::jsonb)
     `;
   }
   await sql`UPDATE knowledge_documents SET state = 'active' WHERE id = ${documentId} AND organisation_id = ${organisationId}`;
