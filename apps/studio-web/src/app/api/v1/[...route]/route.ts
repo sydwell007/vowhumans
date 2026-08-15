@@ -45,11 +45,13 @@ function audioObjectKeyFromSettings(settings: unknown): string | null {
   return typeof key === "string" ? key : null;
 }
 
-// Gives proxyToGateway's 40s upstream timeout room to actually complete, and gives
-// after()-deferred knowledge ingestion (which shares this same budget) room for an
-// embeddings call plus per-chunk inserts. 60 is the practical ceiling on Vercel's
-// Hobby tier — raise it if the plan changes.
-export const maxDuration = 60;
+// Gives proxyToGateway's 40s upstream timeout room to complete, gives after()-deferred
+// knowledge ingestion (which shares this same budget) room for an embeddings call plus
+// per-chunk inserts, and — the largest consumer — sits above lib/openai.ts's own
+// 110s chatComplete timeout so a genuinely slow model response surfaces as an honest
+// upstream timeout instead of this function budget cutting it off first. If the actual
+// Vercel plan's ceiling is lower, Vercel clamps this down automatically; harmless either way.
+export const maxDuration = 120;
 
 function response(data: unknown, status = 200) {
   return NextResponse.json({ success: true, data, meta: { mode: "development-mock", request_id: randomUUID() } }, { status, headers: { "x-vowhumans-mode": "development-mock" } });

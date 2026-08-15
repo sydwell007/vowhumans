@@ -878,9 +878,12 @@ function Knowledge() {
           )}
           {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
           {addSourceMode === 'generate' && !previewContent && (
-            <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
-              {generatingPreview ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{generatingPreview ? 'Generating…' : 'Generate preview'}
-            </button>
+            <div className="full">
+              <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
+                {generatingPreview ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{generatingPreview ? 'Generating…' : 'Generate preview'}
+              </button>
+              {generatingPreview && <p className="panel-note">A thorough article can take up to a couple of minutes with some models — this is normal.</p>}
+            </div>
           )}
           {addSourceMode === 'generate' && previewContent && (
             <div className="full editor-actions">

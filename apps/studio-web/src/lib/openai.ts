@@ -13,6 +13,12 @@ const EMBEDDING_BATCH_SIZE = 100;
 // keeps any of these models — small (native 1536) or large (native 3072) — compatible
 // with that fixed column without another migration.
 const EMBEDDING_DIMENSIONS = 1536;
+// Chat models can vary widely in latency (a slower/more-capable model can comfortably
+// exceed a minute for a long, thorough response) — kept just under route.ts's own
+// maxDuration budget so a real slow response surfaces as an honest upstream timeout
+// rather than this abort firing first and masking how long the model actually needed.
+const CHAT_TIMEOUT_MS = 110_000;
+const EMBEDDING_TIMEOUT_MS = 60_000;
 
 function notConfigured<T>(): OpenAIResult<T> {
   return { ok: false, status: 503, code: "PROVIDER_DISABLED", message: "OpenAI is not configured." };
@@ -37,7 +43,7 @@ export async function chatComplete(args: {
         ...(args.jsonMode ? { response_format: { type: "json_object" } } : {}),
         max_completion_tokens: args.maxOutputTokens ?? 1200,
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
     });
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
@@ -64,7 +70,7 @@ export async function embedBatch(texts: string[]): Promise<OpenAIResult<number[]
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ model: EMBEDDING_MODEL, input: batch, dimensions: EMBEDDING_DIMENSIONS }),
-        signal: AbortSignal.timeout(45000),
+        signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
       });
       if (!upstream.ok) {
         const detail = await upstream.text().catch(() => "");
