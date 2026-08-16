@@ -653,45 +653,120 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
 function WizardKnowledgeStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
   const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetch('/api/v1/knowledge-bases').then((r) => r.json()).then((res) => { if (res?.success) setBases(res.data.items); }).catch(() => {}); }, []);
+  const [newBaseName, setNewBaseName] = useState('');
+  const [newBaseDescription, setNewBaseDescription] = useState('');
+  const [creatingBase, setCreatingBase] = useState(false);
+
+  const [addTargetBase, setAddTargetBase] = useState('');
+  const [addSourceMode, setAddSourceMode] = useState<'upload' | 'website' | 'generate'>('upload');
+  const [addTitle, setAddTitle] = useState('');
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [addUrl, setAddUrl] = useState('');
+  const [addTopic, setAddTopic] = useState('');
+  const [addLanguage, setAddLanguage] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
+
+  async function refreshBases() {
+    const res = await fetch('/api/v1/knowledge-bases').then((r) => r.json()).catch(() => null);
+    if (res?.success) {
+      setBases(res.data.items);
+      setAddTargetBase((prev) => prev || res.data.items[0]?.id || '');
+    }
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch when this step mounts; refreshBases() is also reused by user-triggered handlers below
+  useEffect(() => { refreshBases(); }, []);
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function assignSelected() {
-    if (selectedIds.length === 0) { setError('Choose at least one knowledge base.'); return; }
+    if (selectedIds.length === 0) { setError('Select at least one library above (click it to toggle it on) before continuing.'); return; }
     setBusy(true);
     setError(null);
     try {
-      await Promise.all(selectedIds.map((id) => fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, knowledge_base_id: id, assigned: true }) })));
+      const results = await Promise.all(selectedIds.map((id) => fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, knowledge_base_id: id, assigned: true }) })));
+      if (results.some((r) => !r.ok)) throw new Error('Could not assign one or more libraries.');
       onDone();
-    } catch {
-      setError('Could not assign these knowledge bases.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign these knowledge bases.');
     } finally {
       setBusy(false);
     }
   }
 
-  async function createAndAssign(event: React.FormEvent) {
+  async function submitCreateBase(event: React.FormEvent) {
     event.preventDefault();
-    if (!newName.trim()) { setError('Give the library a name.'); return; }
-    setBusy(true);
+    if (!newBaseName.trim()) { setError('Give the library a name.'); return; }
+    setCreatingBase(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/knowledge-bases', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: newName.trim(), description: '' }) });
+      const res = await fetch('/api/v1/knowledge-bases', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: newBaseName.trim(), description: newBaseDescription.trim() }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not create this library.');
-      await fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, knowledge_base_id: body.data.id, assigned: true }) });
-      onDone();
+      setNewBaseName(''); setNewBaseDescription('');
+      setAddTargetBase(body.data.id);
+      setSelectedIds((prev) => (prev.includes(body.data.id) ? prev : [...prev, body.data.id]));
+      await refreshBases();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create this library.');
     } finally {
-      setBusy(false);
+      setCreatingBase(false);
+    }
+  }
+
+  async function generatePreview() {
+    if (addTopic.trim().length < 5) { setError('Describe the topic, skill or expertise to generate (at least 5 characters).'); return; }
+    setGeneratingPreview(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/knowledge-documents/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: addTopic.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not generate this article.');
+      setPreviewContent(body.data.content);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate this article.');
+    } finally {
+      setGeneratingPreview(false);
+    }
+  }
+
+  async function submitAddSource(event: React.FormEvent) {
+    event.preventDefault();
+    if (!addTargetBase) { setError('Choose or create a library first.'); return; }
+    setAdding(true);
+    setError(null);
+    try {
+      let res: Response;
+      if (addSourceMode === 'upload') {
+        if (!addFile) { setError('Choose a file to upload.'); setAdding(false); return; }
+        const form = new FormData();
+        form.set('knowledge_base_id', addTargetBase);
+        form.set('title', addTitle);
+        form.set('language', addLanguage);
+        form.set('file', addFile);
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', body: form });
+      } else if (addSourceMode === 'website') {
+        if (!addUrl.trim()) { setError('Enter a URL.'); setAdding(false); return; }
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'website', url: addUrl.trim(), title: addTitle.trim() }) });
+      } else {
+        if (!previewContent) { setError('Generate a preview first.'); setAdding(false); return; }
+        res = await fetch('/api/v1/knowledge-documents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ knowledge_base_id: addTargetBase, source_type: 'generated', topic: addTopic.trim(), title: addTitle.trim(), content: previewContent }) });
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not add this source.');
+      setAddFile(null); setAddUrl(''); setAddTopic(''); setAddTitle(''); setPreviewContent(null);
+      setSelectedIds((prev) => (prev.includes(addTargetBase) ? prev : [...prev, addTargetBase]));
+      await refreshBases();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add this source.');
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -705,13 +780,68 @@ function WizardKnowledgeStep({ humanId, onDone }: { humanId: string; onDone: () 
           <div className="chip-toggle-row">
             {bases.map((b) => <button type="button" key={b.id} className={`chip-toggle${selectedIds.includes(b.id) ? ' active' : ''}`} onClick={() => toggle(b.id)}>{selectedIds.includes(b.id) ? <Check size={11} /> : null}{b.name}</button>)}
           </div>
-          <button className="secondary-button" type="button" onClick={assignSelected} disabled={busy || selectedIds.length === 0} style={{ marginTop: 10 }}>Use selected libraries</button>
+          <button className="primary-button" type="button" onClick={assignSelected} disabled={busy} style={{ marginTop: 10 }}>
+            {busy ? <RefreshCw size={17} className="spin" /> : <Check size={17} />}{busy ? 'Working…' : `Use selected librar${selectedIds.length === 1 ? 'y' : 'ies'}`}
+          </button>
         </>
       )}
-      <form className="form-grid two" onSubmit={createAndAssign} style={{ marginTop: 14 }}>
-        <label className="full">Or create a new library<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Interview Preparation" /></label>
-        <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <BookOpenText size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
-      </form>
+
+      <div className="wizard-subsection">
+        <p className="eyebrow">Create a new library</p>
+        <form className="form-grid two" onSubmit={submitCreateBase}>
+          <label className="full">Library name<input value={newBaseName} onChange={(e) => setNewBaseName(e.target.value)} placeholder="e.g. Interview Preparation" /></label>
+          <label className="full">Description (optional)<input value={newBaseDescription} onChange={(e) => setNewBaseDescription(e.target.value)} placeholder="What this library is for" /></label>
+          <button className="secondary-button" type="submit" disabled={creatingBase}>{creatingBase ? <RefreshCw size={17} className="spin" /> : <BookOpenText size={17} />}{creatingBase ? 'Creating…' : 'Create library'}</button>
+        </form>
+      </div>
+
+      {bases.length > 0 && (
+        <div className="wizard-subsection">
+          <p className="eyebrow">Add approved knowledge</p>
+          <form className="form-grid two" onSubmit={submitAddSource}>
+            <label>Library
+              <select value={addTargetBase} onChange={(e) => setAddTargetBase(e.target.value)}>
+                <option value="" disabled>Choose a library</option>
+                {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+              </select>
+            </label>
+            <label>Source
+              <select value={addSourceMode} onChange={(e) => { setAddSourceMode(e.target.value as 'upload' | 'website' | 'generate'); setPreviewContent(null); }}>
+                <option value="upload">Upload a document</option>
+                <option value="website">Import a website</option>
+                <option value="generate">Generate with AI</option>
+              </select>
+            </label>
+            {addSourceMode !== 'generate' && <label className="full">Title (optional)<input value={addTitle} onChange={(e) => setAddTitle(e.target.value)} placeholder="Defaults to the file name or URL" /></label>}
+            {addSourceMode === 'upload' && <label className="full">File — PDF, DOCX, Excel, Markdown or text (max 4MB)<input type="file" accept=".pdf,.docx,.xlsx,.xls,.md,.markdown,.txt" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} /></label>}
+            {addSourceMode === 'website' && <label className="full">Approved website URL<input value={addUrl} onChange={(e) => setAddUrl(e.target.value)} placeholder="https://example.com/guide" /></label>}
+            {addSourceMode === 'generate' && (
+              <label className="full">Topic, skill, knowledge base or expertise to generate
+                <textarea value={addTopic} onChange={(e) => { setAddTopic(e.target.value); setPreviewContent(null); }} placeholder="e.g. South African labour law basics for a first-time job seeker" />
+              </label>
+            )}
+            {addSourceMode === 'generate' && previewContent && (
+              <div className="full generated-preview">
+                <p className="eyebrow">Generated preview — review before adding</p>
+                <div className="preview-scroll">{previewContent}</div>
+              </div>
+            )}
+            {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
+            {addSourceMode === 'generate' && !previewContent && (
+              <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
+                {generatingPreview ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{generatingPreview ? 'Generating…' : 'Generate preview'}
+              </button>
+            )}
+            {addSourceMode === 'generate' && previewContent && (
+              <div className="full editor-actions">
+                <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add to library'}</button>
+                <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>{generatingPreview ? <RefreshCw size={17} className="spin" /> : <RefreshCw size={17} />}Regenerate</button>
+              </div>
+            )}
+            {addSourceMode !== 'generate' && <button className="primary-button" type="submit" disabled={adding}>{adding ? <RefreshCw size={17} className="spin" /> : <UploadCloud size={17} />}{adding ? 'Adding…' : 'Add source'}</button>}
+          </form>
+        </div>
+      )}
     </div>
   );
 }
