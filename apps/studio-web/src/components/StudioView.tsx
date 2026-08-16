@@ -344,7 +344,12 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
       {content}
       <span className="empty-icon"><Icon size={20} /></span>
       <strong>{label}</strong>
-      {filled ? <p>{meta ?? 'Assigned'}</p> : (
+      {filled ? (
+        <>
+          <p>{meta ?? 'Assigned'}</p>
+          <button className="plain-button" onClick={onSetup}>Change</button>
+        </>
+      ) : (
         <>
           <p>Not set up yet</p>
           <button className="secondary-button" onClick={onSetup}>Set up {label.toLowerCase()}</button>
@@ -368,6 +373,16 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   const [role, setRole] = useState('');
   const [disclosure, setDisclosure] = useState('AI-generated digital human. Not a real person.');
   const [creatingIdentity, setCreatingIdentity] = useState(false);
+  const [templateFaceAssignments, setTemplateFaceAssignments] = useState<FaceAssignment[]>([]);
+  const [templateVoiceAssignments, setTemplateVoiceAssignments] = useState<VoiceAssignment[]>([]);
+
+  // Looked up once so picking a template can offer to carry over an already-configured
+  // Face/Voice from that demo human — identity is arbitrary and worth redoing per VowHuman,
+  // but a good face or voice already in place shouldn't force a redo.
+  useEffect(() => {
+    fetch('/api/v1/face-assignments').then((r) => r.json()).then((res) => { if (res?.success) setTemplateFaceAssignments(res.data.items); }).catch(() => {});
+    fetch('/api/v1/voice-assignments').then((r) => r.json()).then((res) => { if (res?.success) setTemplateVoiceAssignments(res.data.items); }).catch(() => {});
+  }, []);
 
   function pickTemplate(index: number | null) {
     setTemplateIndex(index);
@@ -387,9 +402,16 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
       const res = await fetch('/api/v1/digital-humans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), role: role.trim(), disclosure: disclosure.trim() }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not create this digital human.');
-      setActiveHumanId(body.data.id);
+      const newHumanId = body.data.id as string;
+      setActiveHumanId(newHumanId);
       setChanged(true);
-      setStep(2);
+
+      const template = templateIndex !== null ? humans[templateIndex] : null;
+      const inheritedFace = template ? templateFaceAssignments.find((a) => a.human_slug === template.id) : undefined;
+      const inheritedVoice = template ? templateVoiceAssignments.find((a) => a.human_slug === template.id) : undefined;
+      if (inheritedFace) await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, face_asset_id: inheritedFace.face_asset_id }) }).catch(() => {});
+      if (inheritedVoice) await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, voice_id: inheritedVoice.voice_id }) }).catch(() => {});
+      setStep(!inheritedFace ? 2 : !inheritedVoice ? 3 : 4);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create this digital human.');
     } finally {
@@ -425,12 +447,17 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
                 <button type="button" className={templateIndex === null ? 'selected' : ''} onClick={() => pickTemplate(null)}>
                   <span className="template-blank"><WandSparkles size={22} /></span><strong>Start blank</strong>
                 </button>
-                {humans.map((human, index) => (
-                  <button type="button" key={human.id} className={templateIndex === index ? 'selected' : ''} onClick={() => pickTemplate(index)}>
-                    <span><Image src={human.image} alt="" fill sizes="140px" /></span>
-                    <strong>{human.name}</strong><small>{human.role}</small>
-                  </button>
-                ))}
+                {humans.map((human, index) => {
+                  const hasFace = templateFaceAssignments.some((a) => a.human_slug === human.id);
+                  const hasVoice = templateVoiceAssignments.some((a) => a.human_slug === human.id);
+                  return (
+                    <button type="button" key={human.id} className={templateIndex === index ? 'selected' : ''} onClick={() => pickTemplate(index)}>
+                      <span><Image src={human.image} alt="" fill sizes="140px" /></span>
+                      <strong>{human.name}</strong><small>{human.role}</small>
+                      {(hasFace || hasVoice) && <small>{[hasFace && 'Face', hasVoice && 'Voice'].filter(Boolean).join(' + ')} ready to reuse</small>}
+                    </button>
+                  );
+                })}
               </div>
               <div className="form-grid two">
                 <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Naledi Support" /></label>
