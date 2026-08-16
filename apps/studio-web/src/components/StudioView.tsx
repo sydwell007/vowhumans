@@ -553,11 +553,12 @@ function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => vo
 function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [providerVoices, setProviderVoices] = useState<string[]>([]);
-  const [selectedVoiceId, setSelectedVoiceId] = useState('');
   const [name, setName] = useState('');
   const [providerVoice, setProviderVoice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     fetch('/api/v1/voices').then((r) => r.json()).then((res) => {
@@ -569,12 +570,32 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
     }).catch(() => {});
   }, []);
 
-  async function assignExisting() {
-    if (!selectedVoiceId) { setError('Choose a voice.'); return; }
+  async function playSample(voice: Voice) {
+    setError(null);
+    audioRef.current?.pause();
+    setPlayingId(voice.id);
+    try {
+      const res = await fetch(`/api/v1/voices/${voice.id}/sample`);
+      if (!res.ok) {
+        const problem = await res.json().catch(() => ({}));
+        throw new Error(problem.message || 'Could not play this sample.');
+      }
+      const blob = await res.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setPlayingId((current) => (current === voice.id ? null : current));
+      await audio.play();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not play this sample.');
+      setPlayingId(null);
+    }
+  }
+
+  async function assignExisting(voiceId: string) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: selectedVoiceId }) });
+      const res = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: voiceId }) });
       if (!res.ok) throw new Error('Could not assign this voice.');
       onDone();
     } catch (err) {
@@ -605,20 +626,22 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
   return (
     <div>
       <h3>Voice</h3>
-      <p className="panel-note">Choose an existing voice, or pick a provider voice to create a new one.</p>
+      <p className="panel-note">Preview and choose an existing voice, or pick a provider voice to create a new one.</p>
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {voices.length > 0 && (
-        <div className="form-grid two">
-          <label className="full">Existing voices
-            <select value={selectedVoiceId} onChange={(e) => setSelectedVoiceId(e.target.value)}>
-              <option value="">Choose one</option>
-              {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </label>
-          <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedVoiceId}>Use this voice</button>
+        <div className="voice-pick-list">
+          {voices.map((v) => (
+            <div className="voice-pick-row" key={v.id}>
+              <span className="source-cell"><i><AudioLines size={14} /></i><b>{v.name}<small>{v.is_custom ? 'Uploaded' : 'Provider voice'}</small></b></span>
+              <button type="button" className="icon-button" aria-label={`Play sample of ${v.name}`} onClick={() => playSample(v)} disabled={playingId === v.id}>
+                {playingId === v.id ? <RefreshCw size={14} className="spin" /> : <Play size={14} />}
+              </button>
+              <button type="button" className="secondary-button" onClick={() => assignExisting(v.id)} disabled={busy}>Use</button>
+            </div>
+          ))}
         </div>
       )}
-      <form className="form-grid two" onSubmit={createAndAssign}>
+      <form className="form-grid two" onSubmit={createAndAssign} style={{ marginTop: 14 }}>
         <label>Or create a new voice<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Warm and professional" /></label>
         <label>Provider voice<select value={providerVoice} onChange={(e) => setProviderVoice(e.target.value)}>{providerVoices.map((pv) => <option key={pv}>{pv}</option>)}</select></label>
         <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <Check size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
