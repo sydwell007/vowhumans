@@ -39,10 +39,15 @@ export function StudioShell({ section, children }: { section: string; children: 
   }, []);
 
   function quickAction() {
-    // DigitalHumans() owns the real wizard and listens for this event — every other
-    // section keeps the generic draft-toast fallback below, unchanged.
+    // DigitalHumans() and LiveSessions() each own a real interaction and listen
+    // for their own event — every other section keeps the generic draft-toast
+    // fallback below, unchanged.
     if (section === "digital-humans") {
       window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
+      return;
+    }
+    if (section === "live-sessions") {
+      window.dispatchEvent(new CustomEvent("studio:start-test-session"));
       return;
     }
     const outcome: Record<string, string> = {
@@ -50,7 +55,6 @@ export function StudioShell({ section, children }: { section: string; children: 
       "identity-consent": "Identity registration opened in draft mode; publication remains blocked.",
       "presenter-studio": "A new presenter project draft is ready below.",
       "api-keys": "Key creation is ready; production keys are displayed once and stored hashed.",
-      "live-sessions": "A disclosed mock test session is starting; no real microphone or provider is used.",
       usage: "A usage report draft was generated from the illustrative data shown below; no live provider invoice is connected.",
       "audit-logs": "An audit export draft was generated from the visible event history below.",
       safety: "This concern has been recorded locally for review; nothing was sent to a live system.",

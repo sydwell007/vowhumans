@@ -12,11 +12,15 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, onStatusChange }: { url: string; token: string; muted: boolean; onStatusChange?: (status: LiveVoiceRoomStatus) => void }) {
+export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected }: { url: string; token: string; muted: boolean; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const roomRef = useRef<Room | null>(null);
   const onStatusChangeRef = useRef(onStatusChange);
+  const onSpeakingChangeRef = useRef(onSpeakingChange);
+  const onFirstAudioRef = useRef(onFirstAudio);
+  const onReconnectedRef = useRef(onReconnected);
+  const firstAudioFiredRef = useRef(false);
   // Raw agent audio plays instantly for turn 1 (unchanged behavior). Once the
   // avatar participant signals readiness, every subsequent turn's audio comes
   // from its own re-muxed vhm-avatar-audio track instead — attaching both would
@@ -30,11 +34,24 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange }: { url: stri
   }, [onStatusChange]);
 
   useEffect(() => {
+    onSpeakingChangeRef.current = onSpeakingChange;
+  }, [onSpeakingChange]);
+
+  useEffect(() => {
+    onFirstAudioRef.current = onFirstAudio;
+  }, [onFirstAudio]);
+
+  useEffect(() => {
+    onReconnectedRef.current = onReconnected;
+  }, [onReconnected]);
+
+  useEffect(() => {
     let cancelled = false;
     const room = new Room();
     roomRef.current = room;
     avatarModeRef.current = false;
     rawAudioElRef.current = null;
+    firstAudioFiredRef.current = false;
     const notify = (status: LiveVoiceRoomStatus) => {
       if (!cancelled) onStatusChangeRef.current?.(status);
     };
@@ -43,6 +60,13 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange }: { url: stri
       const isAvatarTrack = publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
 
       if (track.kind === Track.Kind.Audio) {
+        // First remote audio actually attached — a more accurate "time to first
+        // audio" than the room's own "connected" status, which only means the
+        // WebRTC handshake finished, not that the agent's voice has arrived yet.
+        if (!firstAudioFiredRef.current) {
+          firstAudioFiredRef.current = true;
+          onFirstAudioRef.current?.();
+        }
         const element = track.attach() as HTMLMediaElement;
         element.autoplay = true;
         if (!isAvatarTrack) {
@@ -84,6 +108,18 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange }: { url: stri
     });
 
     room.on(RoomEvent.Disconnected, () => notify("disconnected"));
+    room.on(RoomEvent.Reconnected, () => {
+      if (!cancelled) onReconnectedRef.current?.();
+    });
+
+    // "Speaking" means the agent (any remote participant — voice agent or avatar
+    // participant), never the local user's own mic — this only ever runs 1:1
+    // calls, so any active remote speaker is unambiguously the agent.
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      if (cancelled) return;
+      const agentSpeaking = speakers.some((speaker) => speaker.sid !== room.localParticipant.sid);
+      onSpeakingChangeRef.current?.(agentSpeaking);
+    });
 
     notify("connecting");
     room

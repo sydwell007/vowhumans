@@ -27,8 +27,10 @@ import {
   Languages,
   LockKeyhole,
   MessageSquareText,
-  Mic2,
+  Mic,
+  MicOff,
   MoreHorizontal,
+  PhoneOff,
   Play,
   Radio,
   RefreshCw,
@@ -45,6 +47,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { applications, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
+import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
@@ -1823,13 +1826,286 @@ function IdentityConsent() {
   );
 }
 
+type LiveSessionRow = {
+  id: string;
+  state: string;
+  avatar_mode: string;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  human_name: string | null;
+  source: "embed" | "studio_test";
+  application_name: string | null;
+};
+type LiveSessionMetrics = {
+  live_now: number;
+  sessions_today: number;
+  avg_duration_seconds: number | null;
+  p95_first_audio_ms: number | null;
+  reconnect_rate: number | null;
+  telemetry_insufficient: boolean;
+};
+type GatewayHealthStatus = { gateway_reachable: boolean; realtime_configured: boolean; avatar_configured: boolean };
+type TestReadyHuman = { id: string; name: string; role: string; ready: boolean; faceAssetId: string | null };
+
+function formatCallDuration(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const ACTIVE_SESSION_STATES = new Set(["created", "connecting", "active"]);
+const STALE_SESSION_MS = 30 * 60 * 1000;
+
+function sessionStateDisplay(row: LiveSessionRow): { label: string; tone: string } {
+  if (ACTIVE_SESSION_STATES.has(row.state)) {
+    if (Date.now() - new Date(row.created_at).getTime() > STALE_SESSION_MS) return { label: "Timed out", tone: "muted" };
+    if (row.state === "active") return { label: "Live", tone: "good" };
+    return { label: row.state === "connecting" ? "Connecting" : "Created", tone: "warn" };
+  }
+  if (row.state === "completed") return { label: "Completed", tone: "muted" };
+  if (row.state === "failed") return { label: "Failed", tone: "danger" };
+  return { label: row.state, tone: "muted" };
+}
+
+function sessionDurationDisplay(row: LiveSessionRow): string {
+  const start = row.started_at ?? row.created_at;
+  const end = row.ended_at ?? (ACTIVE_SESSION_STATES.has(row.state) ? new Date().toISOString() : null);
+  if (!end) return "—";
+  return formatCallDuration(Math.max(0, (new Date(end).getTime() - new Date(start).getTime()) / 1000));
+}
+
+type CallStage = "idle" | "starting" | "live" | "ended";
+
 function LiveSessions() {
-  const sessions = [
-    { human: 'Thandi Mokoena', app: 'PlugConnect', owner: 'Candidate-owned', state: 'Listening', duration: '08:42', mode: 'Static + voice' },
-    { human: 'GoalVow Tutor', app: 'GoalVow Academies', owner: 'Learner session', state: 'Speaking', duration: '14:05', mode: 'Audio-only' },
-    { human: 'Sipho Daniels', app: 'PlugConnect', owner: 'Candidate-owned', state: 'Completed', duration: '17:19', mode: 'Static + voice' },
-  ];
-  return <div className="content-stack"><section className="session-overview"><div><span className="live-orb"><Radio size={25}/></span><p className="eyebrow">Live now</p><strong>2</strong><small>healthy sessions</small></div><div><p>Time to first audio</p><strong>684 ms</strong><small>p95 · mock transport</small></div><div><p>Reconnects</p><strong>0.4%</strong><small>rolling 30 days</small></div><div><p>Audio fallback</p><strong>100%</strong><small>verified in tests</small></div></section><section className="panel"><PanelTitle title="Session monitor" eyebrow="Private content hidden" action={<StatusPill>All systems nominal</StatusPill>}/><div className="data-table sessions-table"><div className="table-row table-head"><span>Human</span><span>Application</span><span>Ownership</span><span>State</span><span>Duration</span><span>Mode</span></div>{sessions.map(session=><div className="table-row" key={session.human+session.duration}><span><b>{session.human}</b></span><span>{session.app}</span><span><LockKeyhole size={14}/>{session.owner}</span><span><StatusPill tone={session.state==='Completed'?'muted':'good'}>{session.state}</StatusPill></span><span>{session.duration}</span><span>{session.mode}</span></div>)}</div></section><section className="split-grid"><div className="panel"><PanelTitle title="Realtime health" eyebrow="Provider boundaries"/><div className="health-grid">{[['LiveKit transport','Mock ready','good'],['OpenAI Realtime','Credentials needed','warn'],['Avatar worker','Audio fallback','good'],['Transcript store','Consent gated','good']].map(([name,state,tone])=><div key={name}><span>{name}</span><StatusPill tone={tone}>{state}</StatusPill></div>)}</div></div><div className="panel"><EmptyAction icon={Mic2} title="Run a safe test" copy="Start a disclosed mock room without requesting microphone access." button="Open test" doneTitle="Test session started" doneCopy="A disclosed mock room is open locally. No microphone access was requested and no provider was called." doneButton="Test running"/></div></section></div>;
+  const [sessions, setSessions] = useState<LiveSessionRow[]>([]);
+  const [metrics, setMetrics] = useState<LiveSessionMetrics | null>(null);
+  const [health, setHealth] = useState<GatewayHealthStatus | null>(null);
+  const [testHumans, setTestHumans] = useState<TestReadyHuman[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const testConsoleRef = useRef<HTMLDivElement | null>(null);
+
+  const [callStage, setCallStage] = useState<CallStage>("idle");
+  const [activeHuman, setActiveHuman] = useState<TestReadyHuman | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [liveRoom, setLiveRoom] = useState<{ url: string; token: string } | null>(null);
+  const [liveStatus, setLiveStatus] = useState<LiveVoiceRoomStatus | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [reconnectedThisCall, setReconnectedThisCall] = useState(false);
+  const [callSummary, setCallSummary] = useState<{ duration: string; reconnected: boolean } | null>(null);
+
+  async function refresh() {
+    const [sessionsRes, humansRes, assignRes, faceAssignRes] = await Promise.all([
+      fetch("/api/v1/live-sessions").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/digital-humans").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/persona-assignments").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/face-assignments").then((r) => r.json()).catch(() => null),
+    ]);
+    if (sessionsRes?.success) {
+      setSessions(sessionsRes.data.items);
+      setMetrics(sessionsRes.data.metrics);
+      setHealth(sessionsRes.data.health);
+    }
+    if (humansRes?.success) {
+      const readySlugs = new Set<string>((assignRes?.data?.items ?? []).filter((a: { state: string }) => a.state === "published").map((a: { human_slug: string }) => a.human_slug));
+      const faceBySlug = new Map<string, string>((faceAssignRes?.data?.items ?? []).map((f: { human_slug: string; face_asset_id: string }) => [f.human_slug, f.face_asset_id]));
+      setTestHumans(humansRes.data.items.map((h: DigitalHumanSummary) => ({ id: h.id, name: h.name, role: h.role, ready: readySlugs.has(h.id), faceAssetId: faceBySlug.get(h.id) ?? null })));
+    }
+    setLoaded(true);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused after starting/ending a call and by the poll below
+    refresh();
+    const interval = window.setInterval(refresh, 10000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    function focusConsole() {
+      testConsoleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.addEventListener("studio:start-test-session", focusConsole);
+    return () => window.removeEventListener("studio:start-test-session", focusConsole);
+  }, []);
+
+  useEffect(() => {
+    if (callStage !== "live" || !callStartedAt) return;
+    const interval = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - callStartedAt) / 1000)), 1000);
+    return () => window.clearInterval(interval);
+  }, [callStage, callStartedAt]);
+
+  async function reportEvent(sessionId: string, eventType: string, payload: Record<string, unknown>) {
+    await fetch(`/api/v1/live-sessions/${sessionId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_type: eventType, payload }) }).catch(() => {});
+  }
+
+  async function startTestCall(human: TestReadyHuman) {
+    if (!human.ready || callStage === "starting") return;
+    setError(null);
+    setActiveHuman(human);
+    setCallStage("starting");
+    setReconnectedThisCall(false);
+    setCallSummary(null);
+    try {
+      const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id }) });
+      const sessionBody = await sessionRes.json().catch(() => ({}));
+      if (!sessionRes.ok) throw new Error(sessionBody.message || "Could not start this test call.");
+      const sessionId = sessionBody.data.session_id as string;
+      setActiveSessionId(sessionId);
+      const tokenRes = await fetch(`/api/v1/live-sessions/${sessionId}/token`, { method: "POST" });
+      const tokenBody = await tokenRes.json().catch(() => ({}));
+      if (!tokenRes.ok || !tokenBody?.data?.url || !tokenBody?.data?.token) throw new Error(tokenBody.message || "Could not connect the live call.");
+      setLiveRoom({ url: tokenBody.data.url, token: tokenBody.data.token });
+      // eslint-disable-next-line react-hooks/purity -- startTestCall only ever runs from a click handler (onClick={() => startTestCall(human)}), never during render; the linter can't trace that indirection
+      const startedAt = Date.now();
+      setCallStartedAt(startedAt);
+      setElapsedSeconds(0);
+      setCallStage("live");
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start this test call.");
+      setCallStage("idle");
+      setActiveHuman(null);
+      setActiveSessionId(null);
+    }
+  }
+
+  async function endTestCall() {
+    const sessionId = activeSessionId;
+    const duration = formatCallDuration(elapsedSeconds);
+    setLiveRoom(null);
+    setCallStage("ended");
+    setCallSummary({ duration, reconnected: reconnectedThisCall });
+    if (sessionId) await fetch(`/api/v1/live-sessions/${sessionId}/end`, { method: "POST" }).catch(() => {});
+    refresh();
+  }
+
+  function returnToPicker() {
+    setCallStage("idle");
+    setActiveHuman(null);
+    setActiveSessionId(null);
+    setLiveStatus(null);
+    setSpeaking(false);
+    setCallSummary(null);
+  }
+
+  const stateChip = callStage !== "live" ? null
+    : liveStatus === "error" ? { label: "Connection failed", tone: "danger" }
+    : liveStatus !== "connected" ? { label: "Connecting…", tone: "warn" }
+    : speaking ? { label: "Speaking", tone: "good" }
+    : { label: "Listening", tone: "good" };
+
+  return (
+    <div className="content-stack">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      <section className="session-overview">
+        <div><span className="live-orb"><Radio size={25} /></span><p className="eyebrow">Live now</p><strong>{metrics ? metrics.live_now : loaded ? 0 : "—"}</strong><small>{metrics ? `${metrics.sessions_today} today` : "loading…"}</small></div>
+        <div><p>Time to first audio</p><strong>{metrics && !metrics.telemetry_insufficient && metrics.p95_first_audio_ms !== null ? `${Math.round(metrics.p95_first_audio_ms)} ms` : "—"}</strong><small>{metrics?.telemetry_insufficient ? "Not enough data yet" : "p95 · client-reported"}</small></div>
+        <div><p>Reconnect-free rate</p><strong>{metrics && !metrics.telemetry_insufficient && metrics.reconnect_rate !== null ? `${Math.round((1 - metrics.reconnect_rate) * 100)}%` : "—"}</strong><small>{metrics?.telemetry_insufficient ? "Not enough data yet" : "rolling 30 days"}</small></div>
+        <div><p>Avg call duration</p><strong>{metrics?.avg_duration_seconds ? formatCallDuration(metrics.avg_duration_seconds) : "—"}</strong><small>{metrics?.avg_duration_seconds ? "completed calls" : "No completed calls yet"}</small></div>
+      </section>
+
+      <section className="panel">
+        <PanelTitle title="Session monitor" eyebrow={`${sessions.length} recent session${sessions.length === 1 ? "" : "s"}`} action={<StatusPill tone={health?.gateway_reachable ? "good" : "warn"}>{health?.gateway_reachable ? "Gateway reachable" : "Gateway not reachable"}</StatusPill>} />
+        {loaded && sessions.length === 0 && (
+          <div className="ingestion-card"><span className="empty-icon"><Radio size={24} /></span><p className="eyebrow">No sessions yet</p><h2>Nothing has run yet</h2><p>Start a test call below, or embed a VowHuman on an external application — every real call, from either source, shows up here.</p></div>
+        )}
+        {sessions.length > 0 && (
+          <div className="data-table sessions-table">
+            <div className="table-row table-head"><span>Human</span><span>Source</span><span>State</span><span>Duration</span><span>Mode</span></div>
+            {sessions.map((session) => {
+              const state = sessionStateDisplay(session);
+              return (
+                <div className="table-row" key={session.id}>
+                  <span><b>{session.human_name ?? "Unknown VowHuman"}</b></span>
+                  <span className="source-cell">{session.source === "embed" ? <><AppWindow size={14} />{session.application_name ?? "Embed"}</> : <><LockKeyhole size={14} />Studio test</>}</span>
+                  <span><StatusPill tone={state.tone}>{state.label}</StatusPill></span>
+                  <span>{sessionDurationDisplay(session)}</span>
+                  <span>{session.avatar_mode === "live-avatar" ? "Live avatar" : "Audio-only"}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="split-grid">
+        <div className="panel">
+          <PanelTitle title="Realtime health" eyebrow="Provider boundaries" />
+          <div className="health-grid">
+            {[
+              ["LiveKit transport", health?.gateway_reachable ? "Reachable" : "Not reachable", health?.gateway_reachable ? "good" : "danger"],
+              ["OpenAI Realtime", health?.realtime_configured ? "Configured" : "Not configured", health?.realtime_configured ? "good" : "warn"],
+              ["Avatar worker", health?.avatar_configured ? "Configured" : "Audio fallback", health?.avatar_configured ? "good" : "warn"],
+              ["Persona + knowledge", "Live per call", "good"],
+            ].map(([name, state, tone]) => <div key={name}><span>{name}</span><StatusPill tone={tone}>{state}</StatusPill></div>)}
+          </div>
+        </div>
+
+        <div className="panel test-console" ref={testConsoleRef}>
+          {callStage === "live" && liveRoom && activeHuman ? (
+            <div className="live-call-stage">
+              <span className="embed-disclosure"><Sparkles size={13} />Testing {activeHuman.name} — AI-generated, not a real person</span>
+              <LiveVoiceRoom
+                url={liveRoom.url}
+                token={liveRoom.token}
+                muted={muted}
+                onStatusChange={setLiveStatus}
+                onSpeakingChange={setSpeaking}
+                onFirstAudio={() => activeSessionId && reportEvent(activeSessionId, "first_audio", { elapsed_ms: callStartedAt ? Date.now() - callStartedAt : 0 })}
+                onReconnected={() => {
+                  setReconnectedThisCall(true);
+                  if (activeSessionId) reportEvent(activeSessionId, "reconnected", {});
+                }}
+              />
+              <div className="live-call-meta">
+                {stateChip && <StatusPill tone={stateChip.tone}>{stateChip.label}</StatusPill>}
+                <strong className="live-call-timer">{formatCallDuration(elapsedSeconds)}</strong>
+              </div>
+              <div className="live-call-controls">
+                <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
+                <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
+              </div>
+            </div>
+          ) : callStage === "ended" && callSummary && activeHuman ? (
+            <div className="call-summary">
+              <span className="empty-icon"><Check size={24} /></span>
+              <p className="eyebrow">Test call complete</p>
+              <h2>{callSummary.duration} with {activeHuman.name}</h2>
+              <p>{callSummary.reconnected ? "The connection recovered from a reconnect during this call." : "No reconnects during this call."} It now appears in the session monitor above.</p>
+              <button className="secondary-button" onClick={returnToPicker}><RefreshCw size={15} />Test another VowHuman</button>
+            </div>
+          ) : (
+            <>
+              <PanelTitle title="Test console" eyebrow="Real live voice + avatar call" action={<StatusPill tone="good">Live</StatusPill>} />
+              {testHumans.length === 0 && loaded && (
+                <div className="ingestion-card compact"><p>No digital humans yet.</p><Link href="/studio/digital-humans" className="secondary-button"><ArrowRight size={15} />Create one</Link></div>
+              )}
+              {testHumans.length > 0 && (
+                <div className="human-pick-grid">
+                  {testHumans.map((human) => (
+                    <button key={human.id} className="human-pick-card" disabled={!human.ready || callStage === "starting"} onClick={() => startTestCall(human)}>
+                      <span className="human-pick-avatar">
+                        {human.faceAssetId ? <Image src={`/api/v1/faces/${human.faceAssetId}/image`} alt="" fill sizes="46px" /> : human.name.slice(0, 2).toUpperCase()}
+                      </span>
+                      <b>{human.name}</b>
+                      <small>{human.ready ? human.role : "Publish a persona first"}</small>
+                      {callStage === "starting" && activeHuman?.id === human.id && <RefreshCw size={14} className="spin" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="panel-note">Starts a real disclosed LiveKit call, scoped to your organisation, using each VowHuman&rsquo;s actual published persona, voice and knowledge.</p>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 const presenterOptions = [humans[2], humans[0]];

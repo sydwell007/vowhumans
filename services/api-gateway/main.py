@@ -173,7 +173,14 @@ def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID
 
 @app.get("/api/v1/health", tags=["health"])
 def health():
-    return {"status":"ok","service":"api-gateway","timestamp":int(time.time()),"providers":{"database":"configuration-ready","redis":"configuration-ready","avatar":"audio-fallback"}}
+    return {
+        "status": "ok", "service": "api-gateway", "timestamp": int(time.time()),
+        "providers": {
+            "database": "configuration-ready", "redis": "configuration-ready",
+            "realtime": "configured" if os.getenv("ENABLE_OPENAI_REALTIME", "false").lower() == "true" else "not-configured",
+            "avatar": "configured" if os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true" else "audio-fallback",
+        },
+    }
 
 @app.post("/api/v1/sessions/interview-practice", status_code=201, tags=["sessions"])
 def create_interview_session(body: InterviewSessionRequest, auth: Auth):

@@ -6,8 +6,9 @@ import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
 import { EMBEDDING_MODEL, chatComplete, embedBatch } from "@/lib/openai";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
+import { mintEmbedToken } from "@/lib/embedToken";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","digital-human-applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -35,6 +36,13 @@ async function requireOrganisation(request: NextRequest): Promise<string | null>
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const user = token ? await readSession(token) : null;
   return user?.organisationId ?? null;
+}
+
+// Separate from requireOrganisation (used everywhere else and left untouched) —
+// only live-sessions needs the full user record, to attribute who started a test call.
+async function requireUser(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  return token ? await readSession(token) : null;
 }
 
 // postgres.js returns this driver's jsonb columns as raw text, not pre-parsed objects.
@@ -94,6 +102,30 @@ async function proxyToGateway(path: string, body: unknown): Promise<{ status: nu
     return { status: upstream.status, data };
   } catch {
     return null;
+  }
+}
+
+type GatewayHealth = { gateway_reachable: boolean; realtime_configured: boolean; avatar_configured: boolean };
+
+// Unauthenticated GET on the gateway (services/api-gateway/main.py's health()) — a
+// short timeout is correct here, unlike proxyToGateway's 40s: this only drives a
+// status panel, so a slow-to-wake free-tier gateway should read as "not reachable
+// yet" rather than hang the whole live-sessions response waiting on it.
+async function fetchGatewayHealth(): Promise<GatewayHealth> {
+  const baseUrl = process.env.API_GATEWAY_URL;
+  const unreachable: GatewayHealth = { gateway_reachable: false, realtime_configured: false, avatar_configured: false };
+  if (!baseUrl) return unreachable;
+  try {
+    const upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/health`, { signal: AbortSignal.timeout(4000) });
+    if (!upstream.ok) return unreachable;
+    const body = (await upstream.json().catch(() => null)) as { providers?: { realtime?: string; avatar?: string } } | null;
+    return {
+      gateway_reachable: true,
+      realtime_configured: body?.providers?.realtime === "configured",
+      avatar_configured: body?.providers?.avatar === "configured",
+    };
+  } catch {
+    return unreachable;
   }
 }
 
@@ -362,7 +394,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const rows = await sql`
-      SELECT a.human_slug, a.persona_version_id, pv.persona_id, pv.version, p.name AS persona_name
+      SELECT a.human_slug, a.persona_version_id, pv.persona_id, pv.version, pv.state, p.name AS persona_name
       FROM human_persona_assignments a
       JOIN persona_versions pv ON pv.id = a.persona_version_id
       JOIN personas p ON p.id = pv.persona_id
@@ -388,6 +420,83 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     `;
     return response({ items: rows });
   }
+
+  // The real operations center for every VowHumans call — both external embed
+  // calls (application_id set, from api/public/v1/embed-sessions) and Studio's
+  // own test calls (application_id null, from the live-sessions POST below) —
+  // one unified, organisation-scoped view.
+  if (resource === "live-sessions" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+
+    const [items, [summary], firstAudioRows, reconnectRows, health] = await Promise.all([
+      sql<{
+        id: string; state: string; avatar_mode: string; created_at: string; started_at: string | null; ended_at: string | null;
+        human_id: string | null; human_name: string | null; application_name: string | null;
+      }[]>`
+        SELECT s.id, s.state, s.avatar_mode, s.created_at, s.started_at, s.ended_at,
+          dh.id AS human_id, dh.name AS human_name, a.name AS application_name
+        FROM sessions s
+        LEFT JOIN digital_humans dh ON dh.id = s.digital_human_id
+        LEFT JOIN applications a ON a.id = s.application_id
+        WHERE s.organisation_id = ${organisationId}
+        ORDER BY s.created_at DESC
+        LIMIT 50
+      `,
+      sql<{ live_now: string; sessions_today: string; avg_duration_seconds: number | null }[]>`
+        SELECT
+          count(*) FILTER (WHERE state IN ('created','connecting','active')) AS live_now,
+          count(*) FILTER (WHERE created_at >= current_date) AS sessions_today,
+          avg(EXTRACT(EPOCH FROM (ended_at - COALESCE(started_at, created_at)))) FILTER (WHERE state = 'completed' AND ended_at IS NOT NULL) AS avg_duration_seconds
+        FROM sessions WHERE organisation_id = ${organisationId}
+      `,
+      // One row per session (first report wins) — client-reported "time to first
+      // audio", not a server-measured guarantee; labelled as such in the UI.
+      sql<{ session_id: string; elapsed_ms: number }[]>`
+        SELECT DISTINCT ON (se.session_id) se.session_id, (se.payload->>'elapsed_ms')::numeric AS elapsed_ms
+        FROM session_events se JOIN sessions s ON s.id = se.session_id
+        WHERE s.organisation_id = ${organisationId} AND se.event_type = 'first_audio' AND se.occurred_at > now() - interval '30 days'
+        ORDER BY se.session_id, se.occurred_at ASC
+      `,
+      sql<{ session_id: string }[]>`
+        SELECT DISTINCT se.session_id
+        FROM session_events se JOIN sessions s ON s.id = se.session_id
+        WHERE s.organisation_id = ${organisationId} AND se.event_type = 'reconnected' AND se.occurred_at > now() - interval '30 days'
+      `,
+      fetchGatewayHealth(),
+    ]);
+
+    const TELEMETRY_MIN_SAMPLE = 3;
+    const elapsedValues = firstAudioRows.map((row) => Number(row.elapsed_ms)).sort((a, b) => a - b);
+    const sampleSize = elapsedValues.length;
+    const insufficientTelemetry = sampleSize < TELEMETRY_MIN_SAMPLE;
+    const p95Index = Math.min(elapsedValues.length - 1, Math.floor(elapsedValues.length * 0.95));
+
+    return response({
+      items: items.map((row) => ({
+        id: row.id,
+        state: row.state,
+        avatar_mode: row.avatar_mode,
+        created_at: row.created_at,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        human_name: row.human_name,
+        source: row.application_name ? "embed" : "studio_test",
+        application_name: row.application_name,
+      })),
+      metrics: {
+        live_now: Number(summary.live_now),
+        sessions_today: Number(summary.sessions_today),
+        avg_duration_seconds: summary.avg_duration_seconds !== null ? Number(summary.avg_duration_seconds) : null,
+        p95_first_audio_ms: insufficientTelemetry ? null : elapsedValues[p95Index],
+        reconnect_rate: insufficientTelemetry ? null : reconnectRows.length / sampleSize,
+        telemetry_sample_size: sampleSize,
+        telemetry_insufficient: insufficientTelemetry,
+      },
+      health,
+    });
+  }
+
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
   if (resource === "integrations") return response({ items: integrations });
   if (resource === "templates" || resource === "marketplace") return response({ items: templates, purchases_enabled: false });
@@ -762,6 +871,119 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       RETURNING digital_human_id, application_id, persona_version_id, enabled
     `;
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  const MAX_CONCURRENT_SESSIONS_PER_ORG = 3;
+
+  // Studio's own "test this VowHuman live" flow — reuses the exact embed-token
+  // gateway path api/public/v1/embed-sessions already established, just
+  // authenticated by session cookie instead of an (application, origin) pairing,
+  // and with no consuming application (sessions.application_id is nullable —
+  // see migration 008_live_sessions.sql).
+  if (resource === "live-sessions" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const user = await requireUser(request);
+    const digitalHumanId = typeof body.digital_human_id === "string" ? body.digital_human_id : "";
+    if (!digitalHumanId) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id is required." }, { status: 422 });
+    }
+
+    const [human] = await sql<{ id: string }[]>`SELECT id FROM digital_humans WHERE id = ${digitalHumanId} AND organisation_id = ${organisationId}`;
+    if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "VowHuman not found." }, { status: 404 });
+
+    const [publishedVersion] = await sql<{ id: string }[]>`
+      SELECT pv.id FROM human_persona_assignments hpa JOIN persona_versions pv ON pv.id = hpa.persona_version_id
+      WHERE hpa.organisation_id = ${organisationId} AND hpa.human_slug = ${digitalHumanId} AND pv.state = 'published'
+    `;
+    if (!publishedVersion) {
+      return NextResponse.json({ success: false, code: "PERSONA_NOT_PUBLISHED", message: "Publish this VowHuman's persona before testing it live." }, { status: 409 });
+    }
+
+    const [{ count: activeCount }] = await sql<{ count: string }[]>`
+      SELECT count(*) FROM sessions WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active')
+    `;
+    if (Number(activeCount) >= MAX_CONCURRENT_SESSIONS_PER_ORG) {
+      return NextResponse.json({ success: false, code: "TOO_MANY_ACTIVE_SESSIONS", message: "Too many live sessions running at once. End one before starting another." }, { status: 429 });
+    }
+
+    const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
+    const avatarMode = face ? "live-avatar" : "audio-only";
+
+    const [session] = await sql<{ id: string }[]>`
+      INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_user_id, transport_provider, avatar_mode, context)
+      VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test" })})
+      RETURNING id
+    `;
+    return NextResponse.json({
+      success: true,
+      data: { session_id: session.id, disclosure: "You are testing an AI-generated digital human, not a real person." },
+      meta: { mode: "live", request_id: randomUUID() },
+    }, { status: 201 });
+  }
+
+  if (resource === "live-sessions" && route[1] && route[2] === "token") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [session] = await sql<{ digital_human_id: string; persona_version_id: string }[]>`
+      SELECT digital_human_id, persona_version_id FROM sessions WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+    `;
+    if (!session) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+
+    const baseUrl = process.env.API_GATEWAY_URL;
+    if (!baseUrl) {
+      return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "LiveKit tokens are issued only by the configured server-side API gateway." }, { status: 503 });
+    }
+    try {
+      const upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/livekit/token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${mintEmbedToken(organisationId)}` },
+        body: JSON.stringify({
+          session_id: route[1],
+          participant_identity: `studio-test-${randomUUID().slice(0, 8)}`,
+          human_slug: session.digital_human_id,
+          persona_version_id: session.persona_version_id,
+        }),
+        signal: AbortSignal.timeout(40000),
+      });
+      const data = await upstream.json().catch(() => null);
+      if (!upstream.ok || data === null) {
+        return NextResponse.json({ success: false, code: "GATEWAY_ERROR", message: "Could not start the live call." }, { status: 502 });
+      }
+      return NextResponse.json({ success: true, data, meta: { mode: "live", request_id: randomUUID() } });
+    } catch {
+      return NextResponse.json({ success: false, code: "GATEWAY_ERROR", message: "Could not start the live call." }, { status: 502 });
+    }
+  }
+
+  if (resource === "live-sessions" && route[1] && route[2] === "end") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [row] = await sql<{ id: string }[]>`
+      UPDATE sessions SET state = 'completed', ended_at = now()
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId} AND state != 'completed'
+      RETURNING id
+    `;
+    return NextResponse.json({ success: true, data: { id: route[1], ended: Boolean(row) }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "live-sessions" && route[1] && route[2] === "events") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const eventType = typeof body.event_type === "string" ? body.event_type : "";
+    if (!eventType) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "event_type is required." }, { status: 422 });
+    const [owned] = await sql<{ id: string }[]>`SELECT id FROM sessions WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!owned) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    // Round-tripped through JSON rather than just narrowing the type — this is
+    // client-supplied data (a telemetry payload like {elapsed_ms}), and this is
+    // the cheapest way to guarantee it's plain, serializable JSON before it
+    // reaches sql.json(), not just a same-shaped TypeScript assertion.
+    const payload = JSON.parse(JSON.stringify(body.payload && typeof body.payload === "object" ? body.payload : {}));
+    await sql`
+      INSERT INTO session_events (organisation_id, session_id, sequence, event_type, payload)
+      VALUES (${organisationId}, ${route[1]}, COALESCE((SELECT max(sequence) FROM session_events WHERE session_id = ${route[1]}), 0) + 1, ${eventType}, ${sql.json(payload)})
+    `;
+    return NextResponse.json({ success: true, data: { recorded: true }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   // Generates the article text synchronously and returns it without writing anything —

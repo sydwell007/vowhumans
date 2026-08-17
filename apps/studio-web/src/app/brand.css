@@ -1931,6 +1931,10 @@ body {
 .studio-shell .embed-origins-block { border-color: var(--vh-border) !important; }
 .studio-shell .embed-origins-label small { color: var(--vh-text-muted) !important; }
 .studio-shell .embed-origins-textarea { background: var(--vh-surface-raised) !important; border-color: var(--vh-border) !important; color: var(--vh-text-primary) !important; }
+.studio-shell .human-pick-card { background: var(--vh-surface-raised) !important; }
+.studio-shell .human-pick-card:hover:not(:disabled) { background: var(--vh-surface-hover) !important; }
+.studio-shell .human-pick-card small { color: var(--vh-text-muted) !important; }
+.studio-shell .call-summary > p:not(.eyebrow) { color: var(--vh-text-secondary) !important; }
 
 .studio-shell .preview-meta > div {
   border-color: var(--vh-border) !important;
