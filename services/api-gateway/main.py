@@ -125,12 +125,19 @@ class LiveKitTokenRequest(BaseModel):
     # human. Optional: omitting it just means no avatar-participant is dispatched
     # (audio-only), matching every call before this field existed.
     human_slug: str | None = None
+    # The specific persona_version_id an embed session pinned at enable-time
+    # (digital_human_applications.persona_version_id) — deliberately NOT "whatever
+    # is currently assigned", since a studio user can swap a human's live
+    # assignment after an application was already enabled. Optional: the demo
+    # flow has no real sessions row to pin from, so realtime-agent falls back to
+    # resolving the human's current published assignment when this is absent.
+    persona_version_id: uuid.UUID | None = None
 
 TOKEN_TTL = datetime.timedelta(seconds=600)
 VOICE_AGENT_NAME = "vowhumans-voice"
 AVATAR_AGENT_NAME = "vowhumans-avatar"
 
-def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None) -> str:
+def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None, persona_version_id: uuid.UUID | None) -> str:
     api_key, secret = os.getenv("LIVEKIT_API_KEY", ""), os.getenv("LIVEKIT_API_SECRET", "")
     if not api_key or not secret: raise HTTPException(503, "LiveKit is not configured")
 
@@ -145,11 +152,11 @@ def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID
     # human, never the voice agent). realtime-agent now also has an explicit
     # agent_name, so every token must list it, or no voice agent joins at all.
     #
-    # The voice agent's dispatch always carries {organisation_id, human_slug}
-    # metadata now too (previously only the avatar dispatch did) — realtime-agent
-    # doesn't read it yet, so this is a no-op today, but it's the one piece
-    # multi-tenant voice needs from this side once it does.
-    voice_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
+    # The voice agent's dispatch always carries {organisation_id, human_slug,
+    # persona_version_id} metadata now too (previously it got nothing at all) —
+    # this is what lets realtime-agent resolve the real persona/voice/knowledge
+    # for this call instead of its old hardcoded instructions.
+    voice_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug, "persona_version_id": str(persona_version_id) if persona_version_id else None})
     room_agents = [RoomAgentDispatch(agent_name=VOICE_AGENT_NAME, metadata=voice_metadata)]
     if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
         avatar_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
@@ -188,7 +195,7 @@ def create_presenter_project(body: PresenterProjectRequest, auth: Auth):
 @app.post("/api/v1/livekit/token", tags=["livekit"])
 def livekit_token(body: LiveKitTokenRequest, auth: Auth):
     room=f"vhm_{auth.organisation_id.hex[:10]}_{body.session_id.hex[:16]}"
-    token = create_livekit_token(room, body.participant_identity, auth.organisation_id, body.human_slug)
+    token = create_livekit_token(room, body.participant_identity, auth.organisation_id, body.human_slug, body.persona_version_id)
     return {"url":os.getenv("LIVEKIT_URL"),"room":room,"token":token,"expires_in":int(TOKEN_TTL.total_seconds())}
 
 @app.get("/api/v1/usage", tags=["usage"])

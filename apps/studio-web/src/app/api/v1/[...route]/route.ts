@@ -1160,6 +1160,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  if (route[0] === "applications" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!Array.isArray(body.allowed_embed_origins)) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "allowed_embed_origins must be an array of origin strings." }, { status: 422 });
+    }
+    const allowedOrigins = body.allowed_embed_origins.filter((o): o is string => typeof o === "string" && o.trim().length > 0).map((o) => o.trim());
+    for (const origin of allowedOrigins) {
+      let isBareOrigin = false;
+      try {
+        isBareOrigin = new URL(origin).origin === origin;
+      } catch {
+        isBareOrigin = false;
+      }
+      if (!isBareOrigin) {
+        return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: `"${origin}" is not a valid origin (expected e.g. https://plugconnect.com, no path).` }, { status: 422 });
+      }
+    }
+    const [row] = await sql`
+      UPDATE applications SET settings = jsonb_set(settings, '{allowed_embed_origins}', ${allowedOrigins}::jsonb)
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+      RETURNING id, name, slug, status, settings, created_at
+    `;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (route[0] !== "persona-versions" || !route[1]) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const [current] = await sql<{ state: string }[]>`SELECT state FROM persona_versions WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;

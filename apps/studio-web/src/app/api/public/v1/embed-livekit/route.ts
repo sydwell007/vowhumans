@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "session_id is required." }, { status: 422 });
   }
 
-  const [session] = await sql<{ organisation_id: string; digital_human_id: string }[]>`
-    SELECT organisation_id, digital_human_id FROM sessions WHERE id = ${sessionId}
+  const [session] = await sql<{ organisation_id: string; digital_human_id: string; persona_version_id: string }[]>`
+    SELECT organisation_id, digital_human_id, persona_version_id FROM sessions WHERE id = ${sessionId}
   `;
   if (!session) {
     return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
         session_id: sessionId,
         participant_identity: `embed-guest-${randomUUID().slice(0, 8)}`,
         human_slug: session.digital_human_id,
+        persona_version_id: session.persona_version_id,
       }),
       signal: AbortSignal.timeout(40000),
     });

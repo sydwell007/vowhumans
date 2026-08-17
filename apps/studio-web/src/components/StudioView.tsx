@@ -1851,7 +1851,7 @@ function PresenterStudio() {
   return <div className="content-stack"><section className="presenter-workspace"><div className="panel scene-editor"><PanelTitle title="Customer Service Essentials" eyebrow="Module 1 · Lesson 2" action={<StatusPill tone={status==='Mock preview ready'?'good':'warn'}>{status}</StatusPill>}/><label className="script-field">Presenter script<textarea value={script} onChange={e=>{setScript(e.target.value);setStatus('Draft');}}/><span>{script.length} characters · ~{Math.max(1,Math.round(script.split(/\s+/).length/2.3))} sec</span></label><div className="form-grid two"><label>Presenter<select value={presenter.name} onChange={e=>{setPresenter(presenterOptions.find(p=>p.name===e.target.value) ?? presenterOptions[0]);setStatus('Draft');}}>{presenterOptions.map(p=><option key={p.id}>{p.name}</option>)}</select></label><label>Voice<select value={voice} onChange={e=>{setVoice(e.target.value);setStatus('Draft');}}>{presenterVoices.map(item=><option key={item}>{item}</option>)}</select></label><label>Output language<select value={language} onChange={e=>{setLanguage(e.target.value);setStatus('Draft');}}>{presenterLanguages.map(item=><option key={item}>{item}</option>)}</select></label><label>Visual theme<select value={theme} onChange={e=>{setTheme(e.target.value);setStatus('Draft');}}>{presenterThemes.map(item=><option key={item}>{item}</option>)}</select></label></div><div className="format-picker">{['16:9','9:16','1:1','Audio'].map(item=><button key={item} className={format===item?'selected':''} onClick={()=>{setFormat(item);setStatus('Draft');}}>{item==='Audio'?<FileAudio size={18}/>:<span className={`ratio ratio-${item.replace(':','')}`}/>}<b>{item}</b></button>)}</div><div className="pipeline-strip">{pipelineSteps.map((step,index)=><div key={step} className={index===activeStep?'active':''}><span>{index+1}</span><small>{step}</small></div>)}</div><button className="primary-button render-button" onClick={renderPreview} disabled={!script.trim()||status==='Queued'}>{status==='Queued'?<RefreshCw className="spin" size={17}/>:<WandSparkles size={17}/>} {status==='Queued'?'Building mock preview…':'Generate mock preview'}</button></div><div className="presenter-preview"><div className={`preview-stage preview-${format.replace(':','')}`}><Image src={presenter.image} alt={`Original AI-generated ${presenter.name}`} fill sizes="480px"/><div className="preview-scrim"/><span className="preview-label"><Sparkles size={13}/>AI-generated presenter</span><div className="preview-caption">Clear communication begins with listening.</div><PlayPreviewButton /></div><div className="preview-meta"><div><span>OUTPUT</span><strong>{format} · 1080p</strong></div><div><span>MODE</span><strong>Static mock · {theme}</strong></div><div><span>EXPORT</span><strong>{status==='Mock preview ready'?'Ready to review':'Not rendered'}</strong></div></div><div className="truth-card"><CircleAlert size={18}/><p><strong>This is an honest static preview.</strong> Production voice ({voice}), lip-sync and MP4 assembly ({language}) require approved providers, GPU infrastructure and FFmpeg.</p></div></div></section></div>;
 }
 
-type RealApplication = { id: string; name: string; slug: string; status: string; created_at: string };
+type RealApplication = { id: string; name: string; slug: string; status: string; created_at: string; settings?: { allowed_embed_origins?: string[] } | null };
 type DigitalHumanApplicationLink = { digital_human_id: string; application_id: string; application_name: string; application_slug: string; persona_version_id: string; enabled: boolean };
 
 function Applications() {
@@ -1862,6 +1862,9 @@ function Applications() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editingOriginsId, setEditingOriginsId] = useState<string | null>(null);
+  const [originsDraft, setOriginsDraft] = useState('');
+  const [savingOrigins, setSavingOrigins] = useState(false);
 
   async function refresh() {
     const [appsRes, linksRes, humansRes] = await Promise.all([
@@ -1895,6 +1898,29 @@ function Applications() {
     }
   }
 
+  function startEditingOrigins(app: RealApplication) {
+    setEditingOriginsId(app.id);
+    setOriginsDraft((app.settings?.allowed_embed_origins ?? []).join('\n'));
+    setError(null);
+  }
+
+  async function saveOrigins(appId: string) {
+    setSavingOrigins(true);
+    setError(null);
+    try {
+      const allowedOrigins = originsDraft.split('\n').map((line) => line.trim()).filter(Boolean);
+      const res = await fetch(`/api/v1/applications/${appId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowed_embed_origins: allowedOrigins }) });
+      const resBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(resBody.message || 'Could not save allowed origins.');
+      setEditingOriginsId(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save allowed origins.');
+    } finally {
+      setSavingOrigins(false);
+    }
+  }
+
   return (
     <div className="content-stack">
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
@@ -1921,6 +1947,25 @@ function Applications() {
                 </div>
               )}
               <p className="panel-note">Manage which VowHumans use this application from each digital human&rsquo;s own profile.</p>
+              <div className="embed-origins-block">
+                {editingOriginsId === app.id ? (
+                  <>
+                    <label className="embed-origins-label">Allowed embed origins<small>One per line, e.g. https://plugconnect.com — leave blank to allow embedding from anywhere.</small></label>
+                    <textarea className="embed-origins-textarea" value={originsDraft} onChange={(e) => setOriginsDraft(e.target.value)} placeholder="https://plugconnect.com" rows={3} />
+                    <div className="editor-actions">
+                      <button className="primary-button" type="button" disabled={savingOrigins} onClick={() => saveOrigins(app.id)}>{savingOrigins ? <RefreshCw size={14} className="spin" /> : <Check size={14} />}Save</button>
+                      <button className="plain-button" type="button" onClick={() => setEditingOriginsId(null)}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <button className="plain-button" type="button" onClick={() => startEditingOrigins(app)}>
+                    <LockKeyhole size={13} />
+                    {(app.settings?.allowed_embed_origins?.length ?? 0) > 0
+                      ? `${app.settings!.allowed_embed_origins!.length} allowed origin${app.settings!.allowed_embed_origins!.length === 1 ? '' : 's'}`
+                      : 'Open to any origin — click to restrict'}
+                  </button>
+                )}
+              </div>
             </article>
           );
         })}

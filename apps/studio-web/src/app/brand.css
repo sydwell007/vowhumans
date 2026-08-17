@@ -1928,6 +1928,9 @@ body {
 .studio-shell .wizard-subsection { border-color: var(--vh-border) !important; }
 .studio-shell .application-toggle-row { border-color: var(--vh-border) !important; }
 .studio-shell .application-toggle-row small { color: var(--vh-text-muted) !important; }
+.studio-shell .embed-origins-block { border-color: var(--vh-border) !important; }
+.studio-shell .embed-origins-label small { color: var(--vh-text-muted) !important; }
+.studio-shell .embed-origins-textarea { background: var(--vh-surface-raised) !important; border-color: var(--vh-border) !important; color: var(--vh-text-primary) !important; }
 
 .studio-shell .preview-meta > div {
   border-color: var(--vh-border) !important;
