@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse, after } from "next/server";
-import { applications } from "@/data/platform";
 import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
@@ -8,7 +7,7 @@ import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLoc
 import { EMBEDDING_MODEL, chatComplete, embedBatch } from "@/lib/openai";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","digital-human-applications","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -372,7 +371,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return response({ items: rows });
   }
 
-  if (resource === "applications") return response({ items: applications });
+  if (resource === "applications" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`SELECT id, name, slug, status, settings, created_at FROM applications WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    return response({ items: rows });
+  }
+
+  if (resource === "digital-human-applications" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT dha.digital_human_id, dha.application_id, a.name AS application_name, a.slug AS application_slug, dha.persona_version_id, dha.enabled
+      FROM digital_human_applications dha JOIN applications a ON a.id = dha.application_id
+      WHERE dha.organisation_id = ${organisationId}
+    `;
+    return response({ items: rows });
+  }
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
   if (resource === "integrations") return response({ items: integrations });
   if (resource === "templates" || resource === "marketplace") return response({ items: templates, purchases_enabled: false });
@@ -691,6 +706,62 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       RETURNING id, name, role, disclosure, state, created_at, updated_at
     `;
     return NextResponse.json({ success: true, data: humanRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "applications" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the application a name." }, { status: 422 });
+    const requestedSlug = typeof body.slug === "string" && body.slug.trim() ? body.slug.trim() : name;
+    const baseSlug = requestedSlug.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "application";
+    let applicationRow: { id: string; name: string; slug: string; status: string; settings: unknown; created_at: string } | undefined;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;
+      try {
+        [applicationRow] = await sql`
+          INSERT INTO applications (organisation_id, name, slug) VALUES (${organisationId}, ${name}, ${slug})
+          RETURNING id, name, slug, status, settings, created_at
+        `;
+        break;
+      } catch (error) {
+        if (!(error instanceof Error) || !("code" in error) || (error as { code?: string }).code !== "23505") throw error;
+      }
+    }
+    if (!applicationRow) return NextResponse.json({ success: false, code: "SLUG_CONFLICT", message: "Could not allocate a unique application slug." }, { status: 500 });
+    return NextResponse.json({ success: true, data: applicationRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "digital-human-applications" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const digitalHumanId = typeof body.digital_human_id === "string" ? body.digital_human_id : "";
+    const applicationId = typeof body.application_id === "string" ? body.application_id : "";
+    const enabled = Boolean(body.enabled);
+    if (!digitalHumanId || !applicationId) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id and application_id are required." }, { status: 422 });
+    }
+    if (!enabled) {
+      await sql`UPDATE digital_human_applications SET enabled = false WHERE organisation_id = ${organisationId} AND digital_human_id = ${digitalHumanId} AND application_id = ${applicationId}`;
+      return NextResponse.json({ success: true, data: { digital_human_id: digitalHumanId, application_id: applicationId, enabled: false }, meta: { mode: "live", request_id: randomUUID() } });
+    }
+    // Every application enablement pins to whichever persona version is currently
+    // published — never an editable draft, since that's the one immutability
+    // guarantee the rest of this app already makes about published personas.
+    const [publishedVersion] = await sql<{ id: string }[]>`
+      SELECT pv.id FROM human_persona_assignments hpa JOIN persona_versions pv ON pv.id = hpa.persona_version_id
+      WHERE hpa.organisation_id = ${organisationId} AND hpa.human_slug = ${digitalHumanId} AND pv.state = 'published'
+    `;
+    if (!publishedVersion) {
+      return NextResponse.json({ success: false, code: "PERSONA_NOT_PUBLISHED", message: "Publish this VowHuman's persona before enabling it for an application." }, { status: 409 });
+    }
+    const [row] = await sql`
+      INSERT INTO digital_human_applications (organisation_id, digital_human_id, application_id, persona_version_id, enabled)
+      VALUES (${organisationId}, ${digitalHumanId}, ${applicationId}, ${publishedVersion.id}, true)
+      ON CONFLICT (digital_human_id, application_id) DO UPDATE SET enabled = true, persona_version_id = EXCLUDED.persona_version_id
+      RETURNING digital_human_id, application_id, persona_version_id, enabled
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   // Generates the article text synchronously and returns it without writing anything —

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import base64
 import datetime
 import hashlib
 import hmac
@@ -35,7 +36,48 @@ def _load_key_registry() -> dict[str, str]:
 
 _KEY_REGISTRY = _load_key_registry()
 
-def auth_context(x_api_key: Annotated[str | None, Header()] = None, x_organisation_id: Annotated[str | None, Header()] = None) -> AuthContext:
+def _b64url_decode(data: str) -> bytes:
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
+
+def _verify_embed_token(token: str) -> uuid.UUID:
+    # Node-side counterpart: apps/studio-web/src/lib/embedToken.ts. Minted fresh
+    # per public embed call, server-side only by studio-web — never held by the
+    # browser or by any third-party adapter, unlike the two key-based modes above.
+    secret = os.getenv("VOWHUMANS_EMBED_TOKEN_SECRET", "")
+    if not secret:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Embed tokens are not configured")
+    try:
+        encoded_payload, signature = token.split(".", 1)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Malformed embed token") from exc
+    expected_signature = base64.urlsafe_b64encode(hmac.new(secret.encode(), encoded_payload.encode(), hashlib.sha256).digest()).rstrip(b"=").decode()
+    if not hmac.compare_digest(expected_signature, signature):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid embed token")
+    try:
+        payload = json.loads(_b64url_decode(encoded_payload))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Malformed embed token") from exc
+    if payload.get("scope") != "embed":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid embed token scope")
+    if not isinstance(payload.get("exp"), (int, float)) or payload["exp"] < time.time():
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Embed token expired")
+    try:
+        return uuid.UUID(str(payload.get("organisation_id")))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Malformed embed token") from exc
+
+def auth_context(
+    x_api_key: Annotated[str | None, Header()] = None,
+    x_organisation_id: Annotated[str | None, Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthContext:
+    # Third mode, alongside (not replacing) the two key-based ones below: a
+    # short-lived embed token, checked first only when no x_api_key is present so
+    # an existing key-based caller's behaviour is completely unchanged.
+    if not x_api_key and authorization and authorization.lower().startswith("bearer "):
+        organisation_id = _verify_embed_token(authorization[7:].strip())
+        return AuthContext(organisation_id=organisation_id, key_fingerprint="embed-token")
+
     if not x_api_key:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Valid server-side service key required")
 
@@ -102,10 +144,16 @@ def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID
     # separate test rooms: every one showed only the avatar participant and the
     # human, never the voice agent). realtime-agent now also has an explicit
     # agent_name, so every token must list it, or no voice agent joins at all.
-    room_agents = [RoomAgentDispatch(agent_name=VOICE_AGENT_NAME)]
+    #
+    # The voice agent's dispatch always carries {organisation_id, human_slug}
+    # metadata now too (previously only the avatar dispatch did) — realtime-agent
+    # doesn't read it yet, so this is a no-op today, but it's the one piece
+    # multi-tenant voice needs from this side once it does.
+    voice_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
+    room_agents = [RoomAgentDispatch(agent_name=VOICE_AGENT_NAME, metadata=voice_metadata)]
     if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
-        metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
-        room_agents.append(RoomAgentDispatch(agent_name=AVATAR_AGENT_NAME, metadata=metadata))
+        avatar_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
+        room_agents.append(RoomAgentDispatch(agent_name=AVATAR_AGENT_NAME, metadata=avatar_metadata))
 
     token = (
         AccessToken(api_key, secret)

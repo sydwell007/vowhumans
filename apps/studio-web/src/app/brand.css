@@ -1926,6 +1926,8 @@ body {
 .studio-shell .profile-slot p { color: var(--vh-text-muted) !important; }
 .studio-shell .voice-pick-row { border-color: var(--vh-border) !important; }
 .studio-shell .wizard-subsection { border-color: var(--vh-border) !important; }
+.studio-shell .application-toggle-row { border-color: var(--vh-border) !important; }
+.studio-shell .application-toggle-row small { color: var(--vh-text-muted) !important; }
 
 .studio-shell .preview-meta > div {
   border-color: var(--vh-border) !important;

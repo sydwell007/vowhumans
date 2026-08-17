@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Activity,
+  AppWindow,
   ArrowLeft,
   ArrowRight,
   AudioLines,
@@ -17,6 +18,7 @@ import {
   CircleCheck,
   Clock3,
   Cloud,
+  Copy,
   FileAudio,
   FileText,
   Fingerprint,
@@ -205,8 +207,24 @@ function DigitalHumans() {
   const [wizardHumanId, setWizardHumanId] = useState<string | null>(null);
   const [wizardStartStep, setWizardStartStep] = useState(1);
 
+  const [testMessage, setTestMessage] = useState('Tell me about a time you solved a difficult problem.');
+  const [testTurns, setTestTurns] = useState<{ role: 'user' | 'agent'; content: string; citations?: { document_title: string; content: string }[] }[]>([]);
+  const [testing, setTesting] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  const [apps, setApps] = useState<RealApplication[]>([]);
+  const [appLinks, setAppLinks] = useState<DigitalHumanApplicationLink[]>([]);
+  const [appBusyId, setAppBusyId] = useState<string | null>(null);
+  const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
+
   async function refresh() {
-    const res = await fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null);
+    const [res, appsRes, linksRes] = await Promise.all([
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/applications').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-human-applications').then(r => r.json()).catch(() => null),
+    ]);
+    if (appsRes?.success) setApps(appsRes.data.items);
+    if (linksRes?.success) setAppLinks(linksRes.data.items);
     if (res?.success) {
       setItems(res.data.items);
       setSelectedId((prev) => prev ?? res.data.items[0]?.id ?? null);
@@ -229,9 +247,31 @@ function DigitalHumans() {
       setDetail(null);
     }
     setDetailLoading(false);
+    setTestTurns([]);
+    setTestError(null);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- loads the selected human's profile; re-runs when the list selection changes
   useEffect(() => { if (selectedId) loadDetail(selectedId); }, [selectedId]);
+
+  async function runTest(event: React.FormEvent) {
+    event.preventDefault();
+    if (!detail?.persona || !testMessage.trim() || testing) return;
+    setTesting(true);
+    setTestError(null);
+    const outgoing = testMessage.trim();
+    setTestTurns((prev) => [...prev, { role: 'user', content: outgoing }]);
+    setTestMessage('');
+    try {
+      const res = await fetch(`/api/v1/personas/${detail.persona.persona_id}/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: outgoing }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not run this test.');
+      setTestTurns((prev) => [...prev, { role: 'agent', content: body.data.reply, citations: body.data.citations }]);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : 'Could not run this test.');
+    } finally {
+      setTesting(false);
+    }
+  }
 
   function openWizard(resumeId: string | null, startStep: number) {
     setWizardHumanId(resumeId);
@@ -281,6 +321,31 @@ function DigitalHumans() {
     setBusy(false);
   }
 
+  async function toggleApplication(applicationId: string, enabled: boolean) {
+    if (!detail) return;
+    setAppBusyId(applicationId);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/digital-human-applications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ digital_human_id: detail.human.id, application_id: applicationId, enabled }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not update this application.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this application.');
+    } finally {
+      setAppBusyId(null);
+    }
+  }
+
+  function copyEmbedSnippet(app: RealApplication) {
+    if (!detail) return;
+    const snippet = `<iframe src="${window.location.origin}/embed/${detail.human.id}/${app.slug}" allow="microphone; camera" width="480" height="720" style="border:0;border-radius:16px;"></iframe>`;
+    navigator.clipboard?.writeText(snippet).then(() => {
+      setCopiedAppId(app.id);
+      window.setTimeout(() => setCopiedAppId((current) => (current === app.id ? null : current)), 2500);
+    }).catch(() => setError('Could not copy the embed snippet — copy it manually from the page source.'));
+  }
+
   return (
     <div className="content-stack">
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
@@ -328,11 +393,74 @@ function DigitalHumans() {
                 <ProfileSlot icon={BrainCircuit} label="Persona" filled={Boolean(detail.persona)} meta={detail.persona ? `${detail.persona.persona_name} · v${detail.persona.version}` : undefined} onSetup={() => openWizard(detail.human.id, 5)} />
                 <ProfileSlot icon={Sparkles} label="Gestures" filled={Boolean(detail.gesture_profile)} meta={detail.gesture_profile?.name} onSetup={() => openWizard(detail.human.id, 6)} />
               </section>
+              <div className="wizard-subsection">
+                <PanelTitle title="Applications" eyebrow="Where this VowHuman can be embedded" />
+                {apps.length === 0 && <p className="panel-note">No applications connected yet — connect one from the Applications page.</p>}
+                {apps.length > 0 && (
+                  <div className="application-toggle-list">
+                    {apps.map((app) => {
+                      const link = appLinks.find((l) => l.digital_human_id === detail.human.id && l.application_id === app.id);
+                      const enabled = Boolean(link?.enabled);
+                      const canEnable = detail.persona?.state === 'published';
+                      return (
+                        <div className="application-toggle-row" key={app.id}>
+                          <span><b>{app.name}</b><small>{app.slug}</small></span>
+                          <div className="editor-actions">
+                            <button className="secondary-button" onClick={() => toggleApplication(app.id, !enabled)} disabled={appBusyId === app.id || (!enabled && !canEnable)}>
+                              {appBusyId === app.id ? <RefreshCw size={14} className="spin" /> : null}
+                              <StatusPill tone={enabled ? 'good' : 'muted'}>{enabled ? 'Enabled' : 'Enable'}</StatusPill>
+                            </button>
+                            {enabled && (
+                              <button className="plain-button" type="button" onClick={() => copyEmbedSnippet(app)}>
+                                {copiedAppId === app.id ? <Check size={14} /> : <Copy size={14} />}{copiedAppId === app.id ? 'Copied' : 'Copy embed snippet'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {!detail.persona && <p className="panel-note">Assign a persona to this VowHuman before enabling it for an application.</p>}
+                {detail.persona && detail.persona.state !== 'published' && <p className="panel-note">Publish this VowHuman&rsquo;s persona (from the Personas page) before enabling it for an application.</p>}
+              </div>
             </>
           )}
           {!detailLoading && !detail && <p className="panel-note">Select a digital human, or create a new one.</p>}
         </div>
       </section>
+      {!detailLoading && detail && detail.persona && (
+        <section className="panel test-console">
+          <PanelTitle title={`Test ${detail.human.name}`} eyebrow="Live · grounded in this VowHuman's assigned knowledge" action={<StatusPill tone="good">Live</StatusPill>} />
+          <div className="console-grid">
+            <div className="console-chat">
+              <div className="chat-message agent"><span>VH</span><p>Hi, I&rsquo;m {detail.human.name}. Ask me something to see how I respond.</p></div>
+              {testTurns.map((turn, index) => (
+                <div className={`chat-message ${turn.role === 'user' ? 'user' : 'agent'}`} key={index}>
+                  <span>{turn.role === 'user' ? 'YOU' : 'VH'}</span>
+                  <div>
+                    <p>{turn.content}</p>
+                    {turn.citations && turn.citations.length > 0 && (
+                      <div className="citation-list">
+                        {turn.citations.map((c, i) => <div className="citation-row" key={i}><b>{c.document_title}</b><span>{c.content}</span></div>)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form className="console-controls" onSubmit={runTest}>
+              {testError && <div className="review-warning"><CircleAlert size={17} />{testError}</div>}
+              <label>Test message<textarea value={testMessage} onChange={(e) => setTestMessage(e.target.value)} /></label>
+              <button className="primary-button" type="submit" disabled={testing}>{testing ? <RefreshCw size={17} className="spin" /> : <MessageSquareText size={17} />}{testing ? 'Thinking…' : 'Run test'}</button>
+              <p><ShieldCheck size={14} /> Live response from your organisation&rsquo;s OpenAI account, using this VowHuman&rsquo;s assigned persona and knowledge.</p>
+            </form>
+          </div>
+        </section>
+      )}
+      {!detailLoading && detail && !detail.persona && (
+        <section className="panel ingestion-card"><span className="empty-icon"><MessageSquareText size={24} /></span><p className="eyebrow">No persona assigned yet</p><h2>Assign a persona to test this VowHuman</h2><p>The test console needs a persona to know how to respond — set one up above before testing.</p></section>
+      )}
       {wizardOpen && <DigitalHumanWizard humanId={wizardHumanId} startStep={wizardStartStep} onClose={closeWizard} />}
     </div>
   );
@@ -1723,10 +1851,93 @@ function PresenterStudio() {
   return <div className="content-stack"><section className="presenter-workspace"><div className="panel scene-editor"><PanelTitle title="Customer Service Essentials" eyebrow="Module 1 · Lesson 2" action={<StatusPill tone={status==='Mock preview ready'?'good':'warn'}>{status}</StatusPill>}/><label className="script-field">Presenter script<textarea value={script} onChange={e=>{setScript(e.target.value);setStatus('Draft');}}/><span>{script.length} characters · ~{Math.max(1,Math.round(script.split(/\s+/).length/2.3))} sec</span></label><div className="form-grid two"><label>Presenter<select value={presenter.name} onChange={e=>{setPresenter(presenterOptions.find(p=>p.name===e.target.value) ?? presenterOptions[0]);setStatus('Draft');}}>{presenterOptions.map(p=><option key={p.id}>{p.name}</option>)}</select></label><label>Voice<select value={voice} onChange={e=>{setVoice(e.target.value);setStatus('Draft');}}>{presenterVoices.map(item=><option key={item}>{item}</option>)}</select></label><label>Output language<select value={language} onChange={e=>{setLanguage(e.target.value);setStatus('Draft');}}>{presenterLanguages.map(item=><option key={item}>{item}</option>)}</select></label><label>Visual theme<select value={theme} onChange={e=>{setTheme(e.target.value);setStatus('Draft');}}>{presenterThemes.map(item=><option key={item}>{item}</option>)}</select></label></div><div className="format-picker">{['16:9','9:16','1:1','Audio'].map(item=><button key={item} className={format===item?'selected':''} onClick={()=>{setFormat(item);setStatus('Draft');}}>{item==='Audio'?<FileAudio size={18}/>:<span className={`ratio ratio-${item.replace(':','')}`}/>}<b>{item}</b></button>)}</div><div className="pipeline-strip">{pipelineSteps.map((step,index)=><div key={step} className={index===activeStep?'active':''}><span>{index+1}</span><small>{step}</small></div>)}</div><button className="primary-button render-button" onClick={renderPreview} disabled={!script.trim()||status==='Queued'}>{status==='Queued'?<RefreshCw className="spin" size={17}/>:<WandSparkles size={17}/>} {status==='Queued'?'Building mock preview…':'Generate mock preview'}</button></div><div className="presenter-preview"><div className={`preview-stage preview-${format.replace(':','')}`}><Image src={presenter.image} alt={`Original AI-generated ${presenter.name}`} fill sizes="480px"/><div className="preview-scrim"/><span className="preview-label"><Sparkles size={13}/>AI-generated presenter</span><div className="preview-caption">Clear communication begins with listening.</div><PlayPreviewButton /></div><div className="preview-meta"><div><span>OUTPUT</span><strong>{format} · 1080p</strong></div><div><span>MODE</span><strong>Static mock · {theme}</strong></div><div><span>EXPORT</span><strong>{status==='Mock preview ready'?'Ready to review':'Not rendered'}</strong></div></div><div className="truth-card"><CircleAlert size={18}/><p><strong>This is an honest static preview.</strong> Production voice ({voice}), lip-sync and MP4 assembly ({language}) require approved providers, GPU infrastructure and FFmpeg.</p></div></div></section></div>;
 }
 
-const applicationStatusTone: Record<string, string> = { Connected: "good", Sandbox: "warn", Planned: "muted" };
+type RealApplication = { id: string; name: string; slug: string; status: string; created_at: string };
+type DigitalHumanApplicationLink = { digital_human_id: string; application_id: string; application_name: string; application_slug: string; persona_version_id: string; enabled: boolean };
 
 function Applications() {
-  return <div className="content-stack"><section className="application-grid">{applications.map(app=><article className="application-card" key={app.name}><div className={`app-logo ${app.colour}`}>{app.code}</div><div className="application-head"><div><h2>{app.name}</h2><p>{app.status==='Connected'?'Production integration':app.status==='Sandbox'?'Development sandbox':'Not yet connected'}</p></div><StatusPill tone={applicationStatusTone[app.status] ?? "muted"}>{app.status}</StatusPill></div><div className="app-stats"><span><small>Humans</small><strong>{app.humans}</strong></span><span><small>Sessions</small><strong>{app.sessions}</strong></span></div><InlineAction className="plain-button" idleLabel={<>Manage integration <ArrowRight size={15}/></>} doneLabel="Console pending" /></article>)}</section><section className="panel integration-principle"><span><LockKeyhole size={23}/></span><div><p className="eyebrow">Server-to-server only</p><h2>Keys never visit the browser.</h2><p>Applications receive scoped service credentials and short-lived room tokens. Persona overrides stay versioned per application.</p></div><Link href="/studio/api-keys" className="secondary-button">Manage API keys</Link></section></div>;
+  const [apps, setApps] = useState<RealApplication[]>([]);
+  const [links, setLinks] = useState<DigitalHumanApplicationLink[]>([]);
+  const [humansList, setHumansList] = useState<DigitalHumanSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  async function refresh() {
+    const [appsRes, linksRes, humansRes] = await Promise.all([
+      fetch('/api/v1/applications').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-human-applications').then(r => r.json()).catch(() => null),
+      fetch('/api/v1/digital-humans').then(r => r.json()).catch(() => null),
+    ]);
+    if (appsRes?.success) setApps(appsRes.data.items);
+    if (linksRes?.success) setLinks(linksRes.data.items);
+    if (humansRes?.success) setHumansList(humansRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused by submitCreate below
+  useEffect(() => { refresh(); }, []);
+
+  async function submitCreate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!newName.trim()) { setError('Give the application a name.'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/applications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: newName.trim() }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not connect this application.');
+      setNewName('');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not connect this application.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="content-stack">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && apps.length === 0 && (
+        <section className="panel ingestion-card"><span className="empty-icon"><AppWindow size={24} /></span><p className="eyebrow">No applications connected yet</p><h2>Connect your first application</h2><p>Applications are the external sites and products — like PlugConnect or GoalVow Academies — where your VowHumans can be embedded, once you enable a VowHuman for them from its own profile.</p></section>
+      )}
+      <section className="application-grid">
+        {apps.map((app) => {
+          const enabledHumans = links.filter((l) => l.application_id === app.id && l.enabled);
+          return (
+            <article className="application-card" key={app.id}>
+              <div className="app-logo coral">{app.name.slice(0, 2).toUpperCase()}</div>
+              <div className="application-head">
+                <div><h2>{app.name}</h2><p>{app.slug}</p></div>
+                <StatusPill tone={app.status === 'active' ? 'good' : 'muted'}>{app.status}</StatusPill>
+              </div>
+              <div className="app-stats"><span><small>VowHumans enabled</small><strong>{enabledHumans.length}</strong></span></div>
+              {enabledHumans.length > 0 && (
+                <div className="chip-toggle-row">
+                  {enabledHumans.map((l) => {
+                    const human = humansList.find((h) => h.id === l.digital_human_id);
+                    return <span className="chip-toggle active" key={l.digital_human_id}>{human?.name ?? 'VowHuman'}</span>;
+                  })}
+                </div>
+              )}
+              <p className="panel-note">Manage which VowHumans use this application from each digital human&rsquo;s own profile.</p>
+            </article>
+          );
+        })}
+      </section>
+      <section className="panel">
+        <PanelTitle title="Connect an application" eyebrow="External sites your VowHumans can serve" />
+        <form className="form-grid two" onSubmit={submitCreate}>
+          <label className="full">Application name<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. PlugConnect" /></label>
+          <div className="full chip-toggle-row">
+            {applications.map((app) => <button type="button" key={app.name} className="chip-toggle" onClick={() => setNewName(app.name)}>{app.name}</button>)}
+          </div>
+          <button className="primary-button" type="submit" disabled={creating}>{creating ? <RefreshCw size={17} className="spin" /> : <AppWindow size={17} />}{creating ? 'Connecting…' : 'Connect application'}</button>
+        </form>
+      </section>
+      <section className="panel integration-principle"><span><LockKeyhole size={23}/></span><div><p className="eyebrow">Server-to-server only</p><h2>Keys never visit the browser.</h2><p>Applications receive scoped service credentials and short-lived room tokens. Persona overrides stay versioned per application.</p></div><Link href="/studio/api-keys" className="secondary-button">Manage API keys</Link></section>
+    </div>
+  );
 }
 
 const usageGrains: { label: string; bars: number[]; steps: string[] }[] = [
