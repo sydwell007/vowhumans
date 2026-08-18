@@ -2187,49 +2187,54 @@ function PresenterStudio() {
   const [playIndex, setPlayIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  async function refresh() {
+  async function refresh(): Promise<PresenterProjectSummary[]> {
     const [projectsRes, humansRes, voicesRes, faceAssignRes] = await Promise.all([
       fetch("/api/v1/presenter-projects").then((r) => r.json()).catch(() => null),
       fetch("/api/v1/digital-humans").then((r) => r.json()).catch(() => null),
       fetch("/api/v1/voices").then((r) => r.json()).catch(() => null),
       fetch("/api/v1/face-assignments").then((r) => r.json()).catch(() => null),
     ]);
-    if (projectsRes?.success) {
-      setProjects(projectsRes.data.items);
-      setSelectedId((prev) => prev ?? projectsRes.data.items[0]?.id ?? null);
-    }
+    if (projectsRes?.success) setProjects(projectsRes.data.items);
     if (humansRes?.success) setHumansList(humansRes.data.items);
     if (voicesRes?.success) setVoicesList(voicesRes.data.items);
     if (faceAssignRes?.success) {
       setFaceByHuman(new Map(faceAssignRes.data.items.map((f: { human_slug: string; face_asset_id: string }) => [f.human_slug, f.face_asset_id])));
     }
     setLoaded(true);
+    return projectsRes?.success ? (projectsRes.data.items as PresenterProjectSummary[]) : [];
   }
 
-  async function refreshDetail(id: string) {
-    const res = await fetch(`/api/v1/presenter-projects/${id}`).then((r) => r.json()).catch(() => null);
-    if (res?.success) setDetail(res.data);
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused after create/delete
-    refresh();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the detail panel whenever the selected project changes (including to none)
+  // The one place selection changes — always does the real fetch itself rather than
+  // leaning on a useEffect keyed off selectedId. That pattern silently no-ops on a
+  // second click of the same already-selected chip (React bails out on an unchanged
+  // state value, so the effect never re-fires) — clicking a project whose first load
+  // failed for any reason had no way to ever retry. Also surfaces a real error
+  // instead of failing silently, unlike the previous version.
+  async function selectProject(id: string | null) {
+    setSelectedId(id);
+    setPlaying(false);
+    setPlayIndex(0);
+    setError(null);
+    if (!id) {
       setDetail(null);
       return;
     }
-    refreshDetail(selectedId);
-    setPlaying(false);
-    setPlayIndex(0);
-  }, [selectedId]);
+    const res = await fetch(`/api/v1/presenter-projects/${id}`).then((r) => r.json()).catch(() => null);
+    if (res?.success) setDetail(res.data);
+    else setError(res?.message || "Could not load this project. Try again.");
+  }
+
+  useEffect(() => {
+    async function init() {
+      const items = await refresh();
+      if (items[0]) await selectProject(items[0].id);
+    }
+    init();
+  }, []);
 
   useEffect(() => {
     function focusCreateForm() {
-      setSelectedId(null);
+      selectProject(null);
       createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     window.addEventListener("studio:new-presenter-project", focusCreateForm);
@@ -2260,8 +2265,8 @@ function PresenterStudio() {
       const resBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(resBody.message || "Could not create this project.");
       setFormTitle("");
-      setSelectedId(resBody.data.project.id);
       await refresh();
+      await selectProject(resBody.data.project.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create this project.");
     } finally {
@@ -2271,7 +2276,7 @@ function PresenterStudio() {
 
   async function deleteProject(id: string) {
     await fetch(`/api/v1/presenter-projects/${id}`, { method: "DELETE" }).catch(() => {});
-    setSelectedId(null);
+    await selectProject(null);
     await refresh();
   }
 
@@ -2296,7 +2301,7 @@ function PresenterStudio() {
     } finally {
       setGenerating(false);
       setGenProgress(null);
-      await refreshDetail(detail.project.id);
+      await selectProject(detail.project.id);
       await refresh();
     }
   }
@@ -2334,7 +2339,7 @@ function PresenterStudio() {
         <section className="panel">
           <div className="chip-toggle-row">
             {projects.map((p) => (
-              <button key={p.id} type="button" className={`chip-toggle${selectedId === p.id ? " active" : ""}`} onClick={() => setSelectedId(p.id)}>
+              <button key={p.id} type="button" className={`chip-toggle${selectedId === p.id ? " active" : ""}`} onClick={() => selectProject(p.id)}>
                 {p.title}
               </button>
             ))}
@@ -2403,9 +2408,15 @@ function PresenterStudio() {
                 readOnly={detail.project.state !== "draft"}
                 onChange={(e) => setDetail({ ...detail, project: { ...detail.project, script: e.target.value } })}
                 onBlur={async (e) => {
-                  if (detail.project.state !== "draft" || e.target.value.trim() === detail.project.script.trim()) return;
+                  // Not comparing against detail.project.script here — onChange above
+                  // already keeps that in sync with the textarea on every keystroke, so
+                  // by blur time they're always equal and a same-value check like that
+                  // would never see a change worth saving. Patching unconditionally on
+                  // blur (while still draft) is simple and correct; a same-value PATCH
+                  // is a harmless no-op server-side.
+                  if (detail.project.state !== "draft") return;
                   await fetch(`/api/v1/presenter-projects/${detail.project.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ script: e.target.value }) });
-                  await refreshDetail(detail.project.id);
+                  await selectProject(detail.project.id);
                   await refresh();
                 }}
               />
