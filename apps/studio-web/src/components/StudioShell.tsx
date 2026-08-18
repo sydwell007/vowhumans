@@ -39,9 +39,9 @@ export function StudioShell({ section, children }: { section: string; children: 
   }, []);
 
   function quickAction() {
-    // DigitalHumans() and LiveSessions() each own a real interaction and listen
-    // for their own event — every other section keeps the generic draft-toast
-    // fallback below, unchanged.
+    // DigitalHumans(), LiveSessions() and PresenterStudio() each own a real
+    // interaction and listen for their own event — every other section keeps
+    // the generic draft-toast fallback below, unchanged.
     if (section === "digital-humans") {
       window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
       return;
@@ -50,10 +50,13 @@ export function StudioShell({ section, children }: { section: string; children: 
       window.dispatchEvent(new CustomEvent("studio:start-test-session"));
       return;
     }
+    if (section === "presenter-studio") {
+      window.dispatchEvent(new CustomEvent("studio:new-presenter-project"));
+      return;
+    }
     const outcome: Record<string, string> = {
       dashboard: "A safe digital-human draft is ready for identity and Persona setup.",
       "identity-consent": "Identity registration opened in draft mode; publication remains blocked.",
-      "presenter-studio": "A new presenter project draft is ready below.",
       "api-keys": "Key creation is ready; production keys are displayed once and stored hashed.",
       usage: "A usage report draft was generated from the illustrative data shown below; no live provider invoice is connected.",
       "audit-logs": "An audit export draft was generated from the visible event history below.",

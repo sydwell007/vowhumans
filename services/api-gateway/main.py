@@ -173,11 +173,22 @@ def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID
 
 @app.get("/api/v1/health", tags=["health"])
 def health():
+    # No "realtime" field here on purpose: ENABLE_OPENAI_REALTIME only ever
+    # matters to realtime-agent-worker (the actual voice bridge), a completely
+    # separate Railway service from this one, deliberately deployed with no
+    # public network of its own (docs/LIVE_VOICE_DEPLOYMENT.md — it only makes
+    # outbound connections to LiveKit). This gateway's own copy of that env var,
+    # if it even has one, was never load-bearing for anything and isn't a
+    # trustworthy proxy for the worker's real config. avatar IS this gateway's
+    # own decision — ENABLE_AVATAR_PARTICIPANT directly controls whether
+    # create_livekit_token() attaches avatar dispatch metadata, right here.
+    # apps/studio-web checks realtime-agent-health's own /health for the
+    # realtime signal instead — see fetchGatewayHealth() in
+    # apps/studio-web/src/app/api/v1/[...route]/route.ts.
     return {
         "status": "ok", "service": "api-gateway", "timestamp": int(time.time()),
         "providers": {
             "database": "configuration-ready", "redis": "configuration-ready",
-            "realtime": "configured" if os.getenv("ENABLE_OPENAI_REALTIME", "false").lower() == "true" else "not-configured",
             "avatar": "configured" if os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true" else "audio-fallback",
         },
     }

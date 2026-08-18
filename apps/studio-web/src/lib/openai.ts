@@ -97,3 +97,30 @@ export async function embedBatch(texts: string[]): Promise<OpenAIResult<number[]
     return { ok: false, status: 502, code: "EMBEDDING_FAILED", message: err instanceof Error ? err.message : "Could not reach OpenAI." };
   }
 }
+
+const SPEECH_TIMEOUT_MS = 60_000;
+
+// The same POST /v1/audio/speech call api/v1/[...route]/route.ts already makes
+// inline for Voice Library sample playback (mp3, a fixed sentence) — factored
+// out now that Presenter Studio needs it a second time for real scene
+// narration. wav (not mp3) because avatar-worker's /internal/v1/render expects
+// a .wav upload.
+export async function synthesizeSpeech(text: string, providerVoiceId: string): Promise<OpenAIResult<Buffer>> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return notConfigured();
+  try {
+    const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: providerVoiceId, input: text, response_format: "wav" }),
+      signal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
+    });
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => "");
+      return { ok: false, status: 502, code: "TTS_FAILED", message: detail.slice(0, 300) || "Could not generate narration." };
+    }
+    return { ok: true, data: Buffer.from(await upstream.arrayBuffer()) };
+  } catch (err) {
+    return { ok: false, status: 502, code: "TTS_FAILED", message: err instanceof Error ? err.message : "Could not reach OpenAI." };
+  }
+}

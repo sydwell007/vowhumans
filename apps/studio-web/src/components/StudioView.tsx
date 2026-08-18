@@ -19,7 +19,6 @@ import {
   Clock3,
   Cloud,
   Copy,
-  FileAudio,
   FileText,
   Fingerprint,
   Gauge,
@@ -93,11 +92,6 @@ function InlineAction({ className, idleLabel, doneLabel, icon: Icon = Check }: {
 function IconMenuButton({ className, label }: { className: string; label: string }) {
   const [acted, setActed] = useState(false);
   return <button className={className} aria-label={acted ? `Actions noted for ${label}` : `More actions for ${label}`} onClick={() => setActed(true)}>{acted ? <Check size={18} /> : <MoreHorizontal size={18} />}</button>;
-}
-
-function PlayPreviewButton({ className, size = 25 }: { className?: string; size?: number }) {
-  const [tried, setTried] = useState(false);
-  return <button className={className} aria-label={tried ? "Rendered preview not available yet" : "Play preview"} onClick={() => setTried(true)}>{tried ? <CircleAlert size={size} /> : <Play size={size} fill="currentColor" />}</button>;
 }
 
 function Dashboard() {
@@ -1845,7 +1839,7 @@ type LiveSessionMetrics = {
   reconnect_rate: number | null;
   telemetry_insufficient: boolean;
 };
-type GatewayHealthStatus = { gateway_reachable: boolean; realtime_configured: boolean; avatar_configured: boolean };
+type GatewayHealthStatus = { gateway_reachable: boolean; realtime_configured: boolean; realtime_check_available: boolean; avatar_configured: boolean };
 type TestReadyHuman = { id: string; name: string; role: string; ready: boolean; faceAssetId: string | null };
 
 function formatCallDuration(totalSeconds: number): string {
@@ -1897,6 +1891,8 @@ function LiveSessions() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reconnectedThisCall, setReconnectedThisCall] = useState(false);
   const [callSummary, setCallSummary] = useState<{ duration: string; reconnected: boolean } | null>(null);
+  const [agentJoined, setAgentJoined] = useState(false);
+  const [noAgentTimeout, setNoAgentTimeout] = useState(false);
 
   async function refresh() {
     const [sessionsRes, humansRes, assignRes, faceAssignRes] = await Promise.all([
@@ -1939,6 +1935,17 @@ function LiveSessions() {
     return () => window.clearInterval(interval);
   }, [callStage, callStartedAt]);
 
+  // The room can connect (WebRTC-wise) with nobody home — realtime-agent-worker
+  // is a separate deployed service that can silently refuse the job (e.g. its
+  // ENABLE_OPENAI_REALTIME isn't set) and there's otherwise no client-visible
+  // sign of that; the call just sits on "Listening" forever. Surface it instead
+  // of leaving that indistinguishable from a real, working, quiet room.
+  useEffect(() => {
+    if (callStage !== "live" || liveStatus !== "connected" || agentJoined) return;
+    const timeout = window.setTimeout(() => setNoAgentTimeout(true), 12000);
+    return () => window.clearTimeout(timeout);
+  }, [callStage, liveStatus, agentJoined]);
+
   async function reportEvent(sessionId: string, eventType: string, payload: Record<string, unknown>) {
     await fetch(`/api/v1/live-sessions/${sessionId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_type: eventType, payload }) }).catch(() => {});
   }
@@ -1950,6 +1957,8 @@ function LiveSessions() {
     setCallStage("starting");
     setReconnectedThisCall(false);
     setCallSummary(null);
+    setAgentJoined(false);
+    setNoAgentTimeout(false);
     try {
       const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id }) });
       const sessionBody = await sessionRes.json().catch(() => ({}));
@@ -1996,6 +2005,7 @@ function LiveSessions() {
   const stateChip = callStage !== "live" ? null
     : liveStatus === "error" ? { label: "Connection failed", tone: "danger" }
     : liveStatus !== "connected" ? { label: "Connecting…", tone: "warn" }
+    : noAgentTimeout ? { label: "No agent joined", tone: "danger" }
     : speaking ? { label: "Speaking", tone: "good" }
     : { label: "Listening", tone: "good" };
 
@@ -2039,11 +2049,18 @@ function LiveSessions() {
           <div className="health-grid">
             {[
               ["LiveKit transport", health?.gateway_reachable ? "Reachable" : "Not reachable", health?.gateway_reachable ? "good" : "danger"],
-              ["OpenAI Realtime", health?.realtime_configured ? "Configured" : "Not configured", health?.realtime_configured ? "good" : "warn"],
+              ["OpenAI Realtime", !health?.realtime_check_available ? "Unknown" : health.realtime_configured ? "Configured" : "Not configured", !health?.realtime_check_available ? "muted" : health.realtime_configured ? "good" : "danger"],
               ["Avatar worker", health?.avatar_configured ? "Configured" : "Audio fallback", health?.avatar_configured ? "good" : "warn"],
               ["Persona + knowledge", "Live per call", "good"],
             ].map(([name, state, tone]) => <div key={name}><span>{name}</span><StatusPill tone={tone}>{state}</StatusPill></div>)}
           </div>
+          {health && !health.realtime_configured && (
+            <p className="panel-note">
+              {health.realtime_check_available
+                ? "The deployed voice provider isn't configured — a test call will connect but no agent will speak. See docs/LIVE_VOICE_DEPLOYMENT.md."
+                : "Set REALTIME_AGENT_HEALTH_URL to see a real status here instead of Unknown — see docs/LIVE_VOICE_DEPLOYMENT.md."}
+            </p>
+          )}
         </div>
 
         <div className="panel test-console" ref={testConsoleRef}>
@@ -2056,12 +2073,22 @@ function LiveSessions() {
                 muted={muted}
                 onStatusChange={setLiveStatus}
                 onSpeakingChange={setSpeaking}
-                onFirstAudio={() => activeSessionId && reportEvent(activeSessionId, "first_audio", { elapsed_ms: callStartedAt ? Date.now() - callStartedAt : 0 })}
+                onFirstAudio={() => {
+                  setAgentJoined(true);
+                  setNoAgentTimeout(false);
+                  if (activeSessionId) reportEvent(activeSessionId, "first_audio", { elapsed_ms: callStartedAt ? Date.now() - callStartedAt : 0 });
+                }}
                 onReconnected={() => {
                   setReconnectedThisCall(true);
                   if (activeSessionId) reportEvent(activeSessionId, "reconnected", {});
                 }}
               />
+              {noAgentTimeout && (
+                <div className="live-call-diagnostic">
+                  <CircleAlert size={15} />
+                  <span>Connected, but no voice agent has joined. The realtime voice provider likely isn&rsquo;t configured in this environment — check Realtime health below, or see docs/LIVE_VOICE_DEPLOYMENT.md.</span>
+                </div>
+              )}
               <div className="live-call-meta">
                 {stateChip && <StatusPill tone={stateChip.tone}>{stateChip.label}</StatusPill>}
                 <strong className="live-call-timer">{formatCallDuration(elapsedSeconds)}</strong>
@@ -2108,23 +2135,333 @@ function LiveSessions() {
   );
 }
 
-const presenterOptions = [humans[2], humans[0]];
-const presenterVoices = ['Ayo · Warm', 'Development mock'];
-const presenterLanguages = ['English (South Africa)', 'isiZulu'];
-const presenterThemes = ['GoalVow Midnight', 'Clean classroom'];
-const pipelineSteps = ['Script', 'Scenes', 'Voice', 'Avatar', 'Captions', 'Assembly'];
+type PresenterProjectSummary = {
+  id: string; title: string; course: string | null; module: string | null; lesson: string | null;
+  digital_human_id: string | null; digital_human_name: string | null;
+  voice_id: string | null; voice_name: string | null;
+  output_language: string; aspect_ratio: string; state: string; created_at: string;
+};
+type PresenterScene = {
+  id: string; ordinal: number; script: string; duration_ms: number | null; state: string;
+  generated_video_id: string | null; output_kind: "scene-clip" | "scene-audio" | null;
+  render_duration_ms: number | null; render_state: string | null; failure_reason: string | null;
+};
+type PresenterProjectDetail = { project: PresenterProjectSummary & { script: string }; scenes: PresenterScene[] };
+type PresenterVoiceOption = { id: string; name: string };
+
+const ASPECT_OPTIONS = ["16:9", "9:16", "1:1", "audio"];
+const PIPELINE_STEPS = ["Script", "Voice", "Avatar", "Ready"];
+
+function presenterStateLabel(state: string): { label: string; tone: string } {
+  if (state === "draft") return { label: "Draft", tone: "muted" };
+  if (state === "queued" || state === "processing") return { label: "Generating…", tone: "warn" };
+  if (state === "preview_ready") return { label: "Ready to review", tone: "good" };
+  if (state === "approved") return { label: "Approved", tone: "good" };
+  if (state === "failed") return { label: "Failed", tone: "danger" };
+  return { label: state, tone: "muted" };
+}
 
 function PresenterStudio() {
-  const [script, setScript] = useState("Welcome to GoalVow Academy. In this lesson, we’ll explore how clear communication builds stronger customer relationships.");
-  const [format, setFormat] = useState('16:9');
-  const [status, setStatus] = useState('Draft');
-  const [presenter, setPresenter] = useState(presenterOptions[0]);
-  const [voice, setVoice] = useState(presenterVoices[0]);
-  const [language, setLanguage] = useState(presenterLanguages[0]);
-  const [theme, setTheme] = useState(presenterThemes[0]);
-  const activeStep = status === 'Draft' ? 0 : status === 'Queued' ? 1 : pipelineSteps.length - 1;
-  function renderPreview(){setStatus('Queued');window.setTimeout(()=>setStatus('Mock preview ready'),900);}
-  return <div className="content-stack"><section className="presenter-workspace"><div className="panel scene-editor"><PanelTitle title="Customer Service Essentials" eyebrow="Module 1 · Lesson 2" action={<StatusPill tone={status==='Mock preview ready'?'good':'warn'}>{status}</StatusPill>}/><label className="script-field">Presenter script<textarea value={script} onChange={e=>{setScript(e.target.value);setStatus('Draft');}}/><span>{script.length} characters · ~{Math.max(1,Math.round(script.split(/\s+/).length/2.3))} sec</span></label><div className="form-grid two"><label>Presenter<select value={presenter.name} onChange={e=>{setPresenter(presenterOptions.find(p=>p.name===e.target.value) ?? presenterOptions[0]);setStatus('Draft');}}>{presenterOptions.map(p=><option key={p.id}>{p.name}</option>)}</select></label><label>Voice<select value={voice} onChange={e=>{setVoice(e.target.value);setStatus('Draft');}}>{presenterVoices.map(item=><option key={item}>{item}</option>)}</select></label><label>Output language<select value={language} onChange={e=>{setLanguage(e.target.value);setStatus('Draft');}}>{presenterLanguages.map(item=><option key={item}>{item}</option>)}</select></label><label>Visual theme<select value={theme} onChange={e=>{setTheme(e.target.value);setStatus('Draft');}}>{presenterThemes.map(item=><option key={item}>{item}</option>)}</select></label></div><div className="format-picker">{['16:9','9:16','1:1','Audio'].map(item=><button key={item} className={format===item?'selected':''} onClick={()=>{setFormat(item);setStatus('Draft');}}>{item==='Audio'?<FileAudio size={18}/>:<span className={`ratio ratio-${item.replace(':','')}`}/>}<b>{item}</b></button>)}</div><div className="pipeline-strip">{pipelineSteps.map((step,index)=><div key={step} className={index===activeStep?'active':''}><span>{index+1}</span><small>{step}</small></div>)}</div><button className="primary-button render-button" onClick={renderPreview} disabled={!script.trim()||status==='Queued'}>{status==='Queued'?<RefreshCw className="spin" size={17}/>:<WandSparkles size={17}/>} {status==='Queued'?'Building mock preview…':'Generate mock preview'}</button></div><div className="presenter-preview"><div className={`preview-stage preview-${format.replace(':','')}`}><Image src={presenter.image} alt={`Original AI-generated ${presenter.name}`} fill sizes="480px"/><div className="preview-scrim"/><span className="preview-label"><Sparkles size={13}/>AI-generated presenter</span><div className="preview-caption">Clear communication begins with listening.</div><PlayPreviewButton /></div><div className="preview-meta"><div><span>OUTPUT</span><strong>{format} · 1080p</strong></div><div><span>MODE</span><strong>Static mock · {theme}</strong></div><div><span>EXPORT</span><strong>{status==='Mock preview ready'?'Ready to review':'Not rendered'}</strong></div></div><div className="truth-card"><CircleAlert size={18}/><p><strong>This is an honest static preview.</strong> Production voice ({voice}), lip-sync and MP4 assembly ({language}) require approved providers, GPU infrastructure and FFmpeg.</p></div></div></section></div>;
+  const [projects, setProjects] = useState<PresenterProjectSummary[]>([]);
+  const [humansList, setHumansList] = useState<DigitalHumanSummary[]>([]);
+  const [voicesList, setVoicesList] = useState<PresenterVoiceOption[]>([]);
+  const [faceByHuman, setFaceByHuman] = useState<Map<string, string>>(new Map());
+  const [loaded, setLoaded] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PresenterProjectDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const createFormRef = useRef<HTMLDivElement | null>(null);
+
+  const [formTitle, setFormTitle] = useState("");
+  const [formScript, setFormScript] = useState("Welcome to GoalVow Academy. In this lesson, we'll explore how clear communication builds stronger customer relationships.");
+  const [formHumanId, setFormHumanId] = useState("");
+  const [formVoiceId, setFormVoiceId] = useState("");
+  const [formLanguage, setFormLanguage] = useState("English (South Africa)");
+  const [formAspect, setFormAspect] = useState("16:9");
+  const [creating, setCreating] = useState(false);
+
+  const [generating, setGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const [playing, setPlaying] = useState(false);
+  const [playIndex, setPlayIndex] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  async function refresh() {
+    const [projectsRes, humansRes, voicesRes, faceAssignRes] = await Promise.all([
+      fetch("/api/v1/presenter-projects").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/digital-humans").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/voices").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/face-assignments").then((r) => r.json()).catch(() => null),
+    ]);
+    if (projectsRes?.success) {
+      setProjects(projectsRes.data.items);
+      setSelectedId((prev) => prev ?? projectsRes.data.items[0]?.id ?? null);
+    }
+    if (humansRes?.success) setHumansList(humansRes.data.items);
+    if (voicesRes?.success) setVoicesList(voicesRes.data.items);
+    if (faceAssignRes?.success) {
+      setFaceByHuman(new Map(faceAssignRes.data.items.map((f: { human_slug: string; face_asset_id: string }) => [f.human_slug, f.face_asset_id])));
+    }
+    setLoaded(true);
+  }
+
+  async function refreshDetail(id: string) {
+    const res = await fetch(`/api/v1/presenter-projects/${id}`).then((r) => r.json()).catch(() => null);
+    if (res?.success) setDetail(res.data);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused after create/delete
+    refresh();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the detail panel whenever the selected project changes (including to none)
+      setDetail(null);
+      return;
+    }
+    refreshDetail(selectedId);
+    setPlaying(false);
+    setPlayIndex(0);
+  }, [selectedId]);
+
+  useEffect(() => {
+    function focusCreateForm() {
+      setSelectedId(null);
+      createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.addEventListener("studio:new-presenter-project", focusCreateForm);
+    return () => window.removeEventListener("studio:new-presenter-project", focusCreateForm);
+  }, []);
+
+  async function createProject(event: React.FormEvent) {
+    event.preventDefault();
+    if (!formTitle.trim() || !formScript.trim()) {
+      setError("Give the project a title and a script.");
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v1/presenter-projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: formTitle.trim(),
+          script: formScript.trim(),
+          digital_human_id: formHumanId || undefined,
+          voice_id: formVoiceId || undefined,
+          output_language: formLanguage,
+          aspect_ratio: formAspect,
+        }),
+      });
+      const resBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(resBody.message || "Could not create this project.");
+      setFormTitle("");
+      setSelectedId(resBody.data.project.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create this project.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function deleteProject(id: string) {
+    await fetch(`/api/v1/presenter-projects/${id}`, { method: "DELETE" }).catch(() => {});
+    setSelectedId(null);
+    await refresh();
+  }
+
+  async function generate() {
+    if (!detail) return;
+    setGenerating(true);
+    setError(null);
+    const total = detail.scenes.length;
+    let done = detail.scenes.filter((s) => s.state === "completed").length;
+    setGenProgress({ done, total });
+    try {
+      for (;;) {
+        const res = await fetch(`/api/v1/presenter-projects/${detail.project.id}/render-next-scene`, { method: "POST" });
+        const resBody = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(resBody.message || "Generation failed.");
+        if (resBody.data.done) break;
+        done += 1;
+        setGenProgress({ done, total });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed.");
+    } finally {
+      setGenerating(false);
+      setGenProgress(null);
+      await refreshDetail(detail.project.id);
+      await refresh();
+    }
+  }
+
+  const playableScenes = detail?.scenes.filter((s) => s.generated_video_id) ?? [];
+  const currentScene = playableScenes[playIndex];
+
+  function playFromStart() {
+    setPlayIndex(0);
+    setPlaying(true);
+  }
+  function handleEnded() {
+    if (playIndex + 1 < playableScenes.length) setPlayIndex((i) => i + 1);
+    else {
+      setPlaying(false);
+      setPlayIndex(0);
+    }
+  }
+  useEffect(() => {
+    if (playing && videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  }, [playing, playIndex]);
+
+  const completedScenes = detail?.scenes.filter((s) => s.state === "completed").length ?? 0;
+  const totalScenes = detail?.scenes.length ?? 0;
+  const activeStep = !detail ? 0 : detail.project.state === "draft" ? 0 : completedScenes < totalScenes ? 1 + (completedScenes > 0 ? 1 : 0) : PIPELINE_STEPS.length - 1;
+  const faceAssetId = detail?.project.digital_human_id ? faceByHuman.get(detail.project.digital_human_id) : undefined;
+
+  return (
+    <div className="content-stack">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && projects.length > 0 && (
+        <section className="panel">
+          <div className="chip-toggle-row">
+            {projects.map((p) => (
+              <button key={p.id} type="button" className={`chip-toggle${selectedId === p.id ? " active" : ""}`} onClick={() => setSelectedId(p.id)}>
+                {p.title}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(!selectedId || !detail) && (
+        <section className="panel scene-editor" ref={createFormRef}>
+          <PanelTitle title={projects.length === 0 ? "Create your first project" : "New project"} eyebrow="Real script-to-video generation" />
+          <form onSubmit={createProject}>
+            <label className="script-field">
+              Title
+              <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="e.g. Customer Service Essentials" />
+            </label>
+            <label className="script-field">
+              Presenter script
+              <textarea value={formScript} onChange={(e) => setFormScript(e.target.value)} />
+              <span>{formScript.length} characters · one scene per paragraph, blank-line separated</span>
+            </label>
+            <div className="form-grid two">
+              <label>
+                Presenter
+                <select value={formHumanId} onChange={(e) => setFormHumanId(e.target.value)}>
+                  <option value="">No VowHuman (audio-only)</option>
+                  {humansList.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Voice
+                <select value={formVoiceId} onChange={(e) => setFormVoiceId(e.target.value)}>
+                  <option value="">Choose a voice…</option>
+                  {voicesList.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Output language
+                <input value={formLanguage} onChange={(e) => setFormLanguage(e.target.value)} />
+              </label>
+              <label>
+                Aspect ratio
+                <select value={formAspect} onChange={(e) => setFormAspect(e.target.value)}>
+                  {ASPECT_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </label>
+            </div>
+            <button className="primary-button render-button" type="submit" disabled={creating || !formTitle.trim() || !formScript.trim()}>
+              {creating ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />} {creating ? "Creating…" : "Create project"}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {detail && (
+        <section className="presenter-workspace">
+          <div className="panel scene-editor">
+            <PanelTitle
+              title={detail.project.title}
+              eyebrow={[detail.project.course, detail.project.module, detail.project.lesson].filter(Boolean).join(" · ") || "Presenter project"}
+              action={<StatusPill tone={presenterStateLabel(detail.project.state).tone}>{presenterStateLabel(detail.project.state).label}</StatusPill>}
+            />
+            <label className="script-field">
+              Presenter script
+              <textarea
+                value={detail.project.script}
+                readOnly={detail.project.state !== "draft"}
+                onChange={(e) => setDetail({ ...detail, project: { ...detail.project, script: e.target.value } })}
+                onBlur={async (e) => {
+                  if (detail.project.state !== "draft" || e.target.value.trim() === detail.project.script.trim()) return;
+                  await fetch(`/api/v1/presenter-projects/${detail.project.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ script: e.target.value }) });
+                  await refreshDetail(detail.project.id);
+                  await refresh();
+                }}
+              />
+              <span>{detail.scenes.length} scene{detail.scenes.length === 1 ? "" : "s"} · {detail.project.state === "draft" ? "editable — leaves the field to re-split scenes" : "locked once generation has started"}</span>
+            </label>
+            <div className="pipeline-strip">
+              {PIPELINE_STEPS.map((step, index) => <div key={step} className={index <= activeStep ? "active" : ""}><span>{index + 1}</span><small>{step}</small></div>)}
+            </div>
+            {genProgress && <p className="panel-note">Generating scene {genProgress.done + 1} of {genProgress.total}…</p>}
+            <div className="editor-actions">
+              <button className="primary-button render-button" onClick={generate} disabled={generating || !detail.project.voice_id || completedScenes === totalScenes}>
+                {generating ? <RefreshCw className="spin" size={17} /> : <WandSparkles size={17} />}
+                {generating ? "Generating…" : completedScenes === totalScenes && totalScenes > 0 ? "Fully generated" : "Generate preview"}
+              </button>
+              <button className="plain-button" type="button" onClick={() => deleteProject(detail.project.id)}><Trash2 size={15} />Delete project</button>
+            </div>
+            {!detail.project.voice_id && <p className="panel-note">Assign a voice to this project before generating.</p>}
+          </div>
+
+          <div className="presenter-preview">
+            <div className={`preview-stage preview-${detail.project.aspect_ratio.replace(":", "")}`}>
+              {faceAssetId && <Image src={`/api/v1/faces/${faceAssetId}/image`} alt="" fill sizes="480px" />}
+              {playing && currentScene && (
+                <video
+                  ref={videoRef}
+                  className={currentScene.output_kind === "scene-clip" ? "scene-video visible" : "scene-video hidden"}
+                  src={`/api/v1/generated-videos/${currentScene.generated_video_id}/media`}
+                  onEnded={handleEnded}
+                  playsInline
+                />
+              )}
+              <div className="preview-scrim" />
+              <span className="preview-label"><Sparkles size={13} />AI-generated presenter</span>
+              {playing && currentScene && <div className="preview-caption">{currentScene.script}</div>}
+              {!playing && (
+                <button className="present-play" aria-label={playableScenes.length === 0 ? "Nothing rendered yet" : "Play preview"} onClick={playFromStart} disabled={playableScenes.length === 0}>
+                  {playableScenes.length === 0 ? <CircleAlert size={25} /> : <Play size={25} fill="currentColor" />}
+                </button>
+              )}
+            </div>
+            <div className="preview-meta">
+              <div><span>OUTPUT</span><strong>{detail.project.aspect_ratio} · {playableScenes.some((s) => s.output_kind === "scene-clip") ? "lip-synced" : "audio"}</strong></div>
+              <div><span>SCENES</span><strong>{completedScenes} / {totalScenes} rendered</strong></div>
+              <div><span>PREVIEW</span><strong>{playableScenes.length > 0 ? "Ready to play" : "Not rendered"}</strong></div>
+            </div>
+            <div className="truth-card">
+              <CircleAlert size={18} />
+              <p>
+                <strong>Real narration and per-scene lip-synced rendering</strong>, played back scene-by-scene right here — every clip above is a genuine generated file, not a placeholder. A single downloadable MP4 export (scene concatenation, burned-in captions) isn&rsquo;t built yet; this plays the real scenes back to back instead.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 type RealApplication = { id: string; name: string; slug: string; status: string; created_at: string; settings?: { allowed_embed_origins?: string[] } | null };

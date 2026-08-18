@@ -4,11 +4,11 @@ import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
-import { EMBEDDING_MODEL, chatComplete, embedBatch } from "@/lib/openai";
+import { EMBEDDING_MODEL, chatComplete, embedBatch, synthesizeSpeech } from "@/lib/openai";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 import { mintEmbedToken } from "@/lib/embedToken";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -75,6 +75,48 @@ function slugToUuid(slug: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Presenter Studio: a script becomes one scene per paragraph (blank-line separated),
+// or the whole script as a single scene if the author never broke it up.
+function splitScriptIntoScenes(script: string): string[] {
+  const paragraphs = script.trim().split(/\n\s*\n+/).map((p) => p.trim()).filter(Boolean);
+  return paragraphs.length > 0 ? paragraphs : [script.trim()];
+}
+
+// Same words-per-second formula the old mock UI already used for its "~X sec"
+// estimate — kept as the upfront planning estimate; real playback duration comes
+// from the actual rendered/synthesized media once a scene finishes generating.
+function estimateSceneDurationMs(text: string): number {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  return Math.max(1000, Math.round((words / 2.3) * 1000));
+}
+
+// Minimal RIFF/WAVE header parse (no library) — real duration from the fmt chunk's
+// byte rate and the data chunk's size, not another estimate, for whatever OpenAI's
+// TTS endpoint actually returned. Confirmed live against a real response: OpenAI
+// streams this wav and writes the data chunk's declared size as 0xFFFFFFFF ("unknown,
+// read to EOF" — a real, if unusual, RIFF convention for streamed output), not the
+// true byte count — trusting that field literally produced a multi-hour "duration"
+// from a five-second clip. The real size is just whatever's left in the buffer.
+function wavDurationMs(buffer: Buffer): number | null {
+  if (buffer.length < 44 || buffer.toString("ascii", 0, 4) !== "RIFF" || buffer.toString("ascii", 8, 12) !== "WAVE") return null;
+  let offset = 12;
+  let byteRate: number | null = null;
+  let dataSize: number | null = null;
+  while (offset + 8 <= buffer.length) {
+    const chunkId = buffer.toString("ascii", offset, offset + 4);
+    const declaredChunkSize = buffer.readUInt32LE(offset + 4);
+    if (chunkId === "fmt " && offset + 8 + 16 <= buffer.length) {
+      byteRate = buffer.readUInt32LE(offset + 8 + 8);
+    } else if (chunkId === "data") {
+      dataSize = declaredChunkSize === 0xffffffff ? buffer.length - (offset + 8) : declaredChunkSize;
+      break; // Size-unknown data chunks are always last — nothing meaningful follows.
+    }
+    offset += 8 + declaredChunkSize + (declaredChunkSize % 2);
+  }
+  if (!byteRate || !dataSize) return null;
+  return Math.round((dataSize / byteRate) * 1000);
+}
+
 // Fixed public-demo organisation. Unauthenticated demo traffic (no end-user account
 // system exists yet) is scoped to this one organisation id, which must be bound to
 // VOWHUMANS_SERVICE_API_KEY in the gateway's VOWHUMANS_SERVICE_API_KEYS registry.
@@ -105,28 +147,64 @@ async function proxyToGateway(path: string, body: unknown): Promise<{ status: nu
   }
 }
 
-type GatewayHealth = { gateway_reachable: boolean; realtime_configured: boolean; avatar_configured: boolean };
+type GatewayHealth = {
+  gateway_reachable: boolean;
+  avatar_configured: boolean;
+  realtime_configured: boolean;
+  // False whenever REALTIME_AGENT_HEALTH_URL isn't set (or unreachable) — lets
+  // the UI say "unknown" instead of a false "not configured". See the long
+  // comment below for why this can't just be read off the gateway itself.
+  realtime_check_available: boolean;
+};
 
-// Unauthenticated GET on the gateway (services/api-gateway/main.py's health()) — a
-// short timeout is correct here, unlike proxyToGateway's 40s: this only drives a
-// status panel, so a slow-to-wake free-tier gateway should read as "not reachable
-// yet" rather than hang the whole live-sessions response waiting on it.
+// Two separate Railway services matter here (docs/LIVE_VOICE_DEPLOYMENT.md):
+// api-gateway (mints tokens — its own ENABLE_AVATAR_PARTICIPANT genuinely
+// controls its own behavior in create_livekit_token(), so reading it off the
+// gateway is accurate) and realtime-agent-worker, the actual voice bridge,
+// deliberately deployed with no public network at all (outbound-only, to
+// LiveKit) — it can never be pinged directly. realtime-agent-health is a
+// separate, publicly-reachable companion service (services/realtime-agent/
+// main.py) built for exactly this gap; its /health reports whether
+// ENABLE_OPENAI_REALTIME + OPENAI_API_KEY are present in ITS OWN environment,
+// which is only a true proxy for the worker's config if the operator also
+// mirrors those two vars onto it (documented in
+// docs/LIVE_VOICE_DEPLOYMENT.md) — REALTIME_AGENT_HEALTH_URL being unset is
+// the common case today, hence realtime_check_available.
 async function fetchGatewayHealth(): Promise<GatewayHealth> {
-  const baseUrl = process.env.API_GATEWAY_URL;
-  const unreachable: GatewayHealth = { gateway_reachable: false, realtime_configured: false, avatar_configured: false };
-  if (!baseUrl) return unreachable;
-  try {
-    const upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/health`, { signal: AbortSignal.timeout(4000) });
-    if (!upstream.ok) return unreachable;
-    const body = (await upstream.json().catch(() => null)) as { providers?: { realtime?: string; avatar?: string } } | null;
-    return {
-      gateway_reachable: true,
-      realtime_configured: body?.providers?.realtime === "configured",
-      avatar_configured: body?.providers?.avatar === "configured",
-    };
-  } catch {
-    return unreachable;
+  const gatewayBaseUrl = process.env.API_GATEWAY_URL;
+  const realtimeHealthUrl = process.env.REALTIME_AGENT_HEALTH_URL;
+
+  let gatewayReachable = false;
+  let avatarConfigured = false;
+  if (gatewayBaseUrl) {
+    try {
+      const upstream = await fetch(`${gatewayBaseUrl.replace(/\/$/, "")}/api/v1/health`, { signal: AbortSignal.timeout(4000) });
+      if (upstream.ok) {
+        const body = (await upstream.json().catch(() => null)) as { providers?: { avatar?: string } } | null;
+        gatewayReachable = true;
+        avatarConfigured = body?.providers?.avatar === "configured";
+      }
+    } catch {
+      // Not reachable — gatewayReachable stays false.
+    }
   }
+
+  let realtimeConfigured = false;
+  let realtimeCheckAvailable = false;
+  if (realtimeHealthUrl) {
+    try {
+      const upstream = await fetch(`${realtimeHealthUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(4000) });
+      if (upstream.ok) {
+        const body = (await upstream.json().catch(() => null)) as { provider_health?: { healthy?: boolean } } | null;
+        realtimeCheckAvailable = true;
+        realtimeConfigured = Boolean(body?.provider_health?.healthy);
+      }
+    } catch {
+      // Not reachable — realtimeCheckAvailable stays false.
+    }
+  }
+
+  return { gateway_reachable: gatewayReachable, avatar_configured: avatarConfigured, realtime_configured: realtimeConfigured, realtime_check_available: realtimeCheckAvailable };
 }
 
 // Records why an ingestion attempt didn't finish, using the already-existing (and
@@ -495,6 +573,53 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
       health,
     });
+  }
+
+  if (resource === "presenter-projects" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT pp.id, pp.title, pp.course, pp.module, pp.lesson, pp.digital_human_id, dh.name AS digital_human_name,
+        pp.voice_id, v.name AS voice_name, pp.output_language, pp.aspect_ratio, pp.state, pp.created_at
+      FROM presenter_projects pp
+      LEFT JOIN digital_humans dh ON dh.id = pp.digital_human_id
+      LEFT JOIN voices v ON v.id = pp.voice_id
+      WHERE pp.organisation_id = ${organisationId}
+      ORDER BY pp.created_at DESC
+    `;
+    return response({ items: rows });
+  }
+
+  if (resource === "presenter-projects" && route[1] && !route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [project] = await sql`
+      SELECT pp.*, dh.name AS digital_human_name, v.name AS voice_name
+      FROM presenter_projects pp
+      LEFT JOIN digital_humans dh ON dh.id = pp.digital_human_id
+      LEFT JOIN voices v ON v.id = pp.voice_id
+      WHERE pp.id = ${route[1]} AND pp.organisation_id = ${organisationId}
+    `;
+    if (!project) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const scenes = await sql`
+      SELECT ps.id, ps.ordinal, ps.script, ps.duration_ms, ps.state,
+        gv.id AS generated_video_id, gv.output_kind, gv.duration_ms AS render_duration_ms, gv.state AS render_state, gv.failure_reason
+      FROM presenter_scenes ps
+      LEFT JOIN generated_videos gv ON gv.scene_id = ps.id
+      WHERE ps.project_id = ${route[1]} AND ps.organisation_id = ${organisationId}
+      ORDER BY ps.ordinal
+    `;
+    return response({ project, scenes });
+  }
+
+  if (resource === "generated-videos" && route[1] && route[2] === "media") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [video] = await sql<{ object_key: string | null }[]>`SELECT object_key FROM generated_videos WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!video?.object_key) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const [blob] = await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${video.object_key} AND organisation_id = ${organisationId}`;
+    if (!blob) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return new NextResponse(new Uint8Array(blob.data), { headers: { "content-type": blob.mime_type, "cache-control": "private, max-age=3600" } });
   }
 
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
@@ -986,6 +1111,171 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { recorded: true }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
+  if (resource === "presenter-projects" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const user = await requireUser(request);
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    const script = typeof body.script === "string" ? body.script.trim() : "";
+    if (!title || !script) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the project a title and a script." }, { status: 422 });
+    }
+    const digitalHumanId = typeof body.digital_human_id === "string" && body.digital_human_id ? body.digital_human_id : null;
+    const voiceId = typeof body.voice_id === "string" && body.voice_id ? body.voice_id : null;
+    const outputLanguage = typeof body.output_language === "string" && body.output_language.trim() ? body.output_language.trim() : "English (South Africa)";
+    const aspectRatio = typeof body.aspect_ratio === "string" && ["16:9", "9:16", "1:1", "audio"].includes(body.aspect_ratio) ? body.aspect_ratio : "16:9";
+    const course = typeof body.course === "string" && body.course.trim() ? body.course.trim() : null;
+    const projectModule = typeof body.module === "string" && body.module.trim() ? body.module.trim() : null;
+    const lesson = typeof body.lesson === "string" && body.lesson.trim() ? body.lesson.trim() : null;
+
+    const splitScenes = splitScriptIntoScenes(script);
+    const result = await sql.begin(async (tx) => {
+      const [project] = await tx`
+        INSERT INTO presenter_projects (organisation_id, title, course, module, lesson, script, digital_human_id, voice_id, output_language, aspect_ratio, state, created_by)
+        VALUES (${organisationId}, ${title}, ${course}, ${projectModule}, ${lesson}, ${script}, ${digitalHumanId}, ${voiceId}, ${outputLanguage}, ${aspectRatio}, 'draft', ${user?.id ?? null})
+        RETURNING *
+      `;
+      const scenes = [];
+      for (let i = 0; i < splitScenes.length; i += 1) {
+        const [scene] = await tx`
+          INSERT INTO presenter_scenes (organisation_id, project_id, ordinal, script, duration_ms, state)
+          VALUES (${organisationId}, ${project.id}, ${i}, ${splitScenes[i]}, ${estimateSceneDurationMs(splitScenes[i])}, 'draft')
+          RETURNING *
+        `;
+        scenes.push(scene);
+      }
+      return { project, scenes };
+    });
+    return NextResponse.json({ success: true, data: result, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  // The core render step. One scene per call, by design — TTS plus a GPU lip-sync
+  // render comfortably fits inside this route's own maxDuration, but a whole
+  // multi-scene project doing all of that in one request risks exceeding it. The
+  // frontend calls this in a loop until {done: true}, giving real, visible,
+  // incremental progress with no separate job-queue service needed. Re-running it
+  // after a scene fails naturally retries that same scene, since the "next scene"
+  // lookup below is WHERE state != 'completed', not WHERE state = 'draft'.
+  if (resource === "presenter-projects" && route[1] && route[2] === "render-next-scene") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+
+    const [project] = await sql<{ id: string; state: string; digital_human_id: string | null; voice_id: string | null }[]>`
+      SELECT id, state, digital_human_id, voice_id FROM presenter_projects WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+    `;
+    if (!project) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    if (!project.voice_id) {
+      return NextResponse.json({ success: false, code: "VOICE_REQUIRED", message: "Assign a voice to this project before generating." }, { status: 422 });
+    }
+
+    const [nextScene] = await sql<{ id: string; ordinal: number; script: string }[]>`
+      SELECT id, ordinal, script FROM presenter_scenes
+      WHERE project_id = ${route[1]} AND organisation_id = ${organisationId} AND state != 'completed'
+      ORDER BY ordinal LIMIT 1
+    `;
+    if (!nextScene) {
+      await sql`UPDATE presenter_projects SET state = 'preview_ready' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+      return NextResponse.json({ success: true, data: { done: true, project_state: "preview_ready" }, meta: { mode: "live", request_id: randomUUID() } });
+    }
+
+    await sql`UPDATE presenter_scenes SET state = 'processing' WHERE id = ${nextScene.id} AND organisation_id = ${organisationId}`;
+    if (project.state !== "processing") {
+      await sql`UPDATE presenter_projects SET state = 'processing' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    }
+
+    const [voice] = await sql<{ provider_voice_id: string | null }[]>`SELECT provider_voice_id FROM voices WHERE id = ${project.voice_id} AND organisation_id = ${organisationId}`;
+    if (!voice?.provider_voice_id) {
+      await sql`UPDATE presenter_scenes SET state = 'failed' WHERE id = ${nextScene.id} AND organisation_id = ${organisationId}`;
+      await sql`UPDATE presenter_projects SET state = 'failed' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+      return NextResponse.json({ success: false, code: "VOICE_NOT_CONFIGURED", message: "This project's voice is not usable." }, { status: 422 });
+    }
+
+    const speech = await synthesizeSpeech(nextScene.script, voice.provider_voice_id);
+    if (!speech.ok) {
+      await sql`UPDATE presenter_scenes SET state = 'failed' WHERE id = ${nextScene.id} AND organisation_id = ${organisationId}`;
+      await sql`UPDATE presenter_projects SET state = 'failed' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+      await sql`
+        INSERT INTO generated_videos (organisation_id, project_id, scene_id, render_provider, output_kind, state, failure_reason)
+        VALUES (${organisationId}, ${route[1]}, ${nextScene.id}, 'openai-tts', 'scene-audio', 'failed', ${speech.message.slice(0, 500)})
+      `;
+      return NextResponse.json({ success: false, code: speech.code, message: speech.message }, { status: speech.status });
+    }
+
+    let finalBytes: Buffer = speech.data;
+    let mimeType = "audio/wav";
+    let outputKind: "scene-clip" | "scene-audio" = "scene-audio";
+    let renderProvider = "openai-tts";
+    let fallbackNote: string | null = null;
+
+    const avatarWorkerUrl = process.env.AVATAR_WORKER_URL;
+    const internalKey = process.env.VOWHUMANS_INTERNAL_KEY;
+    if (project.digital_human_id && avatarWorkerUrl && internalKey) {
+      const [face] = await sql<{ object_key: string }[]>`
+        SELECT fa.object_key FROM human_face_assignments hfa
+        JOIN face_assets fa ON fa.id = hfa.face_asset_id
+        WHERE hfa.organisation_id = ${organisationId} AND hfa.human_slug = ${project.digital_human_id}
+      `;
+      const blob = face
+        ? (await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${face.object_key} AND organisation_id = ${organisationId}`)[0]
+        : undefined;
+      if (blob) {
+        try {
+          const prepareForm = new FormData();
+          prepareForm.append("image_file", new Blob([new Uint8Array(blob.data)], { type: blob.mime_type }), "face.png");
+          const prepareRes = await fetch(`${avatarWorkerUrl.replace(/\/$/, "")}/internal/v1/avatars`, {
+            method: "POST",
+            headers: { "x-internal-key": internalKey },
+            body: prepareForm,
+            signal: AbortSignal.timeout(30000),
+          });
+          if (prepareRes.ok) {
+            const { avatar_id: avatarId } = (await prepareRes.json()) as { avatar_id: string };
+            const renderForm = new FormData();
+            renderForm.append("avatar_id", avatarId);
+            renderForm.append("audio_file", new Blob([new Uint8Array(speech.data)], { type: "audio/wav" }), "narration.wav");
+            const renderRes = await fetch(`${avatarWorkerUrl.replace(/\/$/, "")}/internal/v1/render`, {
+              method: "POST",
+              headers: { "x-internal-key": internalKey },
+              body: renderForm,
+              signal: AbortSignal.timeout(90000),
+            });
+            // Best-effort release regardless of render outcome — mirrors
+            // avatar-participant's own cleanup, never blocks the response on it.
+            fetch(`${avatarWorkerUrl.replace(/\/$/, "")}/internal/v1/avatars/${avatarId}`, { method: "DELETE", headers: { "x-internal-key": internalKey } }).catch(() => {});
+            if (renderRes.ok) {
+              finalBytes = Buffer.from(await renderRes.arrayBuffer());
+              mimeType = "video/mp4";
+              outputKind = "scene-clip";
+              renderProvider = "openai-tts+musetalk";
+            } else {
+              fallbackNote = `Avatar rendering unavailable (${renderRes.status}) — used audio-only fallback.`;
+            }
+          } else {
+            fallbackNote = `Avatar rendering unavailable (${prepareRes.status}) — used audio-only fallback.`;
+          }
+        } catch {
+          fallbackNote = "Avatar rendering unreachable — used audio-only fallback.";
+        }
+      }
+    }
+
+    const durationMs = wavDurationMs(speech.data) ?? estimateSceneDurationMs(nextScene.script);
+    const objectKey = `presenter-scene-${nextScene.id}-${randomUUID().slice(0, 8)}`;
+    await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, ${mimeType}, ${finalBytes}, ${finalBytes.length})`;
+    const [generatedVideo] = await sql`
+      INSERT INTO generated_videos (organisation_id, project_id, scene_id, render_provider, output_kind, object_key, duration_ms, state, completed_at)
+      VALUES (${organisationId}, ${route[1]}, ${nextScene.id}, ${renderProvider}, ${outputKind}, ${objectKey}, ${durationMs}, 'completed', now())
+      RETURNING id, output_kind, object_key, duration_ms, state
+    `;
+    await sql`UPDATE presenter_scenes SET state = 'completed' WHERE id = ${nextScene.id} AND organisation_id = ${organisationId}`;
+
+    return NextResponse.json({
+      success: true,
+      data: { done: false, scene_id: nextScene.id, ordinal: nextScene.ordinal, generated_video: generatedVideo, fallback_note: fallbackNote },
+      meta: { mode: "live", request_id: randomUUID() },
+    }, { status: 201 });
+  }
+
   // Generates the article text synchronously and returns it without writing anything —
   // lets the user review it in the UI before committing. Also keeps the slow chatComplete
   // call out of the after()-deferred background job entirely, so that job (now just
@@ -1266,6 +1556,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (route[0] === "voices" && route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    // presenter_projects.voice_id is a real FK with no cascade — same SET NULL
+    // reasoning as digital_human_id below: a project's script and already-rendered
+    // scenes are independent artifacts once generated.
+    await sql`UPDATE presenter_projects SET voice_id = NULL WHERE organisation_id = ${organisationId} AND voice_id = ${route[1]}`;
     const [deleted] = await sql<{ settings: unknown }[]>`
       DELETE FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING settings
     `;
@@ -1293,15 +1587,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     // human_slug in the 5 assignment tables is plain text, not a FK to digital_humans —
     // nothing cascades automatically, so clean each one up explicitly before dropping
-    // the row itself. (sessions.digital_human_id and presenter_projects.digital_human_id
-    // do have a real FK with no cascade, but neither table is ever written to by this
-    // app yet, so they can't block this delete today — revisit if that changes.)
+    // the row itself. presenter_projects.digital_human_id IS a real FK with no cascade
+    // and, now that Presenter Studio actually writes to it, can genuinely block this
+    // delete — SET NULL instead of failing: a project's script and already-rendered
+    // scenes are independent artifacts once generated, same reasoning digital_human_
+    // applications already applies by pinning its own persona_version_id rather than
+    // staying live-linked. (sessions.digital_human_id is NOT NULL with no cascade
+    // either, but nothing writes real rows there yet, so it still can't block this.)
     const deleted = await sql.begin(async (tx) => {
       await tx`DELETE FROM human_voice_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
       await tx`DELETE FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
       await tx`DELETE FROM human_gesture_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
       await tx`DELETE FROM human_knowledge_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
       await tx`DELETE FROM human_persona_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]}`;
+      await tx`UPDATE presenter_projects SET digital_human_id = NULL WHERE organisation_id = ${organisationId} AND digital_human_id = ${route[1]}`;
       const [human] = await tx`DELETE FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
       return Boolean(human);
     });
@@ -1342,6 +1641,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const [deleted] = await sql`DELETE FROM guardrails WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
+  if (route[0] === "presenter-projects" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    // generated_videos.project_id has no ON DELETE CASCADE (unlike presenter_scenes,
+    // which does) — delete its rows and their media_blobs explicitly first.
+    const videoRows = await sql<{ object_key: string | null }[]>`
+      SELECT object_key FROM generated_videos WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}
+    `;
+    await sql`DELETE FROM generated_videos WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}`;
+    for (const row of videoRows) {
+      if (row.object_key) await sql`DELETE FROM media_blobs WHERE object_key = ${row.object_key} AND organisation_id = ${organisationId}`;
+    }
+    const [deleted] = await sql`DELETE FROM presenter_projects WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
   if (route[0] !== "sessions") return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
   return response({ id: route[1] ?? null, deletion: "mock-queued", private_content_included: false }, 202);
 }
@@ -1380,6 +1694,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     `;
     if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "presenter-projects" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const [current] = await sql<{ state: string }[]>`SELECT state FROM presenter_projects WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!current) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    if (current.state !== "draft") {
+      return NextResponse.json({ success: false, code: "CONFLICT", message: "Only draft projects can be edited — delete and start a new one instead." }, { status: 409 });
+    }
+
+    const newScript = typeof body.script === "string" && body.script.trim() ? body.script.trim() : null;
+    const aspectRatio = typeof body.aspect_ratio === "string" && ["16:9", "9:16", "1:1", "audio"].includes(body.aspect_ratio) ? body.aspect_ratio : null;
+
+    const result = await sql.begin(async (tx) => {
+      const [project] = await tx`
+        UPDATE presenter_projects SET
+          title = COALESCE(${typeof body.title === "string" && body.title.trim() ? body.title.trim() : null}, title),
+          course = COALESCE(${typeof body.course === "string" ? body.course.trim() || null : null}, course),
+          module = COALESCE(${typeof body.module === "string" ? body.module.trim() || null : null}, module),
+          lesson = COALESCE(${typeof body.lesson === "string" ? body.lesson.trim() || null : null}, lesson),
+          script = COALESCE(${newScript}, script),
+          digital_human_id = COALESCE(${typeof body.digital_human_id === "string" ? body.digital_human_id : null}, digital_human_id),
+          voice_id = COALESCE(${typeof body.voice_id === "string" ? body.voice_id : null}, voice_id),
+          output_language = COALESCE(${typeof body.output_language === "string" && body.output_language.trim() ? body.output_language.trim() : null}, output_language),
+          aspect_ratio = COALESCE(${aspectRatio}, aspect_ratio)
+        WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+        RETURNING *
+      `;
+      // Editing the script re-splits scenes from scratch — safe only while still
+      // draft (enforced above), since nothing has rendered against the old ones yet.
+      const scenes: unknown[] = [];
+      if (newScript) {
+        await tx`DELETE FROM presenter_scenes WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}`;
+        const splitScenes = splitScriptIntoScenes(newScript);
+        for (let i = 0; i < splitScenes.length; i += 1) {
+          const [scene] = await tx`
+            INSERT INTO presenter_scenes (organisation_id, project_id, ordinal, script, duration_ms, state)
+            VALUES (${organisationId}, ${route[1]}, ${i}, ${splitScenes[i]}, ${estimateSceneDurationMs(splitScenes[i])}, 'draft')
+            RETURNING *
+          `;
+          scenes.push(scene);
+        }
+      }
+      return { project, scenes };
+    });
+    return NextResponse.json({ success: true, data: result, meta: { mode: "live", request_id: randomUUID() } });
   }
 
   if (route[0] === "applications" && route[1]) {

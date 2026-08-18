@@ -54,7 +54,16 @@ covers the default (health API) mode for that directory.
   mode alongside the two above, used only by studio-web's own public embed routes,
   never by the browser or the PHP adapter directly.
 
-**`realtime-agent-health`:** no required env vars beyond defaults.
+**`realtime-agent-health`:** no required env vars for the service itself to run,
+but Studio's Live Sessions page (`GET /api/v1/live-sessions`) polls this
+service's `/health` to show whether the realtime voice provider is actually
+configured — that check is only meaningful if you also set here the same two
+values as `realtime-agent-worker` below:
+- `ENABLE_OPENAI_REALTIME` = `true`.
+- `OPENAI_API_KEY` = same value as your local `.env.local`.
+
+Without these two, Studio's health panel shows "Realtime: unknown" rather than
+a wrong yes/no — still honest, just less useful.
 
 **`realtime-agent-worker`:**
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` = same values as your local
@@ -103,6 +112,9 @@ Three places need the real URL and matching keys:
    - `VOWHUMANS_EMBED_TOKEN_SECRET` = a freshly generated random value, also set on
      `api-gateway` above (must match exactly on both sides — this one is never
      shared with the PHP adapter or any other caller).
+   - `REALTIME_AGENT_HEALTH_URL` = the Railway URL for `realtime-agent-health`
+     (a different service than `api-gateway` — see step 1's table). Optional;
+     only powers the "Realtime" row on Studio's Live Sessions health panel.
 
 3. **Local `.env.local`** (optional, only if you want to test against the real
    deployed backend from `npm run dev` instead of the mock): set `API_GATEWAY_URL`
