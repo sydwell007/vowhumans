@@ -1403,14 +1403,7 @@ function Personas() {
                     }}
                   >
                     <option value="">Not assigned</option>
-                    {realHumans.length > 0 && (
-                      <optgroup label="Digital humans">
-                        {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
-                      </optgroup>
-                    )}
-                    <optgroup label="Demo catalogue">
-                      {humans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
-                    </optgroup>
+                    {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}</option>)}
                   </select>
                 </label>
                 <label className="full">Knowledge bases
@@ -2767,17 +2760,18 @@ function FaceLibrary() {
               <div className="face-asset-preview"><Image src={`/api/v1/faces/${face.id}/image`} alt="" fill sizes="200px" unoptimized /></div>
               <div className="asset-detail"><span>{face.media_type}</span></div>
               <label className="full">Assign to digital human
+                {/* Real digital humans only — presenter-projects, live sessions and
+                    the digital-human profile page all join face assignments on a real
+                    digital_humans.id, so a catalogue-slug assignment (e.g. the static
+                    "Thandi Mokoena" demo entry, id "thandi-mokoena") can never match a
+                    real digital human of the same display name and silently goes
+                    nowhere — no feature reads it. Listing both under identical names
+                    with no visual distinction was a guaranteed mis-pick. */}
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignFace(slug, face.id); }} disabled={busyId === face.id}>
                   <option value="">Not assigned</option>
-                  {realHumans.length > 0 && (
-                    <optgroup label="Digital humans">
-                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
-                    </optgroup>
-                  )}
-                  <optgroup label="Demo catalogue">
-                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
-                  </optgroup>
+                  {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.face_asset_id !== face.id) ? ' (has a face)' : ''}</option>)}
                 </select>
+                {realHumans.length === 0 && <small>Create a digital human first, then assign this face to it.</small>}
               </label>
             </article>
           );
@@ -2890,14 +2884,7 @@ function GestureLibrary() {
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignProfile(slug, profile.id); }} disabled={busyId === profile.id}>
                   <option value="">Not assigned</option>
-                  {realHumans.length > 0 && (
-                    <optgroup label="Digital humans">
-                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
-                    </optgroup>
-                  )}
-                  <optgroup label="Demo catalogue">
-                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
-                  </optgroup>
+                  {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.gesture_profile_id !== profile.id) ? ' (has a profile)' : ''}</option>)}
                 </select>
               </label>
             </article>
@@ -3064,14 +3051,7 @@ function VoiceLibrary() {
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignVoice(slug, voice.id); }} disabled={busyId === voice.id}>
                   <option value="">Not assigned</option>
-                  {realHumans.length > 0 && (
-                    <optgroup label="Digital humans">
-                      {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
-                    </optgroup>
-                  )}
-                  <optgroup label="Demo catalogue">
-                    {humans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
-                  </optgroup>
+                  {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
                 </select>
               </label>
             </article>
