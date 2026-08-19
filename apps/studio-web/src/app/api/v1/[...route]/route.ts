@@ -1209,6 +1209,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const avatarWorkerUrl = process.env.AVATAR_WORKER_URL;
     const internalKey = process.env.VOWHUMANS_INTERNAL_KEY;
+    if (project.digital_human_id && (!avatarWorkerUrl || !internalKey)) {
+      fallbackNote = "Avatar rendering isn't configured in this environment — used audio-only fallback.";
+    }
     if (project.digital_human_id && avatarWorkerUrl && internalKey) {
       const [face] = await sql<{ object_key: string }[]>`
         SELECT fa.object_key FROM human_face_assignments hfa
@@ -1218,6 +1221,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const blob = face
         ? (await sql<{ data: Buffer; mime_type: string }[]>`SELECT data, mime_type FROM media_blobs WHERE object_key = ${face.object_key} AND organisation_id = ${organisationId}`)[0]
         : undefined;
+      if (!blob) {
+        fallbackNote = "No face image is assigned to this VowHuman yet — used audio-only fallback.";
+      }
       if (blob) {
         try {
           const prepareForm = new FormData();
@@ -1262,9 +1268,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const durationMs = wavDurationMs(speech.data) ?? estimateSceneDurationMs(nextScene.script);
     const objectKey = `presenter-scene-${nextScene.id}-${randomUUID().slice(0, 8)}`;
     await sql`INSERT INTO media_blobs (object_key, organisation_id, mime_type, data, size_bytes) VALUES (${objectKey}, ${organisationId}, ${mimeType}, ${finalBytes}, ${finalBytes.length})`;
+    // failure_reason doubles as a plain explanatory note here — this row isn't a
+    // failure (state is 'completed'), but when outputKind stayed 'scene-audio' the
+    // reason why is worth keeping around instead of only ever existing in this one
+    // response, otherwise there's no way to see it again once the generate() call
+    // that produced it is over.
     const [generatedVideo] = await sql`
-      INSERT INTO generated_videos (organisation_id, project_id, scene_id, render_provider, output_kind, object_key, duration_ms, state, completed_at)
-      VALUES (${organisationId}, ${route[1]}, ${nextScene.id}, ${renderProvider}, ${outputKind}, ${objectKey}, ${durationMs}, 'completed', now())
+      INSERT INTO generated_videos (organisation_id, project_id, scene_id, render_provider, output_kind, object_key, duration_ms, state, completed_at, failure_reason)
+      VALUES (${organisationId}, ${route[1]}, ${nextScene.id}, ${renderProvider}, ${outputKind}, ${objectKey}, ${durationMs}, 'completed', now(), ${fallbackNote})
       RETURNING id, output_kind, object_key, duration_ms, state
     `;
     await sql`UPDATE presenter_scenes SET state = 'completed' WHERE id = ${nextScene.id} AND organisation_id = ${organisationId}`;

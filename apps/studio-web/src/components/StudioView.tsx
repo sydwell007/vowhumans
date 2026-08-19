@@ -2480,6 +2480,16 @@ function PresenterStudio() {
               <div><span>SCENES</span><strong>{completedScenes} / {totalScenes} rendered</strong></div>
               <div><span>PREVIEW</span><strong>{playableScenes.length > 0 ? "Ready to play" : "Not rendered"}</strong></div>
             </div>
+            {(() => {
+              const audioOnly = playableScenes.filter((s) => s.output_kind === "scene-audio");
+              if (audioOnly.length === 0 || !detail.project.digital_human_id) return null;
+              const reason = audioOnly.find((s) => s.failure_reason)?.failure_reason;
+              return (
+                <p className="panel-note">
+                  {audioOnly.length}/{playableScenes.length} scene{audioOnly.length === 1 ? "" : "s"} rendered audio-only instead of lip-synced video. {reason || "The digital human may have no face image assigned, or avatar rendering isn't configured in this environment."}
+                </p>
+              );
+            })()}
             <div className="truth-card">
               <CircleAlert size={18} />
               <p>
