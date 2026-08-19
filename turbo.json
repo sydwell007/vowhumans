@@ -25,6 +25,7 @@
         "TURN_*",
         "TTS_*",
         "AVATAR_PROVIDER",
+        "AVATAR_WORKER_URL",
         "GPU_WORKER_*",
         "BILLING_PROVIDER",
         "PAYFAST_*",
