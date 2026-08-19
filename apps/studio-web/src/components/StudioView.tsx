@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AppWindow,
@@ -2162,6 +2163,7 @@ function presenterStateLabel(state: string): { label: string; tone: string } {
 }
 
 function PresenterStudio() {
+  const router = useRouter();
   const [projects, setProjects] = useState<PresenterProjectSummary[]>([]);
   const [humansList, setHumansList] = useState<DigitalHumanSummary[]>([]);
   const [voicesList, setVoicesList] = useState<PresenterVoiceOption[]>([]);
@@ -2220,8 +2222,24 @@ function PresenterStudio() {
       return;
     }
     const res = await fetch(`/api/v1/presenter-projects/${id}`).then((r) => r.json()).catch(() => null);
-    if (res?.success) setDetail(res.data);
-    else setError(res?.message || "Could not load this project. Try again.");
+    if (res?.success) {
+      setDetail(res.data);
+      return;
+    }
+    // A dead/expired session and a since-deleted project both 404-shape their way
+    // to the generic client-side catch below with no res.message (the API only sets
+    // message on validation-style errors) — that produced the same misleading "try
+    // again" text for three unrelated causes. Branch on the real code instead so the
+    // message actually matches what happened.
+    if (res?.code === "UNAUTHENTICATED") {
+      router.push(`/sign-in?next=${encodeURIComponent("/studio/presenter-studio")}`);
+      return;
+    }
+    if (res?.code === "NOT_FOUND") {
+      setError("This project could not be found — it may have been deleted.");
+      return;
+    }
+    setError(res?.message || "Could not load this project. Try again.");
   }
 
   useEffect(() => {
