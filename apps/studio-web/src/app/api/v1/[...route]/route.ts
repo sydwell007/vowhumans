@@ -1287,6 +1287,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }, { status: 201 });
   }
 
+  // Once every scene is 'completed', render-next-scene's own state != 'completed'
+  // filter finds nothing left to do — there was previously no way back from that
+  // short of deleting the whole project and starting over, which is exactly what
+  // fixing a since-corrected gap (e.g. a face assigned after the first render)
+  // would otherwise force. Wipes prior render artifacts and resets scenes back to
+  // 'draft' so the normal render-next-scene loop can pick them up fresh.
+  if (resource === "presenter-projects" && route[1] && route[2] === "regenerate") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [project] = await sql<{ id: string }[]>`SELECT id FROM presenter_projects WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!project) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+
+    const videoRows = await sql<{ object_key: string | null }[]>`
+      SELECT object_key FROM generated_videos WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}
+    `;
+    await sql`DELETE FROM generated_videos WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}`;
+    for (const row of videoRows) {
+      if (row.object_key) await sql`DELETE FROM media_blobs WHERE object_key = ${row.object_key} AND organisation_id = ${organisationId}`;
+    }
+    await sql`UPDATE presenter_scenes SET state = 'draft' WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}`;
+    await sql`UPDATE presenter_projects SET state = 'draft' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    return response({ id: route[1], reset: true });
+  }
+
   // Generates the article text synchronously and returns it without writing anything —
   // lets the user review it in the UI before committing. Also keeps the slow chatComplete
   // call out of the after()-deferred background job entirely, so that job (now just

@@ -2324,6 +2324,26 @@ function PresenterStudio() {
     }
   }
 
+  // Once every scene is completed the render loop above has nothing left to do
+  // (render-next-scene only picks up scenes that aren't 'completed' yet) — so
+  // fixing something after the fact, like assigning a face to the digital human
+  // this project uses, had no way back short of deleting and recreating the whole
+  // project. Wipes the prior render artifacts server-side, then reuses the same
+  // generate() loop against the now-reset scenes.
+  async function regenerate() {
+    if (!detail) return;
+    setGenerating(true);
+    setError(null);
+    const res = await fetch(`/api/v1/presenter-projects/${detail.project.id}/regenerate`, { method: "POST" }).then((r) => r.json()).catch(() => null);
+    if (!res?.success) {
+      setError(res?.message || "Could not reset this project for regeneration.");
+      setGenerating(false);
+      return;
+    }
+    await selectProject(detail.project.id);
+    await generate();
+  }
+
   const playableScenes = detail?.scenes.filter((s) => s.generated_video_id) ?? [];
   const currentScene = playableScenes[playIndex];
 
@@ -2445,9 +2465,9 @@ function PresenterStudio() {
             </div>
             {genProgress && <p className="panel-note">Generating scene {genProgress.done + 1} of {genProgress.total}…</p>}
             <div className="editor-actions">
-              <button className="primary-button render-button" onClick={generate} disabled={generating || !detail.project.voice_id || completedScenes === totalScenes}>
+              <button className="primary-button render-button" onClick={completedScenes === totalScenes && totalScenes > 0 ? regenerate : generate} disabled={generating || !detail.project.voice_id}>
                 {generating ? <RefreshCw className="spin" size={17} /> : <WandSparkles size={17} />}
-                {generating ? "Generating…" : completedScenes === totalScenes && totalScenes > 0 ? "Fully generated" : "Generate preview"}
+                {generating ? "Generating…" : completedScenes === totalScenes && totalScenes > 0 ? "Regenerate" : "Generate preview"}
               </button>
               <button className="plain-button" type="button" onClick={() => deleteProject(detail.project.id)}><Trash2 size={15} />Delete project</button>
             </div>
