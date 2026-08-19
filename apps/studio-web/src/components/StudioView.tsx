@@ -2118,7 +2118,7 @@ function LiveSessions() {
                   {testHumans.map((human) => (
                     <button key={human.id} className="human-pick-card" disabled={!human.ready || callStage === "starting"} onClick={() => startTestCall(human)}>
                       <span className="human-pick-avatar">
-                        {human.faceAssetId ? <Image src={`/api/v1/faces/${human.faceAssetId}/image`} alt="" fill sizes="46px" /> : human.name.slice(0, 2).toUpperCase()}
+                        {human.faceAssetId ? <Image src={`/api/v1/faces/${human.faceAssetId}/image`} alt="" fill sizes="46px" unoptimized /> : human.name.slice(0, 2).toUpperCase()}
                       </span>
                       <b>{human.name}</b>
                       <small>{human.ready ? human.role : "Publish a persona first"}</small>
@@ -2456,7 +2456,7 @@ function PresenterStudio() {
 
           <div className="presenter-preview">
             <div className={`preview-stage preview-${detail.project.aspect_ratio.replace(":", "")}`}>
-              {faceAssetId && <Image src={`/api/v1/faces/${faceAssetId}/image`} alt="" fill sizes="480px" />}
+              {faceAssetId && <Image src={`/api/v1/faces/${faceAssetId}/image`} alt="" fill sizes="480px" unoptimized />}
               {playing && currentScene && (
                 <video
                   ref={videoRef}
