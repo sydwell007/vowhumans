@@ -11,6 +11,7 @@ import {
   FileKey2,
   Fingerprint,
   KeyRound,
+  Languages,
   LibraryBig,
   Radio,
   ScrollText,
@@ -134,6 +135,7 @@ export const navigation = [
     items: [
       { slug: "live-sessions", label: "Live Sessions", icon: Radio },
       { slug: "presenter-studio", label: "Presenter Studio", icon: Video },
+      { slug: "languages", label: "Languages", icon: Languages },
       { slug: "applications", label: "Applications", icon: AppWindow },
       { slug: "usage", label: "Usage", icon: ChartNoAxesCombined },
     ],
@@ -161,6 +163,7 @@ export const pageMeta: Record<string, { eyebrow: string; title: string; descript
   "gesture-profiles": { eyebrow: "Motion with restraint", title: "Gesture Profiles", description: "Define natural blink, gaze and head-movement ranges for each conversation state.", action: "New profile" },
   "live-sessions": { eyebrow: "Realtime operations", title: "Live Sessions", description: "Monitor disclosed conversations, transport health and safe audio-only fallback.", action: "Start test session" },
   "presenter-studio": { eyebrow: "VowHumans Present", title: "Presenter Studio", description: "Turn approved course scripts into reviewable scenes and queued media exports.", action: "New project" },
+  languages: { eyebrow: "Capability registry", title: "Languages", description: "Honest per-language, per-capability status, providers, voices and real test tools — nothing is marked production before it passes the quality gate.", action: "Test & compare" },
   applications: { eyebrow: "GoalVow ecosystem", title: "Applications", description: "Connect one digital human to several products with application-specific Personas.", action: "Connect application" },
   usage: { eyebrow: "Performance + cost", title: "Usage", description: "Track sessions, provider spend, latency and render demand without reading private content.", action: "Export report" },
   "identity-consent": { eyebrow: "Governance before generation", title: "Identity & Consent", description: "Publication stays blocked until the identity owner and every permitted use are approved.", action: "Register identity" },

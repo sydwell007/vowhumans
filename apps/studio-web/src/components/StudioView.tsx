@@ -3352,6 +3352,20 @@ function bestStatusForRow(row: LanguageAdminRow, capability: string): string {
   return relevant.reduce((best, c) => (rank.indexOf(c.status) < rank.indexOf(best) ? c.status : best), "unsupported");
 }
 
+// Standalone Operate-menu page reusing the exact same real, DB-backed content as
+// the Settings -> Languages tab (LanguagesSettingsTab, defined below) — both
+// routes render identically live data, this just gives it its own sidebar entry
+// since it's substantial enough to be worth finding without going through Settings.
+function LanguagesPage() {
+  return (
+    <div className="content-stack">
+      <section className="panel">
+        <LanguagesSettingsTab />
+      </section>
+    </div>
+  );
+}
+
 function LanguagesSettingsTab() {
   const [rows, setRows] = useState<LanguageAdminRow[]>([]);
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
@@ -3572,6 +3586,7 @@ export function StudioView({ section }: { section: string }) {
     case 'webhooks': return <WebhooksPage/>;
     case 'safety': return <Safety/>;
     case 'audit-logs': return <AuditLogs/>;
+    case 'languages': return <LanguagesPage/>;
     case 'settings': return <SettingsPage/>;
     default: return null;
   }
