@@ -46,11 +46,21 @@ import {
   Webhook,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { applications, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 import type { Room } from "livekit-client";
+import {
+  ProductionApiKeys,
+  ProductionAuditLogs,
+  ProductionDashboard,
+  ProductionIdentityConsent,
+  ProductionSafety,
+  ProductionSettings,
+  ProductionUsage,
+  ProductionWebhooks,
+} from "./ProductionControlPlane";
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
@@ -95,6 +105,7 @@ function IconMenuButton({ className, label }: { className: string; label: string
   return <button className={className} aria-label={acted ? `Actions noted for ${label}` : `More actions for ${label}`} onClick={() => setActed(true)}>{acted ? <Check size={18} /> : <MoreHorizontal size={18} />}</button>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function Dashboard() {
   return (
     <div className="content-stack">
@@ -1835,7 +1846,7 @@ function Knowledge() {
               )}
               <label className="full">Assign to VowHumans
                 <div className="chip-toggle-row">
-                  {[...realHumans, ...humans].map((human) => {
+                  {realHumans.map((human) => {
                     const active = assignedHumans.includes(human.id);
                     return (
                       <button type="button" key={human.id} className={`chip-toggle${active ? ' active' : ''}`} onClick={() => toggleAssignment(human.id, base.id, !active)} disabled={busyId === `${human.id}:${base.id}`}>
@@ -1843,6 +1854,7 @@ function Knowledge() {
                       </button>
                     );
                   })}
+                  {realHumans.length === 0 && <span className="panel-note">Create a VowHuman before assigning this knowledge library.</span>}
                 </div>
               </label>
             </article>
@@ -1913,6 +1925,7 @@ function Knowledge() {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function IdentityConsent() {
   const [reviewed, setReviewed] = useState(false);
   return (
@@ -2333,7 +2346,7 @@ function PresenterStudio() {
   const [playIndex, setPlayIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  async function refresh(): Promise<PresenterProjectSummary[]> {
+  const refresh = useCallback(async (): Promise<PresenterProjectSummary[]> => {
     const [projectsRes, humansRes, voicesRes, faceAssignRes] = await Promise.all([
       fetch("/api/v1/presenter-projects").then((r) => r.json()).catch(() => null),
       fetch("/api/v1/digital-humans").then((r) => r.json()).catch(() => null),
@@ -2348,7 +2361,7 @@ function PresenterStudio() {
     }
     setLoaded(true);
     return projectsRes?.success ? (projectsRes.data.items as PresenterProjectSummary[]) : [];
-  }
+  }, []);
 
   // The one place selection changes — always does the real fetch itself rather than
   // leaning on a useEffect keyed off selectedId. That pattern silently no-ops on a
@@ -2356,7 +2369,7 @@ function PresenterStudio() {
   // state value, so the effect never re-fires) — clicking a project whose first load
   // failed for any reason had no way to ever retry. Also surfaces a real error
   // instead of failing silently, unlike the previous version.
-  async function selectProject(id: string | null) {
+  const selectProject = useCallback(async (id: string | null) => {
     setSelectedId(id);
     setPlaying(false);
     setPlayIndex(0);
@@ -2384,7 +2397,7 @@ function PresenterStudio() {
       return;
     }
     setError(res?.message || "Could not load this project. Try again.");
-  }
+  }, [router]);
 
   useEffect(() => {
     async function init() {
@@ -2392,7 +2405,7 @@ function PresenterStudio() {
       if (items[0]) await selectProject(items[0].id);
     }
     init();
-  }, []);
+  }, [refresh, selectProject]);
 
   useEffect(() => {
     function focusCreateForm() {
@@ -2401,7 +2414,7 @@ function PresenterStudio() {
     }
     window.addEventListener("studio:new-presenter-project", focusCreateForm);
     return () => window.removeEventListener("studio:new-presenter-project", focusCreateForm);
-  }, []);
+  }, [selectProject]);
 
   async function createProject(event: React.FormEvent) {
     event.preventDefault();
@@ -2871,6 +2884,7 @@ const usageGrains: { label: string; bars: number[]; steps: string[] }[] = [
   { label: "Daily", bars: [52,60,48,55,71,66,44,59,77,63,70,49], steps: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun','Mon','Tue','Wed','Thu','Fri'] },
 ];
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function Usage() {
   const [grainIndex, setGrainIndex] = useState(0);
   const grain = usageGrains[grainIndex];
@@ -3296,21 +3310,25 @@ function VoiceLibrary() {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function ApiKeys() {
   const [created,setCreated]=useState(false);
   return <div className="content-stack"><section className="security-callout"><span><KeyRound size={27}/></span><div><p className="eyebrow">Hash-only credentials</p><h2>Scoped access, shown once.</h2><p>Raw service keys are never stored or placed in client-side code. Rotate immediately if a key may be exposed.</p></div></section><section className="panel"><PanelTitle title="Service API keys" eyebrow="3 active"/><div className="data-table keys-table"><div className="table-row table-head"><span>Name</span><span>Prefix</span><span>Scopes</span><span>Last used</span><span>Status</span></div>{[['PlugConnect production','vhm_pc_••••8A2F','sessions:create · usage:read-own','4 min ago'],['GoalVow Academies','vhm_ga_••••51BE','sessions:create · renders:create','18 min ago'],['VowLMS sandbox','vhm_vl_••••AA90','sessions:create','3 days ago']].map(row=><div className="table-row" key={row[0]}><span><b>{row[0]}</b></span><span><code>{row[1]}</code></span><span>{row[2]}</span><span>{row[3]}</span><span><StatusPill>Active</StatusPill></span></div>)}{created&&<div className="table-row new-row"><span><b>Development key draft</b></span><span><code>vhm_dev_••••NEW</code></span><span>health:read</span><span>Never</span><span><StatusPill tone="warn">Draft</StatusPill></span></div>}</div></section><section className="split-grid"><div className="panel"><EmptyAction icon={KeyRound} title="Issue a development key" copy="This local action creates a UI draft only—no raw credential is generated." button={created?'Draft ready':'Prepare key draft'} onAction={()=>setCreated(true)}/></div><div className="panel safety-checklist"><PanelTitle title="Key hygiene" eyebrow="Required"/>{['Minimum 32 random bytes','Explicit scopes and application binding','Expiry or rotation date','Rate-limit profile','Revocation audit event'].map(item=><div key={item}><CircleCheck size={17}/><span>{item}</span></div>)}</div></section></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function WebhooksPage() {
   const [tested,setTested]=useState(false);
   return <div className="content-stack"><section className="panel"><PanelTitle title="Webhook endpoints" eyebrow="HMAC signed · retry safe"/><div className="webhook-list">{[['PlugConnect lifecycle','https://api.plugconnect.example/vowhumans/events','session.completed · session.deleted','Healthy'],['GoalVow Academies','https://academy.example/api/vowhumans/webhook','render.completed · render.failed','Healthy'],['Development inspector','https://example.invalid/hooks/vowhumans','All sandbox events','Paused']].map(row=><div className="webhook-row" key={row[0]}><span className="empty-icon"><Webhook size={19}/></span><div><strong>{row[0]}</strong><code>{row[1]}</code><small>{row[2]}</small></div><StatusPill tone={row[3]==='Paused'?'warn':'good'}>{row[3]}</StatusPill><IconMenuButton className="icon-button" label={row[0]} /></div>)}</div></section><section className="split-grid"><div className="panel webhook-test"><p className="eyebrow">Delivery tester</p><h2>Verify without sending private content</h2><p>Generate a local signed event envelope with synthetic identifiers only.</p><button className="primary-button" onClick={()=>setTested(true)}>{tested?<Check size={17}/>:<RefreshCw size={17}/>} {tested?'Signature verified':'Run local verification'}</button></div><div className="panel code-panel"><div className="code-dots"><i/><i/><i/></div><pre>{tested?`HTTP/1.1 200 OK\nX-VowHumans-Event: evt_test_01\n\n{ "verified": true, "replayed": false }`:`X-VowHumans-Signature: t=...,v1=...\nX-VowHumans-Event: evt_...\n\nNo transcript fields are included.`}</pre></div></section></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function Safety() {
   const controls=[['Visible AI disclosure','100% coverage','Every session, preview and export surface',Sparkles],['Identity consent gate','3 approved · 1 blocked','Revocation stops new work immediately',UserCheck],['Private transcript policy','Candidate/learner owned','No employer practice-answer access',LockKeyhole],['Moderation pipeline','Mock checks active','Provider moderation adapter ready',ShieldCheck],['Knowledge boundaries','141 cited chunks','Uploads never become system instructions',BookOpenText],['Retention controls','30 day default','Deletion queue contract enabled',Clock3]];
   return <div className="content-stack"><section className="safety-hero"><div><span className="safety-shield"><ShieldCheck size={34}/></span><p className="eyebrow">Safety posture</p><h2>Trust is a system property.</h2><p>VowHumans makes consent, disclosure and data boundaries visible—and keeps unsafe capabilities out of the product.</p></div><div className="safety-score"><span>CONTROL COVERAGE</span><strong>96<small>/100</small></strong><StatusPill>Healthy foundation</StatusPill></div></section><section className="safety-control-grid">{controls.map(([name,state,copy,Icon])=><article className="panel" key={String(name)}><span className="empty-icon"><Icon size={20}/></span><StatusPill>Enforced</StatusPill><h2>{String(name)}</h2><strong>{String(state)}</strong><p>{String(copy)}</p></article>)}</section><section className="prohibited-panel"><PanelTitle title="Never supported" eyebrow="Product-level prohibitions"/><div className="prohibited-grid">{['Unauthorised face or voice cloning','Public-figure impersonation','Hidden AI or covert recording','Appearance-based employment scoring','Face-based emotion or honesty detection','Medical diagnosis or clinical claims','Stolen source media','Employer access to practice answers'].map(item=><span key={item}><X size={14}/>{item}</span>)}</div></section></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function AuditLogs() {
   const events=[['Persona published','Naledi M.','Professional Practice Interviewer v3','persona.publish','Today 19:52'],['Session consent recorded','PlugConnect service','ses_01K19A…','consent.transcript.accept','Today 19:41'],['Knowledge source indexed','System worker','Interview Fundamentals','knowledge.index','Today 19:20'],['Identity approval reviewed','Naledi M.','GoalVow Tutor','identity.approve','Yesterday 16:08'],['API key scope updated','Platform admin','VowLMS sandbox','api_key.scope.update','30 Jul 14:22'],['Deletion request completed','System worker','del_01K02F…','deletion.complete','29 Jul 11:04']];
   const actors = ["All actors", ...Array.from(new Set(events.map((e) => e[1])))];
@@ -3320,6 +3338,7 @@ function AuditLogs() {
   return <div className="content-stack"><section className="panel"><div className="audit-toolbar"><div><p className="eyebrow">Append-only event history</p><h2>Organisation audit trail</h2></div><div><button onClick={() => setActorIndex((i) => (i + 1) % actors.length)}>{activeActor} <ChevronRight size={14}/></button><InlineAction idleLabel={<>Last 30 days <ChevronRight size={14}/></>} doneLabel="Showing last 30 days" /></div></div><div className="audit-list">{visibleEvents.map(event=><div className="audit-event" key={event[0]+event[4]}><span className="audit-icon"><Activity size={17}/></span><div><strong>{event[0]}</strong><p>{event[2]}</p><code>{event[3]}</code></div><span><b>{event[1]}</b><time>{event[4]}</time></span></div>)}</div></section></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- superseded by the persisted control-plane implementation imported below
 function SettingsPage() {
   const user = useAuth();
   const [saved,setSaved]=useState(false);
@@ -3422,7 +3441,7 @@ function LanguagesSettingsTab() {
                 <td><LanguageStatusBadge status={bestStatusForRow(row, "tts")} /></td>
                 <td><LanguageStatusBadge status={bestStatusForRow(row, "realtime")} /></td>
                 <td>
-                  <select value={row.default_voice_id ?? ""} onChange={(e) => updateLanguage(row.code, { enabled: row.enabled, default_voice_id: e.target.value || null, preferred_stt_provider: row.preferred_stt_provider, preferred_tts_provider: row.preferred_tts_provider, preferred_realtime_provider: row.preferred_realtime_provider, fallback_language_code: row.fallback_language_code })}>
+                  <select aria-label={`Default voice for ${row.english_name}`} value={row.default_voice_id ?? ""} onChange={(e) => updateLanguage(row.code, { enabled: row.enabled, default_voice_id: e.target.value || null, preferred_stt_provider: row.preferred_stt_provider, preferred_tts_provider: row.preferred_tts_provider, preferred_realtime_provider: row.preferred_realtime_provider, fallback_language_code: row.fallback_language_code })}>
                     <option value="">Not set</option>
                     {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
@@ -3570,7 +3589,7 @@ function LanguageTestPanel({ languageCode, personas }: { languageCode: string; p
 
 export function StudioView({ section }: { section: string }) {
   switch(section){
-    case 'dashboard': return <Dashboard/>;
+    case 'dashboard': return <ProductionDashboard/>;
     case 'digital-humans': return <DigitalHumans/>;
     case 'personas': return <Personas/>;
     case 'knowledge': return <Knowledge/>;
@@ -3580,14 +3599,14 @@ export function StudioView({ section }: { section: string }) {
     case 'live-sessions': return <LiveSessions/>;
     case 'presenter-studio': return <PresenterStudio/>;
     case 'applications': return <Applications/>;
-    case 'usage': return <Usage/>;
-    case 'identity-consent': return <IdentityConsent/>;
-    case 'api-keys': return <ApiKeys/>;
-    case 'webhooks': return <WebhooksPage/>;
-    case 'safety': return <Safety/>;
-    case 'audit-logs': return <AuditLogs/>;
+    case 'usage': return <ProductionUsage/>;
+    case 'identity-consent': return <ProductionIdentityConsent/>;
+    case 'api-keys': return <ProductionApiKeys/>;
+    case 'webhooks': return <ProductionWebhooks/>;
+    case 'safety': return <ProductionSafety/>;
+    case 'audit-logs': return <ProductionAuditLogs/>;
     case 'languages': return <LanguagesPage/>;
-    case 'settings': return <SettingsPage/>;
+    case 'settings': return <ProductionSettings/>;
     default: return null;
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, beforeEach } from "vitest";
-import { GET, POST } from "./route";
+import { DELETE, GET, PATCH, POST } from "./route";
 
 function get(resource: string) {
   const request = new NextRequest(`http://localhost/api/v1/${resource}`);
@@ -18,6 +18,16 @@ function post(resource: string, body: unknown) {
   // callers ("livekit", "sessions") below, but required for the multi-segment
   // resource paths (e.g. "languages/benchmark") the multilingual tests use.
   return POST(request, { params: Promise.resolve({ route: resource.split("/") }) });
+}
+
+function patch(resource: string, body: unknown) {
+  const request = new NextRequest(`http://localhost/api/v1/${resource}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return PATCH(request, { params: Promise.resolve({ route: resource.split("/") }) });
+}
+
+function remove(resource: string) {
+  const request = new NextRequest(`http://localhost/api/v1/${resource}`, { method: "DELETE" });
+  return DELETE(request, { params: Promise.resolve({ route: resource.split("/") }) });
 }
 
 describe("api/v1 route mock fallback", () => {
@@ -106,4 +116,24 @@ describe("multilingual endpoints require a session", () => {
     const res = await post("persona-versions/11111111-1111-4111-8111-111111111111/language-messages", { language_code: "zu-ZA", opening_message: "Sawubona" });
     expect(res.status).toBe(401);
   });
+});
+
+describe("production control-plane endpoints require a session", () => {
+  for (const resource of ["dashboard", "identities", "api-keys", "webhooks", "usage", "safety", "audit-logs", "organisations/current"]) {
+    it(`GET ${resource}`, async () => expect((await get(resource)).status).toBe(401));
+  }
+
+  for (const [resource, body] of [
+    ["identities", { owner_name: "Owner" }],
+    ["api-keys", { name: "Key" }],
+    ["webhooks", { name: "Hook" }],
+    ["safety", { description: "A concern" }],
+    ["webhooks/11111111-1111-4111-8111-111111111111/test", {}],
+  ] as const) {
+    it(`POST ${resource}`, async () => expect((await post(resource, body)).status).toBe(401));
+  }
+
+  it("PATCH organisations/current", async () => expect((await patch("organisations/current", { name: "Renamed" })).status).toBe(401));
+  it("PATCH api-keys/:id", async () => expect((await patch("api-keys/11111111-1111-4111-8111-111111111111", { status: "revoked" })).status).toBe(401));
+  it("DELETE webhooks/:id", async () => expect((await remove("webhooks/11111111-1111-4111-8111-111111111111")).status).toBe(401));
 });

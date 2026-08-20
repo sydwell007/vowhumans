@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse, after } from "next/server";
 import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
-import sql from "@/lib/db";
+import sql, { databaseConfigured } from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
 import { EMBEDDING_MODEL, chatComplete, embedBatch, synthesizeSpeech, translateText } from "@/lib/openai";
 import { transcribeSpeech } from "@/lib/speech";
@@ -11,7 +11,7 @@ import { mintEmbedToken } from "@/lib/embedToken";
 import { getCapabilityMatrix, recordLanguageUsage, resolveForCapability } from "@/lib/languageRouter";
 import type { CapabilityKind } from "@vowhumans/persona-schema";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","languages","digital-human-languages","terminology","language-reviews"]);
+const allowedResources = new Set(["auth","dashboard","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","safety","audit-logs","languages","digital-human-languages","terminology","language-reviews"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -49,6 +49,46 @@ async function requireOrganisation(request: NextRequest): Promise<string | null>
 // English-only behaviour when off.
 function flagEnabled(name: string): boolean {
   return (process.env[name] ?? "false").toLowerCase() === "true";
+}
+
+function controlPlaneEncryptionKey(): Buffer {
+  const configured = process.env.ENCRYPTION_KEY ?? "";
+  if (configured) {
+    if (/^[0-9a-f]{64}$/i.test(configured)) return Buffer.from(configured, "hex");
+    const decoded = Buffer.from(configured, "base64");
+    if (decoded.length === 32) return decoded;
+  }
+  const fallback = process.env.AUTH_SECRET ?? "";
+  if (!fallback) throw new Error("ENCRYPTION_KEY is not configured.");
+  return createHash("sha256").update(fallback).digest();
+}
+
+function encryptControlPlaneSecret(value: string): Buffer {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", controlPlaneEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]);
+}
+
+function decryptControlPlaneSecret(value: Buffer): string {
+  const iv = value.subarray(0, 12);
+  const tag = value.subarray(12, 28);
+  const decipher = createDecipheriv("aes-256-gcm", controlPlaneEncryptionKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(value.subarray(28)), decipher.final()]).toString("utf8");
+}
+
+function publicFeatureStatus() {
+  return {
+    live_sessions: flagEnabled("ENABLE_LIVE_SESSIONS"),
+    multilingual: flagEnabled("ENABLE_MULTILINGUAL"),
+    presenter_studio: flagEnabled("ENABLE_PRESENTER_STUDIO"),
+    transcripts: flagEnabled("ENABLE_TRANSCRIPTS"),
+    recordings: flagEnabled("ENABLE_RECORDINGS"),
+    openai_realtime: flagEnabled("ENABLE_OPENAI_REALTIME"),
+    avatar_participant: flagEnabled("ENABLE_AVATAR_PARTICIPANT"),
+    gpu_avatar: flagEnabled("ENABLE_MUSETALK") || flagEnabled("ENABLE_LIVEPORTRAIT") || flagEnabled("ENABLE_AUDIO2FACE"),
+  };
 }
 
 // Separate from requireOrganisation (used everywhere else and left untouched) —
@@ -295,7 +335,172 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!user) return response({ authenticated: false });
     return response({ authenticated: true, user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role }, organisation: { id: user.organisationId, name: user.organisationName, slug: user.organisationSlug } });
   }
-  if (resource === "health") return response({ status: "ok", persistence: false, providers: { afrihost_api: "not-verified", realtime: "mock", avatar: "static", gpu: "disabled", billing: "disabled", email: "disabled" } });
+  if (resource === "health") {
+    const gateway = await fetchGatewayHealth();
+    return response({
+      status: "ok",
+      persistence: databaseConfigured,
+      features: publicFeatureStatus(),
+      providers: {
+        gateway: gateway.gateway_reachable ? "reachable" : "not-reachable",
+        realtime: !gateway.realtime_check_available ? "unknown" : gateway.realtime_configured ? "configured" : "not-configured",
+        avatar: gateway.avatar_configured ? "configured" : "audio-fallback",
+        billing: process.env.BILLING_PROVIDER && process.env.BILLING_PROVIDER !== "disabled" ? "configured" : "disabled",
+        email: process.env.EMAIL_PROVIDER && process.env.EMAIL_PROVIDER !== "disabled" ? "configured" : "disabled",
+      },
+    });
+  }
+
+  if (resource === "dashboard") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [counts, recentHumans, recentAudit, gateway] = await Promise.all([
+      sql<{
+        digital_humans: number; published_personas: number; sessions_today: number;
+        live_now: number; pending_identities: number; active_consents: number;
+        usage_cost_minor: number; usage_events: number;
+      }[]>`
+        SELECT
+          (SELECT count(*)::int FROM digital_humans WHERE organisation_id = ${organisationId}) AS digital_humans,
+          (SELECT count(*)::int FROM persona_versions WHERE organisation_id = ${organisationId} AND state = 'published') AS published_personas,
+          (SELECT count(*)::int FROM sessions WHERE organisation_id = ${organisationId} AND created_at >= current_date) AS sessions_today,
+          (SELECT count(*)::int FROM sessions WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active') AND created_at > now() - interval '30 minutes') AS live_now,
+          (SELECT count(*)::int FROM identities WHERE organisation_id = ${organisationId} AND state = 'pending') AS pending_identities,
+          (SELECT count(*)::int FROM identity_consents WHERE organisation_id = ${organisationId} AND state = 'approved' AND (expires_at IS NULL OR expires_at > now())) AS active_consents,
+          (SELECT coalesce(sum(estimated_cost_minor),0)::int FROM usage_records WHERE organisation_id = ${organisationId} AND recorded_at >= date_trunc('month', now())) AS usage_cost_minor,
+          (SELECT count(*)::int FROM usage_records WHERE organisation_id = ${organisationId} AND recorded_at >= date_trunc('month', now())) AS usage_events
+      `,
+      sql`SELECT id, name, role, disclosure, state, created_at FROM digital_humans WHERE organisation_id = ${organisationId} ORDER BY created_at DESC LIMIT 5`,
+      sql`SELECT action, resource_type, occurred_at FROM audit_logs WHERE organisation_id = ${organisationId} ORDER BY occurred_at DESC LIMIT 5`,
+      fetchGatewayHealth(),
+    ]);
+    return NextResponse.json({ success: true, data: { counts: counts[0], humans: recentHumans, activity: recentAudit, gateway }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "identities" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT i.id, i.owner_name, i.display_name, i.provenance, i.geographic_scope,
+        i.commercial_use_confirmed, i.state, i.approved_at, i.expires_at, i.revoked_at,
+        count(ic.id)::int AS consent_count,
+        count(ic.id) FILTER (WHERE ic.state = 'approved' AND (ic.expires_at IS NULL OR ic.expires_at > now()))::int AS approved_consent_count
+      FROM identities i
+      LEFT JOIN identity_consents ic ON ic.identity_id = i.id AND ic.organisation_id = i.organisation_id
+      WHERE i.organisation_id = ${organisationId}
+      GROUP BY i.id
+      ORDER BY i.created_at DESC
+    `;
+    return NextResponse.json({ success: true, data: { items: rows }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "api-keys" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT k.id, k.name, k.prefix, k.scopes, k.status, k.expires_at, k.last_used_at, k.created_at,
+        a.name AS application_name
+      FROM api_keys k LEFT JOIN applications a ON a.id = k.application_id
+      WHERE k.organisation_id = ${organisationId}
+      ORDER BY k.created_at DESC
+    `;
+    return NextResponse.json({ success: true, data: { items: rows }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "webhooks" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT w.id, w.name, w.endpoint_url, w.event_types, w.status, w.last_delivery_at,
+        w.last_status_code, w.consecutive_failures, w.paused_at, w.created_at,
+        a.name AS application_name
+      FROM webhooks w LEFT JOIN applications a ON a.id = w.application_id
+      WHERE w.organisation_id = ${organisationId}
+      ORDER BY w.created_at DESC
+    `;
+    return NextResponse.json({ success: true, data: { items: rows }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "usage") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [summary, trend, providers] = await Promise.all([
+      sql<{
+        usage_events: number; metered_quantity: number; estimated_cost_minor: number;
+        session_minutes: number; presenter_jobs: number; avg_latency_ms: number | null;
+      }[]>`
+        SELECT
+          (SELECT count(*)::int FROM usage_records WHERE organisation_id = ${organisationId}) AS usage_events,
+          (SELECT coalesce(sum(quantity),0)::float FROM usage_records WHERE organisation_id = ${organisationId}) AS metered_quantity,
+          (SELECT coalesce(sum(estimated_cost_minor),0)::int FROM usage_records WHERE organisation_id = ${organisationId}) AS estimated_cost_minor,
+          (SELECT coalesce(sum(extract(epoch FROM (coalesce(ended_at, now()) - coalesce(started_at, created_at))) / 60),0)::float FROM sessions WHERE organisation_id = ${organisationId}) AS session_minutes,
+          (SELECT count(*)::int FROM generated_videos WHERE organisation_id = ${organisationId}) AS presenter_jobs,
+          (SELECT round(avg(latency_ms))::int FROM usage_records WHERE organisation_id = ${organisationId} AND latency_ms IS NOT NULL) AS avg_latency_ms
+      `,
+      sql`
+        SELECT to_char(day, 'YYYY-MM-DD') AS day,
+          coalesce(sum(u.quantity),0)::float AS quantity,
+          coalesce(sum(u.estimated_cost_minor),0)::int AS estimated_cost_minor
+        FROM generate_series(current_date - interval '29 days', current_date, interval '1 day') day
+        LEFT JOIN usage_records u ON u.organisation_id = ${organisationId} AND u.recorded_at >= day AND u.recorded_at < day + interval '1 day'
+        GROUP BY day ORDER BY day
+      `,
+      sql`
+        SELECT provider, unit, count(*)::int AS events, sum(quantity)::float AS quantity,
+          sum(estimated_cost_minor)::int AS estimated_cost_minor
+        FROM usage_records WHERE organisation_id = ${organisationId}
+        GROUP BY provider, unit ORDER BY estimated_cost_minor DESC, provider
+      `,
+    ]);
+    return NextResponse.json({ success: true, data: { summary: summary[0], trend, providers, currency: "ZAR", private_content_included: false }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "audit-logs") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT al.id, al.action, al.resource_type, al.resource_id, al.before_state, al.after_state, al.occurred_at,
+        coalesce(u.display_name, k.name, 'System') AS actor
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.actor_user_id
+      LEFT JOIN api_keys k ON k.id = al.actor_service_key_id
+      WHERE al.organisation_id = ${organisationId}
+      ORDER BY al.occurred_at DESC LIMIT 250
+    `;
+    return NextResponse.json({ success: true, data: { items: rows }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "safety") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [counts, organisation] = await Promise.all([
+      sql<{
+        identities: number; approved_identities: number; pending_identities: number;
+        approved_consents: number; total_consents: number; moderation_events: number;
+        knowledge_chunks: number; open_concerns: number;
+      }[]>`
+        SELECT
+          (SELECT count(*)::int FROM identities WHERE organisation_id = ${organisationId}) AS identities,
+          (SELECT count(*)::int FROM identities WHERE organisation_id = ${organisationId} AND state = 'approved') AS approved_identities,
+          (SELECT count(*)::int FROM identities WHERE organisation_id = ${organisationId} AND state = 'pending') AS pending_identities,
+          (SELECT count(*)::int FROM identity_consents WHERE organisation_id = ${organisationId} AND state = 'approved') AS approved_consents,
+          (SELECT count(*)::int FROM identity_consents WHERE organisation_id = ${organisationId}) AS total_consents,
+          (SELECT count(*)::int FROM moderation_events WHERE organisation_id = ${organisationId} AND occurred_at > now() - interval '30 days') AS moderation_events,
+          (SELECT count(*)::int FROM knowledge_chunks WHERE organisation_id = ${organisationId}) AS knowledge_chunks,
+          (SELECT count(*)::int FROM support_tickets WHERE organisation_id = ${organisationId} AND status = 'open' AND subject = 'Safety concern') AS open_concerns
+      `,
+      sql<{ settings: Record<string, unknown> }[]>`SELECT settings FROM organisations WHERE id = ${organisationId}`,
+    ]);
+    return NextResponse.json({ success: true, data: { counts: counts[0], settings: organisation[0]?.settings ?? {}, features: publicFeatureStatus() }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "organisations" && route[1] === "current") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [organisation] = await sql`SELECT id, name, slug, status, settings, created_at FROM organisations WHERE id = ${organisationId}`;
+    const gateway = await fetchGatewayHealth();
+    return NextResponse.json({ success: true, data: { organisation, features: publicFeatureStatus(), gateway }, meta: { mode: "live", request_id: randomUUID() } });
+  }
 
   // Profile aggregate for one digital human — the 5 assignment tables (voice/face/
   // gesture/knowledge/persona) key on human_slug text, not a real FK, so a real digital
@@ -896,12 +1101,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         let organisation: { id: string; name: string; slug: string } | undefined;
         for (let attempt = 0; attempt < 5; attempt += 1) {
           const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;
-          try {
-            [organisation] = await tx`INSERT INTO organisations (name, slug) VALUES (${organisationName}, ${slug}) RETURNING id, name, slug`;
-            break;
-          } catch (error) {
-            if (!(error instanceof Error) || !("code" in error) || (error as { code?: string }).code !== "23505") throw error;
-          }
+          [organisation] = await tx`
+            INSERT INTO organisations (name, slug) VALUES (${organisationName}, ${slug})
+            ON CONFLICT (slug) DO NOTHING
+            RETURNING id, name, slug
+          `;
+          if (organisation) break;
         }
         if (!organisation) throw new Error("Could not allocate a unique workspace slug.");
         const [user] = await tx`INSERT INTO users (organisation_id, email, display_name, role, password_hash) VALUES (${organisation.id}, ${email}, ${displayName}, 'owner', ${passwordHash}) RETURNING id`;
@@ -955,6 +1160,118 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const res = NextResponse.json({ success: true, data: { redirect: "/" }, meta: { mode: "live", request_id: randomUUID() } });
     res.cookies.set(SESSION_COOKIE_NAME, "", sessionCookieOptions(0));
     return res;
+  }
+
+  if (resource === "identities" && !route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const ownerName = typeof body.owner_name === "string" ? body.owner_name.trim() : "";
+    const displayName = typeof body.display_name === "string" ? body.display_name.trim() : "";
+    const authorityReference = typeof body.authority_reference === "string" ? body.authority_reference.trim() : "";
+    const roles = Array.isArray(body.permitted_roles) ? body.permitted_roles.filter((role): role is string => typeof role === "string" && role.trim().length > 0) : [];
+    const geographicScope = Array.isArray(body.geographic_scope) ? body.geographic_scope.filter((scope): scope is string => typeof scope === "string" && scope.trim().length > 0) : [];
+    const expiresAt = typeof body.expires_at === "string" && body.expires_at ? new Date(body.expires_at) : null;
+    if (!ownerName || !displayName || !authorityReference || body.authority_confirmed !== true || body.commercial_use_confirmed !== true || roles.length === 0 || geographicScope.length === 0) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Owner, display name, authority reference, roles, geography and both authority confirmations are required." }, { status: 422 });
+    }
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Expiry must be a valid future date." }, { status: 422 });
+    }
+    const result = await sql.begin(async (tx) => {
+      const [identity] = await tx`
+        INSERT INTO identities (organisation_id, owner_name, display_name, provenance, geographic_scope, commercial_use_confirmed, state, approved_by, approved_at, expires_at)
+        VALUES (${user.organisationId}, ${ownerName}, ${displayName}, ${JSON.stringify({ authority_reference: authorityReference, attested_by_user_id: user.id, source: "customer_authority_attestation" })}::jsonb, ${geographicScope}, true, 'approved', ${user.id}, now(), ${expiresAt?.toISOString() ?? null})
+        RETURNING id, owner_name, display_name, geographic_scope, commercial_use_confirmed, state, approved_at, expires_at
+      `;
+      const digest = createHash("sha256").update(`${user.organisationId}:${identity.id}:${authorityReference}`).digest("hex");
+      for (const consentType of ["written", "face", "voice", "commercial"]) {
+        await tx`
+          INSERT INTO identity_consents (organisation_id, identity_id, consent_type, object_key, sha256, permitted_roles, state, signed_at, expires_at)
+          VALUES (${user.organisationId}, ${identity.id}, ${consentType}, ${`attestation:${authorityReference}`}, ${digest}, ${roles}, 'approved', now(), ${expiresAt?.toISOString() ?? null})
+        `;
+      }
+      return identity;
+    });
+    return NextResponse.json({ success: true, data: result, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "api-keys" && !route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const allowedScopes = new Set(["sessions:create", "sessions:read", "renders:create", "renders:read", "usage:read", "webhooks:manage"]);
+    const scopes = Array.isArray(body.scopes) ? body.scopes.filter((scope): scope is string => typeof scope === "string" && allowedScopes.has(scope)) : [];
+    const applicationId = typeof body.application_id === "string" && body.application_id ? body.application_id : null;
+    const expiresAt = typeof body.expires_at === "string" && body.expires_at ? new Date(body.expires_at) : null;
+    if (!name || scopes.length === 0 || (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date()))) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Name, at least one valid scope and a future expiry (when supplied) are required." }, { status: 422 });
+    }
+    if (applicationId) {
+      const [application] = await sql`SELECT id FROM applications WHERE id = ${applicationId} AND organisation_id = ${user.organisationId}`;
+      if (!application) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Application does not belong to this organisation." }, { status: 422 });
+    }
+    const rawKey = `vhm_live_${randomBytes(32).toString("base64url")}`;
+    const prefix = rawKey.slice(0, 17);
+    const [row] = await sql`
+      INSERT INTO api_keys (organisation_id, application_id, name, prefix, key_hash, scopes, status, expires_at, created_by)
+      VALUES (${user.organisationId}, ${applicationId}, ${name}, ${prefix}, ${createHash("sha256").update(rawKey).digest("hex")}, ${scopes}, 'active', ${expiresAt?.toISOString() ?? null}, ${user.id})
+      RETURNING id, name, prefix, scopes, status, expires_at, created_at
+    `;
+    return NextResponse.json({ success: true, data: { ...row, secret: rawKey }, meta: { mode: "live", request_id: randomUUID(), secret_display: "once" } }, { status: 201 });
+  }
+
+  if (resource === "webhooks" && route[1] && route[2] === "test") {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [hook] = await sql<{ id: string; secret_ciphertext: Buffer }[]>`SELECT id, secret_ciphertext FROM webhooks WHERE id = ${route[1]} AND organisation_id = ${user.organisationId}`;
+    if (!hook) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const eventId = `evt_test_${randomUUID()}`;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const payload = JSON.stringify({ id: eventId, type: "system.webhook_test", created_at: new Date().toISOString(), data: { synthetic: true } });
+    const signature = createHmac("sha256", decryptControlPlaneSecret(Buffer.from(hook.secret_ciphertext))).update(`${timestamp}.${payload}`).digest("hex");
+    return NextResponse.json({ success: true, data: { verified: true, payload: JSON.parse(payload), headers: { "X-VowHumans-Event": eventId, "X-VowHumans-Signature": `t=${timestamp},v1=${signature}` }, private_content_included: false }, meta: { mode: "local-signature-verification", request_id: randomUUID() } });
+  }
+
+  if (resource === "webhooks" && !route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const endpointUrl = typeof body.endpoint_url === "string" ? body.endpoint_url.trim() : "";
+    const allowedEvents = new Set(["session.created", "session.completed", "session.failed", "render.completed", "render.failed", "identity.revoked"]);
+    const eventTypes = Array.isArray(body.event_types) ? body.event_types.filter((event): event is string => typeof event === "string" && allowedEvents.has(event)) : [];
+    const applicationId = typeof body.application_id === "string" && body.application_id ? body.application_id : null;
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(endpointUrl); } catch { return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Enter a valid endpoint URL." }, { status: 422 }); }
+    const localHttp = process.env.NODE_ENV !== "production" && parsedUrl.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(parsedUrl.hostname);
+    if (!name || eventTypes.length === 0 || (parsedUrl.protocol !== "https:" && !localHttp)) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Name, HTTPS endpoint and at least one supported event are required." }, { status: 422 });
+    }
+    if (applicationId) {
+      const [application] = await sql`SELECT id FROM applications WHERE id = ${applicationId} AND organisation_id = ${user.organisationId}`;
+      if (!application) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Application does not belong to this organisation." }, { status: 422 });
+    }
+    const secret = `whsec_${randomBytes(32).toString("base64url")}`;
+    const [row] = await sql`
+      INSERT INTO webhooks (organisation_id, application_id, name, endpoint_url, secret_ciphertext, event_types, status)
+      VALUES (${user.organisationId}, ${applicationId}, ${name}, ${endpointUrl}, ${encryptControlPlaneSecret(secret)}, ${eventTypes}, 'active')
+      RETURNING id, name, endpoint_url, event_types, status, created_at
+    `;
+    return NextResponse.json({ success: true, data: { ...row, signing_secret: secret }, meta: { mode: "live", request_id: randomUUID(), secret_display: "once" } }, { status: 201 });
+  }
+
+  if (resource === "safety" && !route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const priority = typeof body.priority === "string" && ["normal", "high", "urgent"].includes(body.priority) ? body.priority : "normal";
+    if (description.length < 10) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Describe the safety concern in at least 10 characters." }, { status: 422 });
+    const [ticket] = await sql`
+      INSERT INTO support_tickets (organisation_id, user_id, priority, status, subject, description)
+      VALUES (${user.organisationId}, ${user.id}, ${priority}, 'open', 'Safety concern', ${description})
+      RETURNING id, priority, status, created_at
+    `;
+    await sql`INSERT INTO audit_logs (organisation_id, actor_user_id, action, resource_type, resource_id, after_state) VALUES (${user.organisationId}, ${user.id}, 'safety.concern.reported', 'support_tickets', ${ticket.id}, ${JSON.stringify({ priority, status: "open" })}::jsonb)`;
+    return NextResponse.json({ success: true, data: ticket, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   if (resource === "sessions" && !route[1] && typeof body.digital_human_id === "string") {
@@ -2013,6 +2330,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
   const { route } = await params;
+  if (route[0] === "webhooks" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM webhooks WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+    if (!deleted) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: { id: deleted.id, deleted: true }, meta: { mode: "live", request_id: randomUUID() } }, { status: 202 });
+  }
   if (route[0] === "digital-human-languages" && route[1] && route[2]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -2138,6 +2462,71 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { route } = await params;
   const organisationId = await requireOrganisation(request);
   if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+
+  if (route[0] === "organisations" && route[1] === "current") {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const name = typeof body.name === "string" ? body.name.trim() : null;
+    const incoming = typeof body.settings === "object" && body.settings !== null ? body.settings as Record<string, unknown> : {};
+    const settings: Record<string, unknown> = {};
+    if (typeof incoming.primary_region === "string") settings.primary_region = incoming.primary_region.slice(0, 80);
+    if (typeof incoming.default_language === "string") settings.default_language = incoming.default_language.slice(0, 20);
+    if (typeof incoming.retention_days === "number" && [0, 7, 30, 90].includes(incoming.retention_days)) settings.retention_days = incoming.retention_days;
+    if (typeof incoming.notifications === "object" && incoming.notifications !== null) {
+      settings.notifications = Object.fromEntries(Object.entries(incoming.notifications as Record<string, unknown>).filter(([, value]) => typeof value === "boolean"));
+    }
+    if (!name && Object.keys(settings).length === 0) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "No supported settings were supplied." }, { status: 422 });
+    const [row] = await sql`
+      UPDATE organisations SET name = COALESCE(${name || null}, name), settings = settings || ${JSON.stringify(settings)}::jsonb, updated_at = now()
+      WHERE id = ${organisationId}
+      RETURNING id, name, slug, status, settings, created_at, updated_at
+    `;
+    await sql`
+      INSERT INTO audit_logs (organisation_id, actor_user_id, action, resource_type, resource_id, after_state)
+      VALUES (${organisationId}, ${user.id}, 'organisation.settings.updated', 'organisations', ${organisationId}, ${JSON.stringify({ name: row.name, settings: Object.keys(settings) })}::jsonb)
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "identities" && route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    if (body.state !== "revoked") return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Only revocation is supported after approval." }, { status: 422 });
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (reason.length < 5) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide a revocation reason." }, { status: 422 });
+    const [row] = await sql`
+      UPDATE identities SET state = 'revoked', revoked_at = now(), revocation_reason = ${reason}
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId} AND state <> 'revoked'
+      RETURNING id, owner_name, display_name, state, revoked_at
+    `;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    await sql`UPDATE identity_consents SET state = 'revoked', revoked_at = now() WHERE identity_id = ${route[1]} AND organisation_id = ${organisationId} AND state <> 'revoked'`;
+    await sql`INSERT INTO audit_logs (organisation_id, actor_user_id, action, resource_type, resource_id, after_state) VALUES (${organisationId}, ${user.id}, 'identity.revoked', 'identities', ${route[1]}, ${JSON.stringify({ state: "revoked", reason })}::jsonb)`;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "api-keys" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    if (body.status !== "revoked") return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "API keys can only be revoked." }, { status: 422 });
+    const [row] = await sql`UPDATE api_keys SET status = 'revoked' WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id, name, prefix, scopes, status, expires_at, last_used_at, created_at`;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "webhooks" && route[1]) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const status = body.status === "active" ? "active" : body.status === "paused" ? "archived" : null;
+    if (!status) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Webhook status must be active or paused." }, { status: 422 });
+    const [row] = await sql`
+      UPDATE webhooks SET status = ${status}::lifecycle_state, paused_at = CASE WHEN ${status} = 'archived' THEN now() ELSE NULL END
+      WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+      RETURNING id, name, endpoint_url, event_types, status, paused_at, last_delivery_at, last_status_code, consecutive_failures
+    `;
+    if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
 
   if (route[0] === "guardrails" && route[1]) {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

@@ -1,15 +1,18 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
+import { loadEnvConfig } from "@next/env";
 import postgres from "postgres";
 
 // .env.local etc. live at the monorepo root, not this app's own directory. next.config.ts
 // also loads them via @next/env, but that mutation doesn't reliably reach the separate
-// worker Turbopack dev uses to execute route handlers — so load here too, directly in
-// whichever process actually reads process.env.DATABASE_URL. Cheap, idempotent, and a
-// no-op in production (Vercel injects these directly; no .env files exist there to find).
-if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+// worker Turbopack dev uses to execute route handlers. Load the complete root env in the
+// worker too, even when DATABASE_URL was supplied directly, so independent secrets such
+// as AUTH_SECRET and ENCRYPTION_KEY are not silently absent during local development.
+// Vercel injects variables directly and has no repository .env file to load.
+if (!process.env.VERCEL) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    (require("@next/env") as typeof import("@next/env")).loadEnvConfig(path.resolve(process.cwd(), "../.."));
+    const repositoryRoot = existsSync(path.join(process.cwd(), "apps", "studio-web")) ? process.cwd() : path.resolve(process.cwd(), "../..");
+    loadEnvConfig(repositoryRoot, process.env.NODE_ENV !== "production", console, true);
   } catch {
     // Not fatal — see comment above.
   }
@@ -31,6 +34,16 @@ const connectionString =
   process.env.database_POSTGRES_URL_NO_SSL ??
   "";
 
+export const databaseConfigured = connectionString.length > 0;
+
+let localConnection = false;
+try {
+  const hostname = new URL(connectionString).hostname.replace(/^\[|\]$/g, "");
+  localConnection = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+} catch {
+  // postgres.js reports the more useful invalid connection-string error below.
+}
+
 // A fresh module-scope singleton per server instance. max:1 matches postgres.js's own
 // guidance for serverless environments, where each invocation should hold at most one
 // connection rather than maintaining a large idle pool.
@@ -38,7 +51,7 @@ const sql = postgres(connectionString, {
   max: 1,
   idle_timeout: 20,
   connect_timeout: 10,
-  ssl: connectionString.includes("localhost") ? false : "require",
+  ssl: localConnection ? false : "require",
   // Neon's connection string (and most managed Postgres in front of PgBouncer-style
   // transaction pooling) doesn't reliably support server-side prepared statements across
   // requests — a later query can land on a different pooled backend than the one that

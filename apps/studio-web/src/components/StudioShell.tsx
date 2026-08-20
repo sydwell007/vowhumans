@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu, Plus, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { identityAlertCount, navigation, pageMeta } from "@/data/platform";
+import { navigation, pageMeta } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { BrandLogo } from "./BrandLogo";
 
@@ -21,6 +21,7 @@ export function StudioShell({ section, children }: { section: string; children: 
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationsRead, setNotificationsRead] = useState(false);
+  const [pendingIdentities, setPendingIdentities] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const meta = pageMeta[section];
   const results = query.trim()
@@ -38,10 +39,18 @@ export function StudioShell({ section, children }: { section: string; children: 
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
 
+  useEffect(() => {
+    fetch("/api/v1/dashboard")
+      .then((response) => response.json())
+      .then((payload) => setPendingIdentities(Number(payload?.data?.counts?.pending_identities ?? 0)))
+      .catch(() => setPendingIdentities(0));
+  }, [section]);
+
   function quickAction() {
-    // DigitalHumans(), LiveSessions() and PresenterStudio() each own a real
-    // interaction and listen for their own event — every other section keeps
-    // the generic draft-toast fallback below, unchanged.
+    if (section === "dashboard") {
+      router.push("/studio/digital-humans");
+      return;
+    }
     if (section === "digital-humans") {
       window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
       return;
@@ -54,22 +63,22 @@ export function StudioShell({ section, children }: { section: string; children: 
       window.dispatchEvent(new CustomEvent("studio:new-presenter-project"));
       return;
     }
-    const outcome: Record<string, string> = {
-      dashboard: "A safe digital-human draft is ready for identity and Persona setup.",
-      "identity-consent": "Identity registration opened in draft mode; publication remains blocked.",
-      "api-keys": "Key creation is ready; production keys are displayed once and stored hashed.",
-      usage: "A usage report draft was generated from the illustrative data shown below; no live provider invoice is connected.",
-      "audit-logs": "An audit export draft was generated from the visible event history below.",
-      safety: "This concern has been recorded locally for review; nothing was sent to a live system.",
-      settings: "Your changes are saved locally to this preview session only.",
-    };
-    setNotice(outcome[section] ?? `${meta.action} opened in safe draft mode.`);
-    window.setTimeout(() => setNotice(null), 4200);
+    if (section === "usage") { window.dispatchEvent(new CustomEvent("studio:export-usage")); return; }
+    if (section === "audit-logs") { window.dispatchEvent(new CustomEvent("studio:export-audit")); return; }
+    if (section === "settings") { window.dispatchEvent(new CustomEvent("studio:save-settings")); return; }
+    const target = document.querySelector<HTMLElement>("#studio-primary-action") ?? document.querySelector<HTMLElement>(".content-stack form");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => target.querySelector<HTMLElement>("input, textarea, select, button")?.focus(), 300);
+      return;
+    }
+    setNotice(`${meta.action} controls are visible on this page.`);
+    window.setTimeout(() => setNotice(null), 3200);
   }
 
   function openNotifications() {
     setNotificationsRead(true);
-    setNotice(`${identityAlertCount} ${identityAlertCount === 1 ? "identity is" : "identities are"} awaiting owner verification · disclosure checks are passing.`);
+    setNotice(pendingIdentities > 0 ? `${pendingIdentities} ${pendingIdentities === 1 ? "identity is" : "identities are"} awaiting owner verification.` : "No identity approvals are awaiting review.");
     window.setTimeout(() => setNotice(null), 4200);
   }
 
@@ -91,7 +100,7 @@ export function StudioShell({ section, children }: { section: string; children: 
 
         <div className="environment-card">
           <span className="pulse-dot" />
-          <div><strong>Development workspace</strong><small>Safe mock providers active</small></div>
+          <div><strong>Persistent workspace</strong><small>External providers are configuration-gated</small></div>
           <ChevronDown size={15} />
         </div>
 
@@ -111,7 +120,7 @@ export function StudioShell({ section, children }: { section: string; children: 
                     onClick={() => setMobileOpen(false)}
                   >
                     <Icon size={18} strokeWidth={1.8} /><span>{item.label}</span>
-                    {item.label === "Identity & Consent" && identityAlertCount > 0 && <b className="nav-count">{identityAlertCount}</b>}
+                    {item.label === "Identity & Consent" && pendingIdentities > 0 && <b className="nav-count">{pendingIdentities}</b>}
                   </Link>
                 );
               })}
@@ -169,7 +178,7 @@ export function StudioShell({ section, children }: { section: string; children: 
           </div>
           <div className="topbar-actions">
             <span className="ai-disclosure-chip"><i /> AI systems disclosed</span>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && identityAlertCount > 0 && <b>{identityAlertCount}</b>}</button>
+            <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && pendingIdentities > 0 && <b>{pendingIdentities}</b>}</button>
           </div>
         </header>
 
@@ -182,7 +191,7 @@ export function StudioShell({ section, children }: { section: string; children: 
             </div>
             <button className="primary-button" onClick={quickAction}><Plus size={18} />{meta.action}</button>
           </section>
-          <div className="studio-data-notice" role="note"><strong>Preview dataset</strong><span>Records and activity shown in Studio are local product examples. Usage, billing, provider health and organisation persistence are not connected.</span></div>
+          <div className="studio-data-notice" role="note"><strong>Live workspace</strong><span>Studio changes persist to your organisation database. Provider-backed media and realtime features run only when their server-side capability gates are configured.</span></div>
           {children}
         </div>
       </main>
