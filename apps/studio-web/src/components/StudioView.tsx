@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { StatusPill } from "./StatusPill";
+import { FALLBACK_LANGUAGES, LanguageSelect, LanguageStatusBadge } from "./LanguageSelect";
 import {
   Activity,
   AppWindow,
@@ -48,6 +50,7 @@ import { useEffect, useRef, useState } from "react";
 import { applications, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
+import type { Room } from "livekit-client";
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
@@ -57,9 +60,6 @@ const readiness = [
   { name: "3D avatar", state: "Planned", tone: "muted" },
 ];
 
-function StatusPill({ children, tone = "good", title }: { children: React.ReactNode; tone?: string; title?: string }) {
-  return <span className={`status-pill ${tone}`} title={title}><i />{children}</span>;
-}
 
 function PanelTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: React.ReactNode }) {
   return (
@@ -186,6 +186,7 @@ type DigitalHumanProfile = {
   gesture_profile: { id: string; name: string; state_config: { features: Record<string, { enabled: boolean; range: string }> } } | null;
   persona: { persona_id: string; persona_name: string; version_id: string; version: number; role: string; state: string } | null;
   knowledge_bases: { id: string; name: string }[];
+  languages: { code: string; english_name: string; status: string; voice_id: string | null; voice_name: string | null }[];
 };
 
 function DigitalHumans() {
@@ -391,6 +392,12 @@ function DigitalHumans() {
                 <ProfileSlot icon={BrainCircuit} label="Persona" filled={Boolean(detail.persona)} meta={detail.persona ? `${detail.persona.persona_name} · v${detail.persona.version}` : undefined} onSetup={() => openWizard(detail.human.id, 5)} />
                 <ProfileSlot icon={Sparkles} label="Gestures" filled={Boolean(detail.gesture_profile)} meta={detail.gesture_profile?.name} onSetup={() => openWizard(detail.human.id, 6)} />
               </section>
+              {detail.languages.length > 0 && (
+                <div className="wizard-subsection">
+                  <PanelTitle title="Languages" eyebrow="Real status — never shown as production without passing the quality gate" />
+                  <DigitalHumanLanguageRow humanId={detail.human.id} languages={detail.languages} onChanged={() => loadDetail(detail.human.id)} />
+                </div>
+              )}
               <div className="wizard-subsection">
                 <PanelTitle title="Applications" eyebrow="Where this VowHuman can be embedded" />
                 {apps.length === 0 && <p className="panel-note">No applications connected yet — connect one from the Applications page.</p>}
@@ -482,6 +489,36 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
         </>
       )}
     </article>
+  );
+}
+
+function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
+  const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
+  const [busyCode, setBusyCode] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/v1/voices').then((r) => r.json()).then((res) => { if (res?.success) setVoices(res.data.items); }).catch(() => {});
+  }, []);
+
+  async function assignVoice(code: string, voiceId: string) {
+    setBusyCode(code);
+    await fetch('/api/v1/digital-human-languages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, language_code: code, voice_id: voiceId || null }) }).catch(() => {});
+    onChanged();
+    setBusyCode(null);
+  }
+
+  return (
+    <div className="language-status-list">
+      {languages.map((lang) => (
+        <div className="language-status-row" key={lang.code}>
+          <span>{lang.english_name}</span>
+          <LanguageStatusBadge status={lang.status} />
+          <select value={lang.voice_id ?? ''} onChange={(e) => assignVoice(lang.code, e.target.value)} disabled={busyCode === lang.code}>
+            <option value="">Use organisation default</option>
+            {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -737,7 +774,7 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/voices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), language: 'English (South Africa)', provider_voice_id: providerVoice }) });
+      const res = await fetch('/api/v1/voices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), language: 'en-ZA', provider_voice_id: providerVoice }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not create this voice.');
       await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: body.data.id }) });
@@ -952,7 +989,7 @@ function WizardKnowledgeStep({ humanId, onDone }: { humanId: string; onDone: () 
                 <div className="preview-scroll">{previewContent}</div>
               </div>
             )}
-            {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
+            {addSourceMode !== 'generate' && <label>Language (optional)<LanguageSelect value={addLanguage} onChange={setAddLanguage} includeNone="Not set" /></label>}
             {addSourceMode === 'generate' && !previewContent && (
               <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
                 {generatingPreview ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{generatingPreview ? 'Generating…' : 'Generate preview'}
@@ -1118,9 +1155,11 @@ type PersonaVersionDetail = {
   id: string; persona_id: string; version: number; state: string; role: string; system_instructions: string;
   conversation_style: string; opening_message: string; language: string; speaking_rate: string;
   max_response_words: number; knowledge_base_ids: string[]; published_at: string | null; created_at: string;
+  supported_languages: string[]; code_switching_policy: string; translation_policy: string;
 };
 type Guardrail = { id: string; code: string; instruction: string; enforcement: string };
-type PersonaDetail = { persona: { id: string; name: string; description: string; created_at: string }; versions: PersonaVersionDetail[]; guardrails: Guardrail[] };
+type PersonaLanguageMessage = { id: string; persona_version_id: string; language_code: string; opening_message: string; fallback_message: string; source: string };
+type PersonaDetail = { persona: { id: string; name: string; description: string; created_at: string }; versions: PersonaVersionDetail[]; guardrails: Guardrail[]; language_messages: PersonaLanguageMessage[] };
 type PersonaAssignment = { human_slug: string; persona_version_id: string; persona_id: string; version: number; persona_name: string };
 type KnowledgeBaseSummary = { id: string; name: string; description: string; state: string; created_at: string; document_count: number; chunk_count: number; language_count: number };
 
@@ -1144,6 +1183,9 @@ function Personas() {
   const [editSpeakingRate, setEditSpeakingRate] = useState('1');
   const [editMaxResponseWords, setEditMaxResponseWords] = useState('150');
   const [editKnowledgeBaseIds, setEditKnowledgeBaseIds] = useState<string[]>([]);
+  const [editSupportedLanguages, setEditSupportedLanguages] = useState<string[]>([]);
+  const [editCodeSwitchingPolicy, setEditCodeSwitchingPolicy] = useState('discouraged');
+  const [editTranslationPolicy, setEditTranslationPolicy] = useState('fallback_only');
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
@@ -1197,6 +1239,9 @@ function Personas() {
         setEditSpeakingRate(String(latest.speaking_rate));
         setEditMaxResponseWords(String(latest.max_response_words));
         setEditKnowledgeBaseIds(latest.knowledge_base_ids ?? []);
+        setEditSupportedLanguages(latest.supported_languages ?? []);
+        setEditCodeSwitchingPolicy(latest.code_switching_policy ?? 'discouraged');
+        setEditTranslationPolicy(latest.translation_policy ?? 'fallback_only');
       }
     } else {
       setDetail(null);
@@ -1219,6 +1264,7 @@ function Personas() {
         role: editRole, system_instructions: editSystemInstructions, conversation_style: editConversationStyle,
         opening_message: editOpeningMessage, language: editLanguage, speaking_rate: Number(editSpeakingRate) || 1,
         max_response_words: Number(editMaxResponseWords) || 150, knowledge_base_ids: editKnowledgeBaseIds,
+        supported_languages: editSupportedLanguages, code_switching_policy: editCodeSwitchingPolicy, translation_policy: editTranslationPolicy,
       };
       const res = isDraft
         ? await fetch(`/api/v1/persona-versions/${latestVersion.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
@@ -1383,9 +1429,7 @@ function Personas() {
               <div className="form-grid two">
                 <label>Role<input value={editRole} onChange={(e) => setEditRole(e.target.value)} /></label>
                 <label>Language
-                  <select value={editLanguage} onChange={(e) => setEditLanguage(e.target.value)}>
-                    <option>English (South Africa)</option><option>isiZulu</option><option>Sesotho</option><option>Afrikaans</option>
-                  </select>
+                  <LanguageSelect value={editLanguage} onChange={setEditLanguage} capability="reasoning" showStatusBadge />
                 </label>
                 <label className="full">System instructions<textarea value={editSystemInstructions} onChange={(e) => setEditSystemInstructions(e.target.value)} /></label>
                 <label className="full">Opening message<textarea value={editOpeningMessage} onChange={(e) => setEditOpeningMessage(e.target.value)} /></label>
@@ -1419,6 +1463,37 @@ function Personas() {
                     })}
                   </div>
                 </label>
+                <label>Code-switching policy
+                  <select value={editCodeSwitchingPolicy} onChange={(e) => setEditCodeSwitchingPolicy(e.target.value)}>
+                    <option value="discouraged">Discouraged</option>
+                    <option value="allowed">Allowed</option>
+                    <option value="encouraged">Encouraged</option>
+                  </select>
+                </label>
+                <label>Translation policy
+                  <select value={editTranslationPolicy} onChange={(e) => setEditTranslationPolicy(e.target.value)}>
+                    <option value="never">Never translate</option>
+                    <option value="fallback_only">Fallback only, when direct quality is insufficient</option>
+                    <option value="always_offer">Always offer translation</option>
+                  </select>
+                </label>
+                <label className="full">Supported languages
+                  <div className="chip-toggle-row">
+                    {FALLBACK_LANGUAGES.map((lang) => {
+                      const active = editSupportedLanguages.includes(lang.code);
+                      return (
+                        <button type="button" key={lang.code} className={`chip-toggle${active ? ' active' : ''}`} onClick={() => setEditSupportedLanguages((prev) => active ? prev.filter((c) => c !== lang.code) : [...prev, lang.code])}>
+                          {active ? <Check size={11} /> : null}{lang.english_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+                {editSupportedLanguages.length > 0 && (
+                  <label className="full">Per-language opening &amp; fallback messages
+                    <PersonaLanguageMessages personaVersionId={latestVersion.id} languageCodes={editSupportedLanguages} messages={detail.language_messages} onSaved={() => loadDetail(detail.persona.id)} />
+                  </label>
+                )}
                 <label className="full">Guardrails
                   <div className="chip-toggle-row">
                     {detail.guardrails.map((g) => {
@@ -1501,6 +1576,50 @@ function Personas() {
           <button className="primary-button" type="submit" disabled={creating}>{creating ? <RefreshCw size={17} className="spin" /> : <WandSparkles size={17} />}{creating ? 'Creating…' : 'Create persona'}</button>
         </form>
       </section>
+    </div>
+  );
+}
+
+function PersonaLanguageMessages({ personaVersionId, languageCodes, messages, onSaved }: { personaVersionId: string; languageCodes: string[]; messages: PersonaLanguageMessage[]; onSaved: () => void }) {
+  const [drafts, setDrafts] = useState<Record<string, { opening: string; fallback: string }>>({});
+  const [busyCode, setBusyCode] = useState<string | null>(null);
+
+  function draftFor(code: string) {
+    if (drafts[code]) return drafts[code];
+    const existing = messages.find((m) => m.persona_version_id === personaVersionId && m.language_code === code);
+    return { opening: existing?.opening_message ?? '', fallback: existing?.fallback_message ?? '' };
+  }
+
+  async function save(code: string, autoTranslate: boolean) {
+    setBusyCode(code);
+    const draft = draftFor(code);
+    await fetch('/api/v1/persona-versions/' + personaVersionId + '/language-messages', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ language_code: code, opening_message: draft.opening, fallback_message: draft.fallback, auto_translate: autoTranslate }),
+    }).catch(() => {});
+    onSaved();
+    setBusyCode(null);
+  }
+
+  return (
+    <div className="language-message-list">
+      {languageCodes.map((code) => {
+        const existing = messages.find((m) => m.persona_version_id === personaVersionId && m.language_code === code);
+        const draft = draftFor(code);
+        const name = FALLBACK_LANGUAGES.find((l) => l.code === code)?.english_name ?? code;
+        return (
+          <div className="panel language-message-row" key={code}>
+            <strong>{name}</strong>
+            {existing?.source === 'machine_translated' && <StatusPill tone="warn">Machine translated — review before use</StatusPill>}
+            <textarea placeholder="Opening message" value={draft.opening} onChange={(e) => setDrafts((prev) => ({ ...prev, [code]: { opening: e.target.value, fallback: prev[code]?.fallback ?? draft.fallback } }))} />
+            <textarea placeholder="Fallback message (used when this language can't be resolved)" value={draft.fallback} onChange={(e) => setDrafts((prev) => ({ ...prev, [code]: { opening: prev[code]?.opening ?? draft.opening, fallback: e.target.value } }))} />
+            <div className="editor-actions">
+              <button className="secondary-button" type="button" onClick={() => save(code, false)} disabled={busyCode === code}>{busyCode === code ? 'Saving…' : 'Save'}</button>
+              {code !== 'en-ZA' && <button className="plain-button" type="button" onClick={() => save(code, true)} disabled={busyCode === code}>Translate opening message with AI</button>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1768,7 +1887,7 @@ function Knowledge() {
               <div className="preview-scroll">{previewContent}</div>
             </div>
           )}
-          {addSourceMode !== 'generate' && <label>Language (optional)<input value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)} placeholder="e.g. English (South Africa)" /></label>}
+          {addSourceMode !== 'generate' && <label>Language (optional)<LanguageSelect value={addLanguage} onChange={setAddLanguage} includeNone="Not set" /></label>}
           {addSourceMode === 'generate' && !previewContent && (
             <div className="full">
               <button className="secondary-button" type="button" onClick={generatePreview} disabled={generatingPreview}>
@@ -1876,6 +1995,10 @@ function LiveSessions() {
 
   const [callStage, setCallStage] = useState<CallStage>("idle");
   const [activeHuman, setActiveHuman] = useState<TestReadyHuman | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState("en-ZA");
+  const [switchingLanguage, setSwitchingLanguage] = useState(false);
+  const [languageSwitchNote, setLanguageSwitchNote] = useState<string | null>(null);
+  const liveRoomRef = useRef<Room | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [liveRoom, setLiveRoom] = useState<{ url: string; token: string } | null>(null);
   const [liveStatus, setLiveStatus] = useState<LiveVoiceRoomStatus | null>(null);
@@ -1944,6 +2067,28 @@ function LiveSessions() {
     await fetch(`/api/v1/live-sessions/${sessionId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_type: eventType, payload }) }).catch(() => {});
   }
 
+  // Resolution + logging is guaranteed (the switch-language endpoint always
+  // writes a session_events row); the actual live hot-swap is a best-effort data
+  // message to the realtime-agent worker (verified real API — see
+  // services/realtime-agent/livekit_agent.py's update_agent/update_options usage).
+  // Never claims the switch worked when the registry says the language wasn't
+  // directly usable — disclosed via languageSwitchNote either way.
+  async function switchLanguage(target: string) {
+    if (!activeSessionId) return;
+    setSwitchingLanguage(true);
+    setLanguageSwitchNote(null);
+    const res = await fetch(`/api/v1/live-sessions/${activeSessionId}/switch-language`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target_language: target }) }).then((r) => r.json()).catch(() => null);
+    setSwitchingLanguage(false);
+    if (!res?.success) { setLanguageSwitchNote(res?.message || "Could not switch language."); return; }
+    setSelectedLanguage(target);
+    if (res.data.status === "unsupported" || !res.data.resolved_language) {
+      setLanguageSwitchNote(`${target} isn't usable yet — staying in the current language.`);
+      return;
+    }
+    liveRoomRef.current?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "vhm_language_switch_request", language_code: res.data.resolved_language })), { reliable: true });
+    setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — using ${res.data.resolved_language} instead.` : `Switched to ${res.data.resolved_language}.`);
+  }
+
   async function startTestCall(human: TestReadyHuman) {
     if (!human.ready || callStage === "starting") return;
     setError(null);
@@ -1954,7 +2099,7 @@ function LiveSessions() {
     setAgentJoined(false);
     setNoAgentTimeout(false);
     try {
-      const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id }) });
+      const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id, requested_language: selectedLanguage }) });
       const sessionBody = await sessionRes.json().catch(() => ({}));
       if (!sessionRes.ok) throw new Error(sessionBody.message || "Could not start this test call.");
       const sessionId = sessionBody.data.session_id as string;
@@ -2076,6 +2221,7 @@ function LiveSessions() {
                   setReconnectedThisCall(true);
                   if (activeSessionId) reportEvent(activeSessionId, "reconnected", {});
                 }}
+                onRoomReady={(room) => { liveRoomRef.current = room; }}
               />
               {noAgentTimeout && (
                 <div className="live-call-diagnostic">
@@ -2089,8 +2235,10 @@ function LiveSessions() {
               </div>
               <div className="live-call-controls">
                 <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
+                <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="enabled-only" disabled={switchingLanguage} />
                 <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
               </div>
+              {languageSwitchNote && <p className="panel-note">{languageSwitchNote}</p>}
             </div>
           ) : callStage === "ended" && callSummary && activeHuman ? (
             <div className="call-summary">
@@ -2103,6 +2251,9 @@ function LiveSessions() {
           ) : (
             <>
               <PanelTitle title="Test console" eyebrow="Real live voice + avatar call" action={<StatusPill tone="good">Live</StatusPill>} />
+              <label className="pre-call-language">Language for this call
+                <LanguageSelect value={selectedLanguage} onChange={setSelectedLanguage} capability="realtime" scope="enabled-only" showStatusBadge includeNone="Auto-detect language" />
+              </label>
               {testHumans.length === 0 && loaded && (
                 <div className="ingestion-card compact"><p>No digital humans yet.</p><Link href="/studio/digital-humans" className="secondary-button"><ArrowRight size={15} />Create one</Link></div>
               )}
@@ -2171,7 +2322,7 @@ function PresenterStudio() {
   const [formScript, setFormScript] = useState("Welcome to GoalVow Academy. In this lesson, we'll explore how clear communication builds stronger customer relationships.");
   const [formHumanId, setFormHumanId] = useState("");
   const [formVoiceId, setFormVoiceId] = useState("");
-  const [formLanguage, setFormLanguage] = useState("English (South Africa)");
+  const [formLanguage, setFormLanguage] = useState("en-ZA");
   const [formAspect, setFormAspect] = useState("16:9");
   const [creating, setCreating] = useState(false);
 
@@ -2408,7 +2559,7 @@ function PresenterStudio() {
               </label>
               <label>
                 Output language
-                <input value={formLanguage} onChange={(e) => setFormLanguage(e.target.value)} />
+                <LanguageSelect value={formLanguage} onChange={setFormLanguage} capability="tts" showStatusBadge />
               </label>
               <label>
                 Aspect ratio
@@ -2509,9 +2660,73 @@ function PresenterStudio() {
                 <strong>Real narration and per-scene lip-synced rendering</strong>, played back scene-by-scene right here — every clip above is a genuine generated file, not a placeholder. A single downloadable MP4 export (scene concatenation, burned-in captions) isn&rsquo;t built yet; this plays the real scenes back to back instead.
               </p>
             </div>
+            {playableScenes.length > 0 && <PresenterTranslations projectId={detail.project.id} scenes={detail.scenes} sourceLanguage={detail.project.output_language} />}
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function PresenterTranslations({ projectId, scenes, sourceLanguage }: { projectId: string; scenes: PresenterScene[]; sourceLanguage: string }) {
+  const [targetLanguage, setTargetLanguage] = useState('zu-ZA');
+  const [translating, setTranslating] = useState(false);
+  const [results, setResults] = useState<Record<string, { translated_script: string; translation_status: string; confidence: string }>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  async function translateAll() {
+    setTranslating(true);
+    setError(null);
+    for (const scene of scenes) {
+      const res = await fetch(`/api/v1/presenter-projects/${projectId}/translate-scene`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scene_id: scene.id, target_language: targetLanguage }),
+      }).then((r) => r.json()).catch(() => null);
+      if (res?.success) {
+        setResults((prev) => ({ ...prev, [scene.id]: { translated_script: res.data.translated_script, translation_status: res.data.translation_status, confidence: res.data.confidence } }));
+      } else {
+        setError(res?.message || 'Could not translate one or more scenes.');
+        break;
+      }
+    }
+    setTranslating(false);
+  }
+
+  return (
+    <div className="panel presenter-translations">
+      <PanelTitle title="Translate this project" eyebrow="Stored as a separate version — the source script is never overwritten" />
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      <div className="editor-actions">
+        <LanguageSelect value={targetLanguage} onChange={setTargetLanguage} capability="translation" showStatusBadge />
+        <button className="secondary-button" type="button" onClick={translateAll} disabled={translating}>{translating ? 'Translating…' : 'Translate all scenes'}</button>
+      </div>
+      {Object.keys(results).length > 0 && (
+        <div className="language-message-list">
+          {scenes.map((scene) => {
+            const result = results[scene.id];
+            if (!result) return null;
+            return (
+              <div className="panel language-message-row" key={scene.id}>
+                <strong>Scene {scene.ordinal + 1}</strong>
+                <StatusPill tone={result.translation_status === 'approved' ? 'good' : 'warn'}>{result.translation_status.replace(/_/g, ' ')}</StatusPill>
+                {result.confidence === 'low' && <StatusPill tone="danger">Low-confidence translation — review before use</StatusPill>}
+                <p>{result.translated_script}</p>
+                {scene.generated_video_id && (
+                  <div className="editor-actions">
+                    <a className="plain-button" href={`/api/v1/generated-videos/${scene.generated_video_id}/subtitles?format=srt&language=${targetLanguage}`}>Download .srt ({targetLanguage})</a>
+                    <a className="plain-button" href={`/api/v1/generated-videos/${scene.generated_video_id}/subtitles?format=vtt&language=${targetLanguage}`}>Download .vtt ({targetLanguage})</a>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="editor-actions">
+        {scenes.filter((s) => s.generated_video_id).map((scene) => (
+          <a key={scene.id} className="plain-button" href={`/api/v1/generated-videos/${scene.generated_video_id}/subtitles?format=srt`}>Original ({sourceLanguage}) — Scene {scene.ordinal + 1} .srt</a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2936,7 +3151,7 @@ function VoiceLibrary() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<'provider' | 'upload'>('provider');
   const [addName, setAddName] = useState('');
-  const [addLanguage, setAddLanguage] = useState('English (South Africa)');
+  const [addLanguage, setAddLanguage] = useState('en-ZA');
   const [addProviderVoice, setAddProviderVoice] = useState('');
   const [addFile, setAddFile] = useState<File | null>(null);
   const [adding, setAdding] = useState(false);
@@ -3062,7 +3277,7 @@ function VoiceLibrary() {
         <PanelTitle title="Add a voice" eyebrow="Provider voice or your own upload" />
         <form className="form-grid two" onSubmit={submitAdd}>
           <label className="full">Name<input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="e.g. Warm and professional" /></label>
-          <label>Language<select value={addLanguage} onChange={(e) => setAddLanguage(e.target.value)}><option>English (South Africa)</option><option>isiZulu</option><option>Multilingual</option></select></label>
+          <label>Language<LanguageSelect value={addLanguage} onChange={setAddLanguage} capability="tts" showStatusBadge /></label>
           <label>Source
             <select value={addMode} onChange={(e) => setAddMode(e.target.value as 'provider' | 'upload')}>
               <option value="provider">Pick a provider voice</option>
@@ -3109,16 +3324,234 @@ function SettingsPage() {
   const user = useAuth();
   const [saved,setSaved]=useState(false);
   const [retention,setRetention]=useState('30 days');
-  const [tab, setTab] = useState<"organisation" | "data" | "flags" | "provider" | "notifications">("organisation");
+  const [tab, setTab] = useState<"organisation" | "data" | "flags" | "provider" | "languages" | "notifications">("organisation");
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({ "Session completed": true, "Consent expiring": true, "Webhook failures": true, "Weekly digest": false });
-  const tabs: [typeof tab, string][] = [["organisation", "Organisation"], ["data", "Data & retention"], ["flags", "Feature flags"], ["provider", "Provider health"], ["notifications", "Notifications"]];
+  const tabs: [typeof tab, string][] = [["organisation", "Organisation"], ["data", "Data & retention"], ["flags", "Feature flags"], ["provider", "Provider health"], ["languages", "Languages"], ["notifications", "Notifications"]];
   return <div className="content-stack"><section className="settings-layout"><nav className="settings-nav">{tabs.map(([key, label]) => <button key={key} className={tab === key ? "selected" : ""} onClick={() => setTab(key)}>{label}</button>)}</nav><div className="panel settings-form">
-    {tab === "organisation" && <><PanelTitle title="Organisation defaults" eyebrow={user.organisationName}/><div className="form-grid two"><label>Organisation name<input defaultValue={user.organisationName}/></label><label>Primary region<select defaultValue="South Africa"><option>South Africa</option><option>European Union</option></select></label><label>Default language<select defaultValue="English (South Africa)"><option>English (South Africa)</option><option>isiZulu</option></select></label></div><div className="settings-switches">{[['Visible AI disclosure','Locked on','Cannot be disabled'],['Transcript capture','Consent required','Per-session decision'],['Recording','Off','Requires separate consent'],['GPU avatar modes','Off','Licence and health gate']].map(([label,state,note])=><div key={label}><span><strong>{label}</strong><small>{note}</small></span><StatusPill tone={state==='Off'?'muted':'good'}>{state}</StatusPill></div>)}</div><button className="primary-button" onClick={()=>setSaved(true)}>{saved?<Check size={17}/>:null}{saved?'Settings saved':'Save organisation settings'}</button></>}
+    {tab === "organisation" && <><PanelTitle title="Organisation defaults" eyebrow={user.organisationName}/><div className="form-grid two"><label>Organisation name<input defaultValue={user.organisationName}/></label><label>Primary region<select defaultValue="South Africa"><option>South Africa</option><option>European Union</option></select></label><label>Default language<select defaultValue="en-ZA">{[['en-ZA','English (South Africa)'],['zu-ZA','isiZulu'],['xh-ZA','isiXhosa'],['af-ZA','Afrikaans'],['nso-ZA','Sepedi'],['tn-ZA','Setswana'],['st-ZA','Sesotho'],['ts-ZA','Xitsonga'],['ss-ZA','siSwati'],['ve-ZA','Tshivenda'],['nr-ZA','isiNdebele']].map(([code,name])=><option key={code} value={code}>{name}</option>)}</select></label></div><p className="panel-note">Per-language enablement, providers and voices are configured on the Languages tab.</p><div className="settings-switches">{[['Visible AI disclosure','Locked on','Cannot be disabled'],['Transcript capture','Consent required','Per-session decision'],['Recording','Off','Requires separate consent'],['GPU avatar modes','Off','Licence and health gate']].map(([label,state,note])=><div key={label}><span><strong>{label}</strong><small>{note}</small></span><StatusPill tone={state==='Off'?'muted':'good'}>{state}</StatusPill></div>)}</div><button className="primary-button" onClick={()=>setSaved(true)}>{saved?<Check size={17}/>:null}{saved?'Settings saved':'Save organisation settings'}</button></>}
     {tab === "data" && <><PanelTitle title="Data & retention" eyebrow="Applies organisation-wide"/><div className="form-grid two"><label>Transcript retention<select value={retention} onChange={(e) => setRetention(e.target.value)}><option>Session only</option><option>7 days</option><option>30 days</option><option>90 days</option></select></label></div><div className="settings-switches"><div><span><strong>Deletion queue</strong><small>Removes chunks, embeddings and transcripts on schedule</small></span><StatusPill>Enabled</StatusPill></div><div><span><strong>Recordings</strong><small>Requires separate per-session consent</small></span><StatusPill tone="muted">Off</StatusPill></div><div><span><strong>Current retention window</strong><small>Applies to new sessions immediately</small></span><StatusPill>{retention}</StatusPill></div></div></>}
     {tab === "flags" && <><PanelTitle title="Feature flags" eyebrow="Exact mode status"/><div className="readiness-list">{readiness.map((item) => <div key={item.name}><span>{item.name}</span><StatusPill tone={item.tone}>{item.state}</StatusPill></div>)}</div><p className="panel-note"><CircleAlert size={16} /> GPU modes remain off until licences, CUDA and approved infrastructure are ready.</p></>}
     {tab === "provider" && <><PanelTitle title="Provider health" eyebrow="Boundaries enforced client-side"/><div className="health-grid">{[['LiveKit transport','Mock ready','good'],['OpenAI Realtime','Credentials needed','warn'],['Avatar worker','Audio fallback','good'],['Transcript store','Consent gated','good']].map(([name,state,tone])=><div key={name}><span>{name}</span><StatusPill tone={tone}>{state}</StatusPill></div>)}</div></>}
+    {tab === "languages" && <LanguagesSettingsTab />}
     {tab === "notifications" && <><PanelTitle title="Notifications" eyebrow="Delivered in-app only in preview"/><div className="settings-switches">{Object.entries(notifPrefs).map(([label, on]) => <div key={label}><span><strong>{label}</strong></span><button className="secondary-button" onClick={() => setNotifPrefs((prev) => ({ ...prev, [label]: !prev[label] }))}><StatusPill tone={on ? "good" : "muted"}>{on ? "On" : "Off"}</StatusPill></button></div>)}</div></>}
   </div></section></div>;
+}
+
+type LanguageAdminRow = {
+  code: string; english_name: string; native_name: string; enabled: boolean;
+  default_voice_id: string | null; preferred_stt_provider: string | null; preferred_tts_provider: string | null;
+  preferred_realtime_provider: string | null; fallback_language_code: string | null;
+  capabilities: { capability: string; provider: string; status: string; notes: string }[];
+  avg_latency_ms: number | null; recent_failures: number; validation_reviews: number; validation_passed: number;
+};
+
+function bestStatusForRow(row: LanguageAdminRow, capability: string): string {
+  const relevant = row.capabilities.filter((c) => c.capability === capability);
+  const rank = ["production", "beta", "experimental", "degraded", "temporarily-unavailable", "unsupported"];
+  if (relevant.length === 0) return "unsupported";
+  return relevant.reduce((best, c) => (rank.indexOf(c.status) < rank.indexOf(best) ? c.status : best), "unsupported");
+}
+
+function LanguagesSettingsTab() {
+  const [rows, setRows] = useState<LanguageAdminRow[]>([]);
+  const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
+  const [personas, setPersonas] = useState<{ id: string; name: string }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  async function refresh() {
+    const [langRes, voiceRes, personaRes] = await Promise.all([
+      fetch("/api/v1/languages").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/voices").then((r) => r.json()).catch(() => null),
+      fetch("/api/v1/personas").then((r) => r.json()).catch(() => null),
+    ]);
+    if (langRes?.success) setRows(langRes.data.items);
+    if (voiceRes?.success) setVoices(voiceRes.data.items);
+    if (personaRes?.success) setPersonas(personaRes.data.items);
+    setLoaded(true);
+  }
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch on mount; refresh() is also reused after saves
+  useEffect(() => { refresh(); }, []);
+
+  async function updateLanguage(code: string, patch: Record<string, unknown>) {
+    const res = await fetch(`/api/v1/languages/${code}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => r.json()).catch(() => null);
+    if (!res?.success) { setError(res?.message || "Could not save this language's settings."); return; }
+    await refresh();
+  }
+
+  if (loaded && rows.length <= 1) {
+    return (
+      <>
+        <PanelTitle title="Languages" eyebrow="South African official languages" />
+        <p className="panel-note">Multilingual support isn&rsquo;t enabled in this environment (ENABLE_MULTILINGUAL). English continues to work exactly as before.</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PanelTitle title="Languages" eyebrow="Capability registry — honest per-language, per-capability status" />
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>Language</th><th>Enabled</th><th>STT</th><th>Reasoning</th><th>TTS</th><th>Realtime</th><th>Default voice</th><th>Avg latency</th><th>Recent failures</th><th>Validation</th><th /></tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.code}>
+                <td>{row.english_name}</td>
+                <td><button className="secondary-button" onClick={() => updateLanguage(row.code, { enabled: !row.enabled, default_voice_id: row.default_voice_id, preferred_stt_provider: row.preferred_stt_provider, preferred_tts_provider: row.preferred_tts_provider, preferred_realtime_provider: row.preferred_realtime_provider, fallback_language_code: row.fallback_language_code })}><StatusPill tone={row.enabled ? "good" : "muted"}>{row.enabled ? "Enabled" : "Disabled"}</StatusPill></button></td>
+                <td><LanguageStatusBadge status={bestStatusForRow(row, "stt")} /></td>
+                <td><LanguageStatusBadge status={bestStatusForRow(row, "reasoning")} /></td>
+                <td><LanguageStatusBadge status={bestStatusForRow(row, "tts")} /></td>
+                <td><LanguageStatusBadge status={bestStatusForRow(row, "realtime")} /></td>
+                <td>
+                  <select value={row.default_voice_id ?? ""} onChange={(e) => updateLanguage(row.code, { enabled: row.enabled, default_voice_id: e.target.value || null, preferred_stt_provider: row.preferred_stt_provider, preferred_tts_provider: row.preferred_tts_provider, preferred_realtime_provider: row.preferred_realtime_provider, fallback_language_code: row.fallback_language_code })}>
+                    <option value="">Not set</option>
+                    {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </td>
+                <td>{row.avg_latency_ms ? `${Math.round(row.avg_latency_ms)}ms` : "—"}</td>
+                <td>{row.recent_failures > 0 ? <StatusPill tone="danger">{row.recent_failures}</StatusPill> : "0"}</td>
+                <td>{row.validation_reviews > 0 ? `${row.validation_passed}/${row.validation_reviews} passed` : "No reviews yet"}</td>
+                <td><button className="plain-button" type="button" onClick={() => setExpanded(expanded === row.code ? null : row.code)}>{expanded === row.code ? "Hide tests" : "Test & compare"}</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {expanded && <LanguageTestPanel languageCode={expanded} personas={personas} />}
+      <p className="panel-note"><CircleAlert size={16} /> Enabling a language here only controls whether your organisation offers it — it never changes the underlying capability status above, which only moves after real testing (see docs/SOUTH_AFRICAN_LANGUAGE_QA.md).</p>
+    </>
+  );
+}
+
+function LanguageTestPanel({ languageCode, personas }: { languageCode: string; personas: { id: string; name: string }[] }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [benchmarkResults, setBenchmarkResults] = useState<Record<string, unknown>[] | null>(null);
+  const [benchmarkCapability, setBenchmarkCapability] = useState<string>("");
+  const [testPhrase, setTestPhrase] = useState("");
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState("");
+  const [testMessage, setTestMessage] = useState("Hello, can you help me?");
+  const [personaReply, setPersonaReply] = useState<{ reply: string; language?: { status: string; used_fallback: boolean } } | null>(null);
+  const [reviewScore, setReviewScore] = useState(3);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewSaved, setReviewSaved] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const [recording, setRecording] = useState(false);
+
+  async function compareProviders(capability: string) {
+    setBusy(`benchmark-${capability}`);
+    setBenchmarkResults(null);
+    setBenchmarkCapability(capability);
+    const res = await fetch("/api/v1/languages/benchmark", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language_code: languageCode, capability }) }).then((r) => r.json()).catch(() => null);
+    setBusy(null);
+    if (res?.success) { setTestPhrase(res.data.test_phrase); setBenchmarkResults(res.data.results); }
+  }
+
+  async function testPersonaResponse() {
+    if (!selectedPersona) return;
+    setBusy("persona");
+    setPersonaReply(null);
+    const res = await fetch(`/api/v1/personas/${selectedPersona}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: testMessage, language: languageCode }) }).then((r) => r.json()).catch(() => null);
+    setBusy(null);
+    if (res?.success) setPersonaReply(res.data);
+  }
+
+  async function toggleMicTest() {
+    if (recording) {
+      recorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: BlobPart[] = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        setBusy("mic");
+        const form = new FormData();
+        form.set("file", blob, "test.webm");
+        form.set("language_code", languageCode);
+        const res = await fetch("/api/v1/languages/test-transcription", { method: "POST", body: form }).then((r) => r.json()).catch(() => null);
+        setBusy(null);
+        setTranscript(res?.success ? res.data.text : res?.message || "Could not transcribe this recording.");
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setTranscript("Microphone access was denied or is unavailable.");
+    }
+  }
+
+  async function saveReview(provider: string, capability: string) {
+    await fetch("/api/v1/language-reviews", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ language_code: languageCode, capability, provider, review_type: "admin_benchmark", score: reviewScore, notes: reviewNotes }),
+    }).catch(() => {});
+    setReviewSaved(true);
+    window.setTimeout(() => setReviewSaved(false), 2500);
+  }
+
+  return (
+    <div className="panel language-test-panel">
+      <PanelTitle title={`Test & compare — ${languageCode}`} eyebrow="Real provider calls, nothing is auto-published" />
+
+      <div className="editor-actions">
+        <button className="secondary-button" type="button" onClick={toggleMicTest} disabled={busy === "mic"}>{recording ? "Stop recording" : "Test microphone"}</button>
+        <button className="secondary-button" type="button" onClick={() => compareProviders("stt")} disabled={busy === "benchmark-stt"}>{busy === "benchmark-stt" ? "Comparing…" : "Compare STT providers"}</button>
+        <button className="secondary-button" type="button" onClick={() => compareProviders("tts")} disabled={busy === "benchmark-tts"}>{busy === "benchmark-tts" ? "Comparing…" : "Compare TTS providers"}</button>
+        <button className="secondary-button" type="button" onClick={() => compareProviders("translation")} disabled={busy === "benchmark-translation"}>{busy === "benchmark-translation" ? "Comparing…" : "Compare translation"}</button>
+      </div>
+      {transcript && <p className="panel-note">Transcription result: &ldquo;{transcript}&rdquo;</p>}
+
+      {testPhrase && <p className="panel-note">Test phrase: &ldquo;{testPhrase}&rdquo;</p>}
+      {benchmarkResults && (
+        <div className="benchmark-grid">
+          {benchmarkResults.map((r, i) => {
+            const result = r as { provider: string; status: string; message?: string; text?: string; confidence?: string; registry_status?: string; audio_base64?: string; mime_type?: string; latency_ms?: number };
+            return (
+              <div key={i} className="panel benchmark-card">
+                <strong>{result.provider}</strong>
+                <StatusPill tone={result.status === "ok" ? "good" : result.status === "not_configured" ? "muted" : "danger"}>{result.status.replace(/_/g, " ")}</StatusPill>
+                {result.status === "ok" && result.audio_base64 && <audio controls src={`data:${result.mime_type};base64,${result.audio_base64}`} />}
+                {result.status === "ok" && result.text && <p>{result.text} {result.confidence === "low" && <em>(low confidence)</em>}</p>}
+                {result.status === "error" && <small>{result.message}</small>}
+                {result.status === "registry_only" && <small>Registry status: {result.registry_status}</small>}
+                {result.latency_ms && <small>{result.latency_ms}ms</small>}
+                {result.status === "ok" && (
+                  <div className="review-form">
+                    <label>Score<input type="number" min={1} max={5} value={reviewScore} onChange={(e) => setReviewScore(Number(e.target.value))} /></label>
+                    <input placeholder="Notes (pronunciation, naturalness…)" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
+                    <button className="plain-button" type="button" onClick={() => saveReview(result.provider, benchmarkCapability)}>{reviewSaved ? "Saved" : "Record review"}</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="form-grid two">
+        <label>Persona<select value={selectedPersona} onChange={(e) => setSelectedPersona(e.target.value)}><option value="">Choose a persona…</option>{personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label>Test message<input value={testMessage} onChange={(e) => setTestMessage(e.target.value)} /></label>
+      </div>
+      <button className="secondary-button" type="button" onClick={testPersonaResponse} disabled={!selectedPersona || busy === "persona"}>{busy === "persona" ? "Testing…" : "Test Digital Human response"}</button>
+      {personaReply && (
+        <div className="panel-note">
+          <p>{personaReply.reply}</p>
+          {personaReply.language && <small>Resolved status: {personaReply.language.status}{personaReply.language.used_fallback ? " (fell back — this language wasn't directly usable)" : ""}</small>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function StudioView({ section }: { section: string }) {

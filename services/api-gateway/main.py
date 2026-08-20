@@ -132,12 +132,18 @@ class LiveKitTokenRequest(BaseModel):
     # flow has no real sessions row to pin from, so realtime-agent falls back to
     # resolving the human's current published assignment when this is absent.
     persona_version_id: uuid.UUID | None = None
+    # BCP-47-ish locale code (e.g. "zu-ZA") the caller wants this call conducted
+    # in — optional, purely additive. Threaded into the voice agent's dispatch
+    # metadata the same way human_slug/persona_version_id already are; absent
+    # means today's exact behaviour (realtime-agent falls back to the persona's
+    # own default language).
+    requested_language: str | None = None
 
 TOKEN_TTL = datetime.timedelta(seconds=600)
 VOICE_AGENT_NAME = "vowhumans-voice"
 AVATAR_AGENT_NAME = "vowhumans-avatar"
 
-def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None, persona_version_id: uuid.UUID | None) -> str:
+def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID, human_slug: str | None, persona_version_id: uuid.UUID | None, requested_language: str | None = None) -> str:
     api_key, secret = os.getenv("LIVEKIT_API_KEY", ""), os.getenv("LIVEKIT_API_SECRET", "")
     if not api_key or not secret: raise HTTPException(503, "LiveKit is not configured")
 
@@ -156,7 +162,7 @@ def create_livekit_token(room: str, participant: str, organisation_id: uuid.UUID
     # persona_version_id} metadata now too (previously it got nothing at all) —
     # this is what lets realtime-agent resolve the real persona/voice/knowledge
     # for this call instead of its old hardcoded instructions.
-    voice_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug, "persona_version_id": str(persona_version_id) if persona_version_id else None})
+    voice_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug, "persona_version_id": str(persona_version_id) if persona_version_id else None, "requested_language": requested_language})
     room_agents = [RoomAgentDispatch(agent_name=VOICE_AGENT_NAME, metadata=voice_metadata)]
     if human_slug and os.getenv("ENABLE_AVATAR_PARTICIPANT", "false").lower() == "true":
         avatar_metadata = json.dumps({"organisation_id": str(organisation_id), "human_slug": human_slug})
@@ -213,7 +219,7 @@ def create_presenter_project(body: PresenterProjectRequest, auth: Auth):
 @app.post("/api/v1/livekit/token", tags=["livekit"])
 def livekit_token(body: LiveKitTokenRequest, auth: Auth):
     room=f"vhm_{auth.organisation_id.hex[:10]}_{body.session_id.hex[:16]}"
-    token = create_livekit_token(room, body.participant_identity, auth.organisation_id, body.human_slug, body.persona_version_id)
+    token = create_livekit_token(room, body.participant_identity, auth.organisation_id, body.human_slug, body.persona_version_id, body.requested_language)
     return {"url":os.getenv("LIVEKIT_URL"),"room":room,"token":token,"expires_in":int(TOKEN_TTL.total_seconds())}
 
 @app.get("/api/v1/usage", tags=["usage"])

@@ -4,11 +4,14 @@ import { academyCourses, integrations, templates } from "@/data/commercial";
 import { plans } from "@vowhumans/commercial-core";
 import sql from "@/lib/db";
 import { SESSION_COOKIE_NAME, createSession, destroySession, hashPassword, isLockedOut, readSession, recordFailedLogin, resetFailedLogins, sessionCookieOptions, verifyPassword } from "@/lib/auth";
-import { EMBEDDING_MODEL, chatComplete, embedBatch, synthesizeSpeech } from "@/lib/openai";
+import { EMBEDDING_MODEL, chatComplete, embedBatch, synthesizeSpeech, translateText } from "@/lib/openai";
+import { transcribeSpeech } from "@/lib/speech";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 import { mintEmbedToken } from "@/lib/embedToken";
+import { getCapabilityMatrix, recordLanguageUsage, resolveForCapability } from "@/lib/languageRouter";
+import type { CapabilityKind } from "@vowhumans/persona-schema";
 
-const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health"]);
+const allowedResources = new Set(["auth","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","languages","digital-human-languages","terminology","language-reviews"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -36,6 +39,16 @@ async function requireOrganisation(request: NextRequest): Promise<string | null>
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const user = token ? await readSession(token) : null;
   return user?.organisationId ?? null;
+}
+
+// No ENABLE_* flag was read anywhere in this file before the multilingual work —
+// every other "is this configured" check tests a secret env var's presence
+// directly (OPENAI_API_KEY, AVATAR_WORKER_URL, etc). This is the first explicit
+// on/off feature flag, mirroring the os.getenv(...).lower()=="true" idiom the
+// Python services already use. Every gate below degrades to today's exact
+// English-only behaviour when off.
+function flagEnabled(name: string): boolean {
+  return (process.env[name] ?? "false").toLowerCase() === "true";
 }
 
 // Separate from requireOrganisation (used everywhere else and left untouched) —
@@ -294,15 +307,30 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const [human] = await sql`SELECT id, name, role, disclosure, state, created_at, updated_at FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
     if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
-    const [[face], [voice], [gestureRow], [persona], knowledgeBases] = await Promise.all([
+    const [[face], [voice], [gestureRow], [persona], knowledgeBases, languageRows] = await Promise.all([
       sql`SELECT fa.id, fa.media_type, fa.detector_provider, fa.preprocessing_state, fa.state FROM human_face_assignments hfa JOIN face_assets fa ON fa.id = hfa.face_asset_id WHERE hfa.organisation_id = ${organisationId} AND hfa.human_slug = ${route[1]}`,
       sql`SELECT v.id, v.name, v.provider, v.provider_voice_id, v.language, v.is_custom FROM human_voice_assignments hva JOIN voices v ON v.id = hva.voice_id WHERE hva.organisation_id = ${organisationId} AND hva.human_slug = ${route[1]}`,
       sql`SELECT gp.id, gp.name, gp.state_config FROM human_gesture_assignments hga JOIN gesture_profiles gp ON gp.id = hga.gesture_profile_id WHERE hga.organisation_id = ${organisationId} AND hga.human_slug = ${route[1]}`,
       sql`SELECT p.id AS persona_id, p.name AS persona_name, pv.id AS version_id, pv.version, pv.role, pv.state FROM human_persona_assignments hpa JOIN persona_versions pv ON pv.id = hpa.persona_version_id JOIN personas p ON p.id = pv.persona_id WHERE hpa.organisation_id = ${organisationId} AND hpa.human_slug = ${route[1]}`,
       sql`SELECT kb.id, kb.name FROM human_knowledge_assignments hka JOIN knowledge_bases kb ON kb.id = hka.knowledge_base_id WHERE hka.organisation_id = ${organisationId} AND hka.human_slug = ${route[1]}`,
+      // Best status across every provider per language, matching the honest
+      // capability registry rather than any one human's own override — a
+      // digital human "supports" isiZulu only as much as the platform does.
+      flagEnabled("ENABLE_MULTILINGUAL")
+        ? sql`
+            SELECT l.code, l.english_name,
+              (SELECT lc.status FROM language_capabilities lc WHERE lc.language_code = l.code AND lc.capability = 'tts'
+               ORDER BY CASE lc.status WHEN 'production' THEN 1 WHEN 'beta' THEN 2 WHEN 'experimental' THEN 3 WHEN 'degraded' THEN 4 WHEN 'temporarily-unavailable' THEN 5 ELSE 6 END LIMIT 1) AS status,
+              dhlv.voice_id, v.name AS voice_name
+            FROM languages l
+            LEFT JOIN digital_human_language_voices dhlv ON dhlv.language_code = l.code AND dhlv.organisation_id = ${organisationId} AND dhlv.human_slug = ${route[1]}
+            LEFT JOIN voices v ON v.id = dhlv.voice_id
+            ORDER BY l.sort_order
+          `
+        : Promise.resolve([]),
     ]);
     const gestureProfile = gestureRow ? { ...gestureRow, state_config: typeof gestureRow.state_config === "string" ? JSON.parse(gestureRow.state_config) : gestureRow.state_config } : null;
-    return response({ human, face: face ?? null, voice: voice ?? null, gesture_profile: gestureProfile, persona: persona ?? null, knowledge_bases: knowledgeBases });
+    return response({ human, face: face ?? null, voice: voice ?? null, gesture_profile: gestureProfile, persona: persona ?? null, knowledge_bases: knowledgeBases, languages: languageRows });
   }
 
   if (resource === "digital-humans" && !route[1]) {
@@ -361,6 +389,76 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       SELECT a.human_slug, a.voice_id, v.name AS voice_name
       FROM human_voice_assignments a JOIN voices v ON v.id = a.voice_id
       WHERE a.organisation_id = ${organisationId}
+    `;
+    return response({ items: rows });
+  }
+
+  // ENABLE_MULTILINGUAL off => only en-ZA comes back, enabled:true — every
+  // consuming <LanguageSelect> across the app collapses to today's single-option
+  // equivalent rather than offering 11 languages nobody can actually use yet.
+  if (resource === "languages" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_MULTILINGUAL")) {
+      return response({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
+    }
+    const [languages, capabilities, orgLanguages, usageStats, reviewStats] = await Promise.all([
+      sql<{ code: string; english_name: string; native_name: string; sort_order: number }[]>`SELECT code, english_name, native_name, sort_order FROM languages ORDER BY sort_order`,
+      sql<{ language_code: string; capability: string; provider: string; status: string; notes: string }[]>`SELECT language_code, capability, provider, status, notes FROM language_capabilities ORDER BY language_code, capability, provider`,
+      sql<{ language_code: string; enabled: boolean; default_voice_id: string | null; preferred_stt_provider: string | null; preferred_tts_provider: string | null; preferred_realtime_provider: string | null; fallback_language_code: string | null }[]>`
+        SELECT language_code, enabled, default_voice_id, preferred_stt_provider, preferred_tts_provider, preferred_realtime_provider, fallback_language_code
+        FROM organisation_languages WHERE organisation_id = ${organisationId}
+      `,
+      // Real usage, not synthetic — every row starts at zero until the org's own
+      // benchmarking/live-session calls actually record something (recordLanguageUsage).
+      sql<{ language_code: string; avg_latency_ms: number | null; recent_failures: string }[]>`
+        SELECT language_code, avg(latency_ms) AS avg_latency_ms, count(*) FILTER (WHERE unit LIKE '%:failed' AND recorded_at > now() - interval '7 days') AS recent_failures
+        FROM usage_records WHERE organisation_id = ${organisationId} AND language_code IS NOT NULL GROUP BY language_code
+      `,
+      sql<{ language_code: string; total: string; passed: string }[]>`
+        SELECT language_code, count(*) AS total, count(*) FILTER (WHERE verdict = 'pass') AS passed
+        FROM language_quality_reviews GROUP BY language_code
+      `,
+    ]);
+    const items = languages.map((lang) => {
+      const org = orgLanguages.find((o) => o.language_code === lang.code);
+      const usage = usageStats.find((u) => u.language_code === lang.code);
+      const reviews = reviewStats.find((r) => r.language_code === lang.code);
+      return {
+        code: lang.code, english_name: lang.english_name, native_name: lang.native_name,
+        enabled: org?.enabled ?? false, default_voice_id: org?.default_voice_id ?? null,
+        preferred_stt_provider: org?.preferred_stt_provider ?? null, preferred_tts_provider: org?.preferred_tts_provider ?? null,
+        preferred_realtime_provider: org?.preferred_realtime_provider ?? null, fallback_language_code: org?.fallback_language_code ?? null,
+        capabilities: capabilities.filter((c) => c.language_code === lang.code),
+        avg_latency_ms: usage?.avg_latency_ms ?? null,
+        recent_failures: Number(usage?.recent_failures ?? 0),
+        validation_reviews: Number(reviews?.total ?? 0),
+        validation_passed: Number(reviews?.passed ?? 0),
+      };
+    });
+    return response({ items });
+  }
+
+  if (resource === "digital-human-languages" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = request.nextUrl.searchParams.get("human_slug");
+    const rows = await sql`
+      SELECT dhlv.language_code, dhlv.voice_id, v.name AS voice_name
+      FROM digital_human_language_voices dhlv LEFT JOIN voices v ON v.id = dhlv.voice_id
+      WHERE dhlv.organisation_id = ${organisationId} ${humanSlug ? sql`AND dhlv.human_slug = ${humanSlug}` : sql``}
+    `;
+    return response({ items: rows });
+  }
+
+  if (resource === "terminology" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const languageCode = request.nextUrl.searchParams.get("language_code");
+    const rows = await sql`
+      SELECT id, language_code, source_term, preferred_form, phonetic_guidance, translation, prohibited_translation, notes, created_at
+      FROM terminology_entries WHERE organisation_id = ${organisationId} ${languageCode ? sql`AND language_code = ${languageCode}` : sql``}
+      ORDER BY language_code, source_term
     `;
     return response({ items: rows });
   }
@@ -450,7 +548,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!persona) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     const versions = await sql`SELECT * FROM persona_versions WHERE persona_id = ${route[1]} AND organisation_id = ${organisationId} ORDER BY version DESC`;
     const guardrails = await sql`SELECT id, code, instruction, enforcement FROM guardrails WHERE persona_id = ${route[1]} AND organisation_id = ${organisationId} ORDER BY created_at`;
-    return response({ persona, versions, guardrails });
+    const languageMessages = versions.length > 0
+      ? await sql`SELECT * FROM persona_version_language_messages WHERE organisation_id = ${organisationId} AND persona_version_id = ANY(${versions.map((v) => v.id)}::uuid[]) ORDER BY language_code`
+      : [];
+    return response({ persona, versions, guardrails, language_messages: languageMessages });
   }
 
   if (resource === "personas" && !route[1]) {
@@ -622,6 +723,37 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse(new Uint8Array(blob.data), { headers: { "content-type": blob.mime_type, "cache-control": "private, max-age=3600" } });
   }
 
+  // Populates generated_videos' existing subtitle_object_key concept on the fly
+  // rather than as a stored file — the underlying facts (scene script, duration_ms)
+  // already exist, so there's nothing to keep in sync by generating it per-request.
+  // ?language=<code> serves a stored translation's text instead of the original
+  // script when one exists; the original scene script is never altered either way.
+  if (resource === "generated-videos" && route[1] && route[2] === "subtitles") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const format = request.nextUrl.searchParams.get("format") === "vtt" ? "vtt" : "srt";
+    const language = request.nextUrl.searchParams.get("language");
+    const [video] = await sql<{ scene_id: string | null; duration_ms: number | null }[]>`SELECT scene_id, duration_ms FROM generated_videos WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!video?.scene_id) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const [scene] = await sql<{ script: string }[]>`SELECT script FROM presenter_scenes WHERE id = ${video.scene_id} AND organisation_id = ${organisationId}`;
+    if (!scene) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    let text = scene.script;
+    if (language) {
+      const [translation] = await sql<{ translated_script: string }[]>`SELECT translated_script FROM presenter_scene_translations WHERE scene_id = ${video.scene_id} AND language_code = ${language} AND organisation_id = ${organisationId}`;
+      if (translation) text = translation.translated_script;
+    }
+    const durationMs = video.duration_ms ?? 4000;
+    const toTimestamp = (ms: number, vtt: boolean) => {
+      const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000), msec = ms % 1000;
+      const pad = (n: number, len = 2) => String(n).padStart(len, "0");
+      return `${pad(h)}:${pad(m)}:${pad(s)}${vtt ? "." : ","}${String(msec).padStart(3, "0")}`;
+    };
+    const body = format === "vtt"
+      ? `WEBVTT\n\n${toTimestamp(0, true)} --> ${toTimestamp(durationMs, true)}\n${text}\n`
+      : `1\n${toTimestamp(0, false)} --> ${toTimestamp(durationMs, false)}\n${text}\n`;
+    return new NextResponse(body, { headers: { "content-type": format === "vtt" ? "text/vtt; charset=utf-8" : "application/x-subrip; charset=utf-8", "cache-control": "private, max-age=3600" } });
+  }
+
   if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
   if (resource === "integrations") return response({ items: integrations });
   if (resource === "templates" || resource === "marketplace") return response({ items: templates, purchases_enabled: false });
@@ -637,6 +769,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Multipart uploads must be branched off before the generic request.json() parse
   // below — a request body can only be read once.
+  // "Test transcription" / "Test mic" in Settings -> Languages — a real STT call
+  // (not a stored artifact), writes nothing, gated on both the general
+  // multilingual flag and the specific OpenAI STT flag so it can't be exercised
+  // silently once multilingual is on but STT hasn't been explicitly enabled.
+  if (resource === "languages" && route[1] === "test-transcription" && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_MULTILINGUAL") || !flagEnabled("ENABLE_OPENAI_STT")) {
+      return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Speech-to-text testing is not enabled in this environment." }, { status: 503 });
+    }
+    const form = await request.formData();
+    const file = form.get("file");
+    const languageCode = String(form.get("language_code") ?? "");
+    if (!(file instanceof Blob) || file.size === 0 || !file.type.startsWith("audio/")) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Provide an audio file." }, { status: 422 });
+    }
+    if (file.size > 8 * 1024 * 1024) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Audio file must be 8MB or smaller." }, { status: 422 });
+    if (!languageCode && !flagEnabled("ENABLE_AUTO_LANGUAGE_DETECTION")) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Choose a language, or enable ENABLE_AUTO_LANGUAGE_DETECTION to allow auto-detect." }, { status: 422 });
+    }
+    const started = Date.now();
+    const resolution = languageCode ? await resolveForCapability(organisationId, languageCode, "stt") : null;
+    const languageHint = resolution && resolution.status !== "unsupported" && !resolution.usedFallback ? languageCode : undefined;
+    const result = await transcribeSpeech(Buffer.from(await file.arrayBuffer()), file.type, languageHint);
+    if (languageCode) await recordLanguageUsage({ organisationId, languageCode, capability: "stt", provider: "openai", latencyMs: Date.now() - started, failed: !result.ok });
+    if (!result.ok) return NextResponse.json({ success: false, code: result.code, message: result.message }, { status: result.status });
+    return NextResponse.json({ success: true, data: { text: result.data.text, latency_ms: Date.now() - started, language_hint_used: languageHint ?? null }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (resource === "voices" && !route[1] && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -840,6 +1001,137 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: { human_slug: humanSlug, voice_id: voiceId }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
+  if (resource === "digital-human-languages" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const humanSlug = typeof body.human_slug === "string" ? body.human_slug : "";
+    const languageCode = typeof body.language_code === "string" ? body.language_code : "";
+    const voiceId = typeof body.voice_id === "string" ? body.voice_id : null;
+    if (!humanSlug || !languageCode) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "human_slug and language_code are required." }, { status: 422 });
+    await sql`
+      INSERT INTO digital_human_language_voices (organisation_id, human_slug, language_code, voice_id) VALUES (${organisationId}, ${humanSlug}, ${languageCode}, ${voiceId})
+      ON CONFLICT (organisation_id, human_slug, language_code) DO UPDATE SET voice_id = EXCLUDED.voice_id
+    `;
+    return NextResponse.json({ success: true, data: { human_slug: humanSlug, language_code: languageCode, voice_id: voiceId }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "terminology" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const languageCode = typeof body.language_code === "string" ? body.language_code : "";
+    const sourceTerm = typeof body.source_term === "string" ? body.source_term.trim() : "";
+    const preferredForm = typeof body.preferred_form === "string" ? body.preferred_form.trim() : "";
+    if (!languageCode || !sourceTerm || !preferredForm) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "language_code, source_term and preferred_form are required." }, { status: 422 });
+    }
+    const phoneticGuidance = typeof body.phonetic_guidance === "string" ? body.phonetic_guidance.trim() : "";
+    const translation = typeof body.translation === "string" ? body.translation.trim() : "";
+    const prohibitedTranslation = typeof body.prohibited_translation === "string" ? body.prohibited_translation.trim() : "";
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
+    const [row] = await sql`
+      INSERT INTO terminology_entries (organisation_id, language_code, source_term, preferred_form, phonetic_guidance, translation, prohibited_translation, notes)
+      VALUES (${organisationId}, ${languageCode}, ${sourceTerm}, ${preferredForm}, ${phoneticGuidance}, ${translation}, ${prohibitedTranslation}, ${notes})
+      ON CONFLICT (organisation_id, language_code, source_term) DO UPDATE SET
+        preferred_form = EXCLUDED.preferred_form, phonetic_guidance = EXCLUDED.phonetic_guidance,
+        translation = EXCLUDED.translation, prohibited_translation = EXCLUDED.prohibited_translation, notes = EXCLUDED.notes, updated_at = now()
+      RETURNING id, language_code, source_term, preferred_form, phonetic_guidance, translation, prohibited_translation, notes, created_at
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  // Calls every CONFIGURED provider's real function against a corpus sample and
+  // returns the raw outputs — writes nothing, so viewing a comparison can never
+  // fabricate or silently publish a "winning" provider. Unconfigured providers
+  // (Azure/Google — no credentials in this environment) return an honest
+  // not_configured card rather than being silently omitted, so the gap is visible.
+  if (resource === "languages" && route[1] === "benchmark") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_LANGUAGE_BENCHMARKING")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Language benchmarking is not enabled in this environment." }, { status: 503 });
+    const languageCode = typeof body.language_code === "string" ? body.language_code : "";
+    const capability = typeof body.capability === "string" ? (body.capability as CapabilityKind) : "";
+    if (!languageCode || !capability) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "language_code and capability are required." }, { status: 422 });
+    const matrix = await getCapabilityMatrix();
+    const providerRows = matrix.filter((r) => r.languageCode === languageCode && r.capability === capability);
+    const [sample] = await sql<{ id: string; source_text: string }[]>`SELECT id, source_text FROM language_test_corpus WHERE language_code = ${languageCode} ORDER BY random() LIMIT 1`;
+    const phrase = sample?.source_text || "Hello, thank you for calling. How may I help you today?";
+    const results = await Promise.all(providerRows.map(async (row) => {
+      if (row.provider !== "openai") return { provider: row.provider, status: "not_configured" as const, notes: row.notes };
+      const started = Date.now();
+      if (capability === "tts") {
+        if (!flagEnabled("ENABLE_OPENAI_TTS")) return { provider: row.provider, status: "not_configured" as const, notes: "ENABLE_OPENAI_TTS is off in this environment." };
+        const result = await synthesizeSpeech(phrase, "alloy");
+        return result.ok
+          ? { provider: row.provider, status: "ok" as const, latency_ms: Date.now() - started, audio_base64: result.data.toString("base64"), mime_type: "audio/wav" }
+          : { provider: row.provider, status: "error" as const, message: result.message };
+      }
+      if (capability === "translation") {
+        if (!flagEnabled("ENABLE_TRANSLATION_FALLBACK")) return { provider: row.provider, status: "not_configured" as const, notes: "ENABLE_TRANSLATION_FALLBACK is off in this environment." };
+        const result = await translateText({ text: phrase, sourceLanguage: "en-ZA", targetLanguage: languageCode });
+        return result.ok
+          ? { provider: row.provider, status: "ok" as const, latency_ms: Date.now() - started, text: result.data.text, confidence: result.data.confidence }
+          : { provider: row.provider, status: "error" as const, message: result.message };
+      }
+      // stt/reasoning/realtime have no cheap text-only benchmark path here — report
+      // the registry status honestly rather than fabricating a machine-test result.
+      return { provider: row.provider, status: "registry_only" as const, registry_status: row.status, notes: row.notes };
+    }));
+    return response({ language_code: languageCode, capability, test_phrase: phrase, results });
+  }
+
+  // Org admin can only enable/prefer a language and pick a default voice —
+  // never writes language_capabilities, so an org can't fabricate a "production"
+  // status for every tenant. See docs/MULTILINGUAL_AUDIT.md. Must stay after the
+  // "benchmark" check above — route[1] here is otherwise treated as a language
+  // code, and "benchmark" would (harmlessly, since it fails the FK, but
+  // confusingly) never reach the real benchmark handler if this ran first.
+  if (resource === "languages" && route[1] && route[1] !== "benchmark" && route[1] !== "test-transcription") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_MULTILINGUAL")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Multilingual support is not enabled in this environment." }, { status: 503 });
+    const enabled = Boolean(body.enabled);
+    const defaultVoiceId = typeof body.default_voice_id === "string" ? body.default_voice_id : null;
+    const preferredSttProvider = typeof body.preferred_stt_provider === "string" ? body.preferred_stt_provider : null;
+    const preferredTtsProvider = typeof body.preferred_tts_provider === "string" ? body.preferred_tts_provider : null;
+    const preferredRealtimeProvider = typeof body.preferred_realtime_provider === "string" ? body.preferred_realtime_provider : null;
+    const fallbackLanguageCode = typeof body.fallback_language_code === "string" ? body.fallback_language_code : "en-ZA";
+    const [row] = await sql`
+      INSERT INTO organisation_languages (organisation_id, language_code, enabled, default_voice_id, preferred_stt_provider, preferred_tts_provider, preferred_realtime_provider, fallback_language_code)
+      VALUES (${organisationId}, ${route[1]}, ${enabled}, ${defaultVoiceId}, ${preferredSttProvider}, ${preferredTtsProvider}, ${preferredRealtimeProvider}, ${fallbackLanguageCode})
+      ON CONFLICT (organisation_id, language_code) DO UPDATE SET
+        enabled = EXCLUDED.enabled, default_voice_id = EXCLUDED.default_voice_id,
+        preferred_stt_provider = EXCLUDED.preferred_stt_provider, preferred_tts_provider = EXCLUDED.preferred_tts_provider,
+        preferred_realtime_provider = EXCLUDED.preferred_realtime_provider, fallback_language_code = EXCLUDED.fallback_language_code, updated_at = now()
+      RETURNING *
+    `;
+    return response(row);
+  }
+
+  if (resource === "language-reviews" && !route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const languageCode = typeof body.language_code === "string" ? body.language_code : "";
+    const capability = typeof body.capability === "string" ? body.capability : "";
+    const provider = typeof body.provider === "string" ? body.provider : "";
+    const reviewType = body.review_type === "formal_qa" ? "formal_qa" : "admin_benchmark";
+    if (!languageCode || !capability || !provider) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "language_code, capability and provider are required." }, { status: 422 });
+    }
+    const score = typeof body.score === "number" && body.score >= 1 && body.score <= 5 ? body.score : null;
+    const verdict = typeof body.verdict === "string" && ["pass", "fail", "needs_review"].includes(body.verdict) ? body.verdict : null;
+    const [row] = await sql`
+      INSERT INTO language_quality_reviews (organisation_id, language_code, capability, provider, review_type, reviewer_name, reviewer_contact, score, verdict, notes, reviewed_at)
+      VALUES (${organisationId}, ${languageCode}, ${capability}, ${provider}, ${reviewType},
+        ${typeof body.reviewer_name === "string" ? body.reviewer_name.trim() : null}, ${typeof body.reviewer_contact === "string" ? body.reviewer_contact.trim() : null},
+        ${score}, ${verdict}, ${typeof body.notes === "string" ? body.notes.trim() : ""}, now())
+      RETURNING *
+    `;
+    // Deliberately does not touch language_capabilities.status here — promoting a
+    // language's real status is a separate, deliberate manual step per
+    // docs/SOUTH_AFRICAN_LANGUAGE_QA.md, never an automatic side effect of one review.
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
   if (resource === "faces" && !route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -1035,9 +1327,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
     const avatarMode = face ? "live-avatar" : "audio-only";
 
+    // requested_language rides in the existing context jsonb rather than a new
+    // sessions column — sessions has no dedicated language field, and context
+    // already exists precisely for this kind of extensible per-session metadata.
+    const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL") && typeof body.requested_language === "string" && body.requested_language ? body.requested_language : null;
     const [session] = await sql<{ id: string }[]>`
       INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_user_id, transport_provider, avatar_mode, context)
-      VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test" })})
+      VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test", ...(requestedLanguage ? { requested_language: requestedLanguage } : {}) })})
       RETURNING id
     `;
     return NextResponse.json({
@@ -1050,10 +1346,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (resource === "live-sessions" && route[1] && route[2] === "token") {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const [session] = await sql<{ digital_human_id: string; persona_version_id: string }[]>`
-      SELECT digital_human_id, persona_version_id FROM sessions WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+    const [session] = await sql<{ digital_human_id: string; persona_version_id: string; context: unknown }[]>`
+      SELECT digital_human_id, persona_version_id, context FROM sessions WHERE id = ${route[1]} AND organisation_id = ${organisationId}
     `;
     if (!session) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const context = typeof session.context === "string" ? JSON.parse(session.context) : session.context;
+    const requestedLanguage = typeof (context as { requested_language?: unknown } | null)?.requested_language === "string" ? (context as { requested_language: string }).requested_language : undefined;
 
     const baseUrl = process.env.API_GATEWAY_URL;
     if (!baseUrl) {
@@ -1068,6 +1366,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           participant_identity: `studio-test-${randomUUID().slice(0, 8)}`,
           human_slug: session.digital_human_id,
           persona_version_id: session.persona_version_id,
+          ...(requestedLanguage ? { requested_language: requestedLanguage } : {}),
         }),
         signal: AbortSignal.timeout(40000),
       });
@@ -1109,6 +1408,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       VALUES (${organisationId}, ${route[1]}, COALESCE((SELECT max(sequence) FROM session_events WHERE session_id = ${route[1]}), 0) + 1, ${eventType}, ${sql.json(payload)})
     `;
     return NextResponse.json({ success: true, data: { recorded: true }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  // Resolves the requested language via the capability registry and logs the
+  // attempt as a session_events row regardless of outcome — the one guaranteed
+  // part of mid-call language switching (see docs/MULTILINGUAL_AUDIT.md for why
+  // the LiveKit agent-side hot-swap itself is a separate, less certain step).
+  // Never silently pretends the switch used the requested language when it fell
+  // back — the client is expected to disclose usedFallback to the user.
+  if (resource === "live-sessions" && route[1] && route[2] === "switch-language") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_LANGUAGE_SWITCHING")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Mid-call language switching is not enabled in this environment." }, { status: 503 });
+    const targetLanguage = typeof body.target_language === "string" ? body.target_language : "";
+    if (!targetLanguage) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "target_language is required." }, { status: 422 });
+    const [owned] = await sql<{ id: string; digital_human_id: string }[]>`SELECT id, digital_human_id FROM sessions WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    if (!owned) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+
+    const [realtimeResolution, voiceOverride] = await Promise.all([
+      resolveForCapability(organisationId, targetLanguage, "realtime"),
+      sql<{ voice_id: string }[]>`SELECT voice_id FROM digital_human_language_voices WHERE organisation_id = ${organisationId} AND human_slug = ${owned.digital_human_id} AND language_code = ${targetLanguage}`,
+    ]);
+    await sql`
+      INSERT INTO session_events (organisation_id, session_id, sequence, event_type, payload)
+      VALUES (${organisationId}, ${route[1]}, COALESCE((SELECT max(sequence) FROM session_events WHERE session_id = ${route[1]}), 0) + 1, 'language_switch_requested',
+        ${sql.json({ target_language: targetLanguage, resolved_status: realtimeResolution?.status ?? "unsupported", used_fallback: realtimeResolution?.usedFallback ?? true, fallback_language_code: realtimeResolution?.fallbackLanguageCode ?? null })})
+    `;
+    if (realtimeResolution) await recordLanguageUsage({ organisationId, sessionId: route[1], languageCode: targetLanguage, capability: "realtime", provider: realtimeResolution.provider });
+    return response({
+      target_language: targetLanguage,
+      resolved_language: realtimeResolution?.resolvedLanguageCode ?? null,
+      status: realtimeResolution?.status ?? "unsupported",
+      used_fallback: realtimeResolution?.usedFallback ?? true,
+      fallback_language_code: realtimeResolution?.fallbackLanguageCode ?? null,
+      voice_id: voiceOverride[0]?.voice_id ?? null,
+    });
   }
 
   if (resource === "presenter-projects" && !route[1]) {
@@ -1309,6 +1643,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await sql`UPDATE presenter_scenes SET state = 'draft' WHERE project_id = ${route[1]} AND organisation_id = ${organisationId}`;
     await sql`UPDATE presenter_projects SET state = 'draft' WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
     return response({ id: route[1], reset: true });
+  }
+
+  // Translation lands as its own explicit, reviewable version — presenter_scenes.script
+  // (the source) is never written by this handler. Re-running this for the same
+  // scene+language overwrites only that language's own translation row, always
+  // resetting it back to 'machine_draft' since it's a fresh machine output.
+  if (resource === "presenter-projects" && route[1] && route[2] === "translate-scene") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_MULTILINGUAL")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Multilingual support is not enabled in this environment." }, { status: 503 });
+    if (!flagEnabled("ENABLE_TRANSLATION_FALLBACK")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Translation is not enabled in this environment." }, { status: 503 });
+    const sceneId = typeof body.scene_id === "string" ? body.scene_id : "";
+    const targetLanguage = typeof body.target_language === "string" ? body.target_language : "";
+    if (!sceneId || !targetLanguage) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "scene_id and target_language are required." }, { status: 422 });
+    const [scene] = await sql<{ id: string; script: string; project_id: string }[]>`
+      SELECT ps.id, ps.script, ps.project_id FROM presenter_scenes ps
+      JOIN presenter_projects pp ON pp.id = ps.project_id
+      WHERE ps.id = ${sceneId} AND ps.organisation_id = ${organisationId} AND pp.id = ${route[1]}
+    `;
+    if (!scene) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
+    const glossaryRows = await sql<{ source_term: string; preferred_form: string }[]>`
+      SELECT source_term, preferred_form FROM terminology_entries WHERE organisation_id = ${organisationId} AND language_code = ${targetLanguage}
+    `;
+    const glossary = glossaryRows.map((g) => ({ sourceTerm: g.source_term, preferredForm: g.preferred_form }));
+    const translation = await translateText({ text: scene.script, sourceLanguage: "en-ZA", targetLanguage, glossary });
+    if (!translation.ok) return NextResponse.json({ success: false, code: translation.code, message: translation.message }, { status: translation.status });
+    const [row] = await sql`
+      INSERT INTO presenter_scene_translations (organisation_id, scene_id, language_code, translated_script, translation_status)
+      VALUES (${organisationId}, ${sceneId}, ${targetLanguage}, ${translation.data.text}, 'machine_draft')
+      ON CONFLICT (scene_id, language_code) DO UPDATE SET translated_script = EXCLUDED.translated_script, translation_status = 'machine_draft', reviewed_by = NULL, reviewed_at = NULL, updated_at = now()
+      RETURNING id, scene_id, language_code, translated_script, translation_status, created_at
+    `;
+    return NextResponse.json({ success: true, data: { ...row, confidence: translation.data.confidence }, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   // Generates the article text synchronously and returns it without writing anything —
@@ -1521,12 +1888,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const speakingRate = typeof pick("speaking_rate") === "number" ? (pick("speaking_rate") as number) : latest.speaking_rate;
     const maxResponseWords = typeof pick("max_response_words") === "number" ? (pick("max_response_words") as number) : latest.max_response_words;
     const knowledgeBaseIds = Array.isArray(pick("knowledge_base_ids")) ? (pick("knowledge_base_ids") as string[]) : latest.knowledge_base_ids;
+    const supportedLanguages = Array.isArray(pick("supported_languages")) ? (pick("supported_languages") as string[]) : latest.supported_languages ?? [];
+    const codeSwitchingPolicy = ["discouraged","allowed","encouraged"].includes(pick("code_switching_policy") as string) ? (pick("code_switching_policy") as string) : latest.code_switching_policy ?? "discouraged";
+    const translationPolicy = ["never","fallback_only","always_offer"].includes(pick("translation_policy") as string) ? (pick("translation_policy") as string) : latest.translation_policy ?? "fallback_only";
     const [version] = await sql`
-      INSERT INTO persona_versions (organisation_id, persona_id, version, state, role, system_instructions, conversation_style, opening_message, language, speaking_rate, max_response_words, knowledge_base_ids)
-      VALUES (${organisationId}, ${personaId}, ${latest.version + 1}, 'draft', ${role}, ${systemInstructions}, ${conversationStyle}, ${openingMessage}, ${language}, ${speakingRate}, ${maxResponseWords}, ${knowledgeBaseIds}::uuid[])
+      INSERT INTO persona_versions (organisation_id, persona_id, version, state, role, system_instructions, conversation_style, opening_message, language, speaking_rate, max_response_words, knowledge_base_ids, supported_languages, code_switching_policy, translation_policy)
+      VALUES (${organisationId}, ${personaId}, ${latest.version + 1}, 'draft', ${role}, ${systemInstructions}, ${conversationStyle}, ${openingMessage}, ${language}, ${speakingRate}, ${maxResponseWords}, ${knowledgeBaseIds}::uuid[], ${supportedLanguages}::text[], ${codeSwitchingPolicy}, ${translationPolicy})
       RETURNING *
     `;
     return NextResponse.json({ success: true, data: version, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
+  }
+
+  if (resource === "persona-versions" && route[1] && route[2] === "language-messages") {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!flagEnabled("ENABLE_MULTILINGUAL")) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Multilingual support is not enabled in this environment." }, { status: 503 });
+    const languageCode = typeof body.language_code === "string" ? body.language_code : "";
+    if (!languageCode) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "language_code is required." }, { status: 422 });
+    const openingMessage = typeof body.opening_message === "string" ? body.opening_message.trim() : "";
+    const fallbackMessage = typeof body.fallback_message === "string" ? body.fallback_message.trim() : "";
+    const autoTranslate = body.auto_translate === true;
+    if (autoTranslate && !flagEnabled("ENABLE_TRANSLATION_FALLBACK")) {
+      return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "Translation is not enabled in this environment — write this message by hand instead." }, { status: 503 });
+    }
+    const source = autoTranslate ? "machine_translated" : "human";
+    let finalOpening = openingMessage;
+    const finalFallback = fallbackMessage;
+    if (autoTranslate) {
+      const [version] = await sql<{ opening_message: string }[]>`SELECT opening_message FROM persona_versions WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+      if (version) {
+        const translated = await translateText({ text: version.opening_message, sourceLanguage: "en-ZA", targetLanguage: languageCode });
+        if (translated.ok) finalOpening = translated.data.text;
+      }
+    }
+    const [row] = await sql`
+      INSERT INTO persona_version_language_messages (organisation_id, persona_version_id, language_code, opening_message, fallback_message, source)
+      VALUES (${organisationId}, ${route[1]}, ${languageCode}, ${finalOpening}, ${finalFallback}, ${source})
+      ON CONFLICT (persona_version_id, language_code) DO UPDATE SET opening_message = EXCLUDED.opening_message, fallback_message = EXCLUDED.fallback_message, source = EXCLUDED.source, updated_at = now()
+      RETURNING *
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
   if (resource === "persona-assignments" && !route[1]) {
@@ -1558,8 +1959,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const context = cited.length > 0
       ? `\n\nGrounding context from the organisation's knowledge base (cite naturally, don't invent facts beyond this):\n${cited.map((c, i) => `[${i + 1}] (${c.documentTitle}) ${c.content}`).join("\n\n")}`
       : "";
+
+    // Optional language override for Settings -> Languages' "Test digital-human
+    // response" tool and the Digital Human page — resolves through the same
+    // capability registry live sessions use, so this test reflects the real
+    // routing decision rather than just trusting the requested code.
+    const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL") && typeof body.language === "string" && body.language ? body.language : null;
+    let respondInLanguage = version.language as string;
+    let languageResolution: { status: string; used_fallback: boolean; fallback_language_code: string | null } | null = null;
+    let terminologyBlock = "";
+    if (requestedLanguage) {
+      const resolved = await resolveForCapability(organisationId, requestedLanguage, "reasoning");
+      languageResolution = { status: resolved?.status ?? "unsupported", used_fallback: resolved?.usedFallback ?? true, fallback_language_code: resolved?.fallbackLanguageCode ?? null };
+      respondInLanguage = resolved?.resolvedLanguageCode ?? version.language;
+      const glossary = await sql<{ source_term: string; preferred_form: string }[]>`SELECT source_term, preferred_form FROM terminology_entries WHERE organisation_id = ${organisationId} AND language_code = ${respondInLanguage}`;
+      if (glossary.length > 0) terminologyBlock = `\n\nUse these exact preferred terms wherever they're relevant, never a different translation:\n${glossary.map((g) => `- "${g.source_term}" -> "${g.preferred_form}"`).join("\n")}`;
+    }
+
     const generated = await chatComplete({
-      system: `${version.system_instructions}\n\nConversation style: ${version.conversation_style}\nRespond in ${version.language}. Keep responses under ${version.max_response_words} words.${context}`,
+      system: `${version.system_instructions}\n\nConversation style: ${version.conversation_style}\nRespond in ${respondInLanguage}. Keep responses under ${version.max_response_words} words.${context}${terminologyBlock}`,
       messages: [{ role: "user", content: message }],
       maxOutputTokens: Math.min(800, version.max_response_words * 6),
       reasoningEffort: "none",
@@ -1567,7 +1985,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!generated.ok) return NextResponse.json({ success: false, code: generated.code, message: generated.message }, { status: generated.status });
     return NextResponse.json({
       success: true,
-      data: { reply: generated.data, citations: cited.map((c) => ({ document_title: c.documentTitle, content: c.content.slice(0, 240), similarity: c.similarity })) },
+      data: {
+        reply: generated.data,
+        citations: cited.map((c) => ({ document_title: c.documentTitle, content: c.content.slice(0, 240), similarity: c.similarity })),
+        ...(languageResolution ? { language: languageResolution } : {}),
+      },
       meta: { mode: "live", request_id: randomUUID() },
     });
   }
@@ -1577,6 +1999,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       session_id: body.session_id,
       participant_identity: body.participant_identity ?? `guest-${randomUUID().slice(0, 8)}`,
       human_slug: body.human_slug,
+      ...(flagEnabled("ENABLE_MULTILINGUAL") && typeof body.requested_language === "string" && body.requested_language ? { requested_language: body.requested_language } : {}),
     });
     if (proxied) return NextResponse.json({ success: true, data: proxied.data, meta: { mode: "live", request_id: randomUUID() } }, { status: proxied.status, headers: { "x-vowhumans-mode": "live" } });
     return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "LiveKit tokens are issued only by the configured server-side API gateway." }, { status: 503 });
@@ -1588,6 +2011,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
   const { route } = await params;
+  if (route[0] === "digital-human-languages" && route[1] && route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM digital_human_language_voices WHERE organisation_id = ${organisationId} AND human_slug = ${route[1]} AND language_code = ${route[2]} RETURNING human_slug`;
+    return response({ human_slug: route[1], language_code: route[2], deleted: Boolean(deleted) }, 202);
+  }
+  if (route[0] === "terminology" && route[1]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [deleted] = await sql`DELETE FROM terminology_entries WHERE id = ${route[1]} AND organisation_id = ${organisationId} RETURNING id`;
+    return response({ id: route[1], deleted: Boolean(deleted) }, 202);
+  }
   if (route[0] === "voices" && route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -1819,7 +2254,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       language = COALESCE(${typeof body.language === "string" ? body.language : null}, language),
       speaking_rate = COALESCE(${typeof body.speaking_rate === "number" ? body.speaking_rate : null}, speaking_rate),
       max_response_words = COALESCE(${typeof body.max_response_words === "number" ? body.max_response_words : null}, max_response_words),
-      knowledge_base_ids = COALESCE(${Array.isArray(body.knowledge_base_ids) ? (body.knowledge_base_ids as string[]) : null}::uuid[], knowledge_base_ids)
+      knowledge_base_ids = COALESCE(${Array.isArray(body.knowledge_base_ids) ? (body.knowledge_base_ids as string[]) : null}::uuid[], knowledge_base_ids),
+      supported_languages = COALESCE(${Array.isArray(body.supported_languages) ? (body.supported_languages as string[]) : null}::text[], supported_languages),
+      code_switching_policy = COALESCE(${["discouraged","allowed","encouraged"].includes(body.code_switching_policy as string) ? body.code_switching_policy as string : null}, code_switching_policy),
+      translation_policy = COALESCE(${["never","fallback_only","always_offer"].includes(body.translation_policy as string) ? body.translation_policy as string : null}, translation_policy)
     WHERE id = ${route[1]} AND organisation_id = ${organisationId}
     RETURNING *
   `;

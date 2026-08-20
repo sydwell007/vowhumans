@@ -12,7 +12,7 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected }: { url: string; token: string; muted: boolean; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void }) {
+export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady }: { url: string; token: string; muted: boolean; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -20,6 +20,7 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
   const onSpeakingChangeRef = useRef(onSpeakingChange);
   const onFirstAudioRef = useRef(onFirstAudio);
   const onReconnectedRef = useRef(onReconnected);
+  const onRoomReadyRef = useRef(onRoomReady);
   const firstAudioFiredRef = useRef(false);
   // Raw agent audio plays instantly for turn 1 (unchanged behavior). Once the
   // avatar participant signals readiness, every subsequent turn's audio comes
@@ -44,6 +45,10 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
   useEffect(() => {
     onReconnectedRef.current = onReconnected;
   }, [onReconnected]);
+
+  useEffect(() => {
+    onRoomReadyRef.current = onRoomReady;
+  }, [onRoomReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +130,10 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
     room
       .connect(url, token)
       .then(() => room.localParticipant.setMicrophoneEnabled(!muted))
-      .then(() => notify("connected"))
+      .then(() => {
+        notify("connected");
+        if (!cancelled) onRoomReadyRef.current?.(room);
+      })
       .catch(() => notify("error"));
 
     return () => {

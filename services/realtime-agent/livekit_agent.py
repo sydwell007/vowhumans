@@ -5,11 +5,14 @@ start without credentials. Run it only after ENABLE_LIVEKIT and a conversation p
 are configured. Provider keys remain in the worker environment.
 
 Every class/method/field/event name below (function_tool, RunContext, Agent(tools=...),
-JobContext.add_shutdown_callback) was checked against livekit-agents~=1.6's actual
-installed source before writing this, same discipline avatar-participant's own
-livekit_agent.py documents needing.
+JobContext.add_shutdown_callback, AgentSession.update_agent, RealtimeModel.update_options,
+room.on("data_received", ...) / DataPacket.data|topic) was checked against
+livekit-agents~=1.6's / livekit-plugins-openai~=1.6's actual installed source
+(a throwaway venv, not documentation) before writing this, same discipline
+avatar-participant's own livekit_agent.py documents needing.
 """
 from __future__ import annotations
+import asyncio
 import json
 import os
 import httpx
@@ -35,13 +38,15 @@ class VowHumansAgent(Agent):
         super().__init__(instructions=disclosure + instructions, tools=tools or [])
 
 
-async def _fetch_persona(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None) -> dict | None:
+async def _fetch_persona(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, language: str | None = None) -> dict | None:
     if not (STUDIO_WEB_URL and INTERNAL_KEY):
         return None
     try:
         params = {"human_slug": human_slug}
         if persona_version_id:
             params["persona_version_id"] = persona_version_id
+        if language:
+            params["language"] = language
         resp = await client.get(
             f"{STUDIO_WEB_URL.rstrip('/')}/api/internal/v1/persona",
             headers={"x-internal-key": INTERNAL_KEY, "x-organisation-id": organisation_id},
@@ -80,6 +85,23 @@ def _make_knowledge_tool(client: httpx.AsyncClient, organisation_id: str, knowle
     return search_knowledge_base
 
 
+def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None) -> tuple[str, str, str, list] | None:
+    persona = persona_data.get("persona") if persona_data else None
+    if not persona:
+        return None
+    instructions = (
+        f"{persona['system_instructions']}\n\n"
+        f"Conversation style: {persona['conversation_style']}\n"
+        f"Respond in {persona['language']}. Keep responses under {persona['max_response_words']} words."
+    )
+    opening_instruction = f"Disclose that you are AI, then deliver this opening message: {persona['opening_message']}"
+    voice_info = persona_data.get("voice")
+    voice = voice_info["provider_voice_id"] if voice_info and voice_info.get("provider_voice_id") else FALLBACK_VOICE
+    knowledge_base_ids = persona.get("knowledge_base_ids") or []
+    tools: list = [_make_knowledge_tool(client, organisation_id, knowledge_base_ids)] if knowledge_base_ids else []
+    return instructions, opening_instruction, voice, tools
+
+
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
     if os.getenv("ENABLE_OPENAI_REALTIME", "false").lower() != "true":
@@ -89,6 +111,7 @@ async def entrypoint(ctx: JobContext):
     organisation_id = metadata.get("organisation_id")
     human_slug = metadata.get("human_slug")
     persona_version_id = metadata.get("persona_version_id")
+    requested_language = metadata.get("requested_language")
 
     persona_instructions = FALLBACK_INSTRUCTIONS
     opening_instruction = FALLBACK_OPENING_INSTRUCTION
@@ -103,25 +126,54 @@ async def entrypoint(ctx: JobContext):
     ctx.add_shutdown_callback(client.aclose)
 
     if organisation_id and human_slug:
-        persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id)
-        persona = persona_data.get("persona") if persona_data else None
-        if persona:
-            persona_instructions = (
-                f"{persona['system_instructions']}\n\n"
-                f"Conversation style: {persona['conversation_style']}\n"
-                f"Respond in {persona['language']}. Keep responses under {persona['max_response_words']} words."
-            )
-            opening_instruction = f"Disclose that you are AI, then deliver this opening message: {persona['opening_message']}"
-            voice_info = persona_data.get("voice") if persona_data else None
-            if voice_info and voice_info.get("provider_voice_id"):
-                voice = voice_info["provider_voice_id"]
-            knowledge_base_ids = persona.get("knowledge_base_ids") or []
-            if knowledge_base_ids:
-                tools = [_make_knowledge_tool(client, organisation_id, knowledge_base_ids)]
+        persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, requested_language)
+        config = _persona_to_config(client, organisation_id, persona_data)
+        if config:
+            persona_instructions, opening_instruction, voice, tools = config
 
     session = AgentSession(llm=openai.realtime.RealtimeModel(model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"), voice=voice))
     await session.start(room=ctx.room, agent=VowHumansAgent(persona_instructions, tools))
     await session.generate_reply(instructions=opening_instruction)
+
+    # Mid-call language switching. Both calls below were verified against the
+    # actual installed livekit-agents~=1.6 / livekit-plugins-openai~=1.6 source
+    # (not assumed from docs) before writing this:
+    #   - AgentSession.update_agent(agent) hot-swaps the active Agent (and so its
+    #     instructions) on a running session without a reconnect.
+    #   - RealtimeModel.update_options(voice=...) updates the live OpenAI Realtime
+    #     session's voice in place.
+    # room.on() callbacks are synchronous (same convention avatar-participant's
+    # _on_track_subscribed already uses) — the actual persona re-fetch and swap
+    # runs as a background task.
+    if organisation_id and human_slug:
+        def _on_data_received(data_packet) -> None:
+            if data_packet.topic != "vhm_language_switch_request":
+                return
+            try:
+                message = json.loads(data_packet.data.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return
+            target_language = message.get("language_code")
+            if isinstance(target_language, str) and target_language:
+                asyncio.create_task(_switch_language(client, organisation_id, human_slug, persona_version_id, target_language, session))
+
+        ctx.room.on("data_received", _on_data_received)
+
+
+async def _switch_language(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, target_language: str, session: AgentSession) -> None:
+    persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, target_language)
+    config = _persona_to_config(client, organisation_id, persona_data)
+    if not config:
+        # Honest no-op: the requested language couldn't be resolved to a usable
+        # persona/voice — leave the session exactly as it was rather than
+        # switching to some other language without disclosure. studio-web's own
+        # switch-language endpoint is what tells the user this happened; this
+        # worker only ever acts on a language it could actually resolve.
+        return
+    instructions, _opening, voice, tools = config
+    session.update_agent(VowHumansAgent(instructions, tools))
+    if isinstance(session.llm, openai.realtime.RealtimeModel):
+        session.llm.update_options(voice=voice)
 
 
 if __name__ == "__main__":

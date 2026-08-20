@@ -112,7 +112,9 @@ export async function synthesizeSpeech(text: string, providerVoiceId: string): P
     const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: providerVoiceId, input: text, response_format: "wav" }),
+      // OPENAI_TTS_MODEL was declared in .env.example but never actually read
+      // anywhere in this repo until now.
+      body: JSON.stringify({ model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts", voice: providerVoiceId, input: text, response_format: "wav" }),
       signal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
     });
     if (!upstream.ok) {
@@ -122,5 +124,40 @@ export async function synthesizeSpeech(text: string, providerVoiceId: string): P
     return { ok: true, data: Buffer.from(await upstream.arrayBuffer()) };
   } catch (err) {
     return { ok: false, status: 502, code: "TTS_FAILED", message: err instanceof Error ? err.message : "Could not reach OpenAI." };
+  }
+}
+
+// Minimal LLM-based translation — reuses chatComplete() rather than a dedicated
+// endpoint (OpenAI has no separate translation API). Deliberately not the default
+// path for multilingual conversation: LanguageRouter only calls this as an
+// explicit fallback (Persona.translation_policy, Presenter Studio's
+// "Translate this scene") or for Presenter Studio scene translation, never to
+// silently round-trip every turn through English — that's slower, costs more,
+// and can quietly change meaning, per docs/MULTILINGUAL_AUDIT.md's own framing.
+export async function translateText(args: {
+  text: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  glossary?: readonly { sourceTerm: string; preferredForm: string }[];
+}): Promise<OpenAIResult<{ text: string; confidence: "high" | "low" }>> {
+  const glossaryBlock = args.glossary?.length
+    ? `\n\nUse these exact preferred forms wherever the source term appears — never substitute a different translation for them:\n${args.glossary.map((g) => `- "${g.sourceTerm}" → "${g.preferredForm}"`).join("\n")}`
+    : "";
+  const system =
+    `Translate the user's text from ${args.sourceLanguage} to ${args.targetLanguage}. ` +
+    `Translate literally and faithfully — do not paraphrase, summarise, or add content. ` +
+    `Preserve names, numbers, dates, prices and places exactly, adapting only formatting conventions where the target language requires it.` +
+    glossaryBlock +
+    `\n\nRespond as JSON: {"text": "<translation>", "confidence": "high"|"low"}. Use "low" honestly if you are not confident in the translation quality for this language pair — do not silently guess.`;
+  const result = await chatComplete({ system, messages: [{ role: "user", content: args.text }], jsonMode: true, maxOutputTokens: 800 });
+  if (!result.ok) return result;
+  try {
+    const parsed = JSON.parse(result.data) as { text?: string; confidence?: string };
+    if (typeof parsed.text !== "string" || !parsed.text.trim()) {
+      return { ok: false, status: 502, code: "TRANSLATION_FAILED", message: "The model returned an empty translation." };
+    }
+    return { ok: true, data: { text: parsed.text, confidence: parsed.confidence === "high" ? "high" : "low" } };
+  } catch {
+    return { ok: false, status: 502, code: "TRANSLATION_FAILED", message: "The model returned an unparseable translation response." };
   }
 }

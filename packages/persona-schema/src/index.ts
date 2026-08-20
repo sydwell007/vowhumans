@@ -85,6 +85,54 @@ export interface AvatarProvider extends HealthCheckedProvider {
   render(input: { identityId: string; audio: Uint8Array; signal?: AbortSignal }): Promise<{ frameStreamUrl?: string; latencyMs: number }>;
 }
 
+export interface TranslationProvider extends HealthCheckedProvider {
+  translate(input: {
+    text: string;
+    sourceLanguage: string;
+    targetLanguage: string;
+    glossary?: readonly { sourceTerm: string; preferredForm: string }[];
+  }): Promise<{ text: string; confidence: "high" | "low" }>;
+}
+
+export const capabilityKinds = ["stt", "reasoning", "tts", "realtime", "translation"] as const;
+export type CapabilityKind = (typeof capabilityKinds)[number];
+
+export const languageCapabilityStatuses = [
+  "unsupported", "experimental", "beta", "production", "degraded", "temporarily-unavailable",
+] as const;
+export type LanguageCapabilityStatus = (typeof languageCapabilityStatuses)[number];
+
+export interface LanguageCapabilityRecord {
+  languageCode: string;
+  capability: CapabilityKind;
+  provider: string;
+  status: LanguageCapabilityStatus;
+  fallbackLanguageCode?: string;
+  notes: string;
+}
+
+// Pure selection logic, deliberately kept free of fetch/DB access so it's cheaply
+// unit-testable — apps/studio-web/src/lib/languageRouter.ts only wraps this with
+// the I/O (loading records from Postgres, recording usage). A language never
+// silently resolves to a different one without the caller being told: callers
+// MUST check usedFallback and disclose it rather than acting as if the
+// requested language was actually used.
+export function resolveLanguageCapability(
+  records: readonly LanguageCapabilityRecord[],
+  languageCode: string,
+  capability: CapabilityKind,
+): { record: LanguageCapabilityRecord | null; usedFallback: boolean; fallbackLanguageCode?: string } {
+  const usable = (status: LanguageCapabilityStatus) => status === "production" || status === "beta" || status === "experimental";
+  const direct = records.find((r) => r.languageCode === languageCode && r.capability === capability && usable(r.status));
+  if (direct) return { record: direct, usedFallback: false };
+
+  const unusable = records.find((r) => r.languageCode === languageCode && r.capability === capability);
+  const fallbackCode = unusable?.fallbackLanguageCode ?? "en-ZA";
+  if (fallbackCode === languageCode) return { record: null, usedFallback: false };
+  const fallback = records.find((r) => r.languageCode === fallbackCode && r.capability === capability && usable(r.status));
+  return { record: fallback ?? null, usedFallback: true, fallbackLanguageCode: fallbackCode };
+}
+
 export function canPublishIdentity(input: { owner: boolean; written: boolean; face: boolean; voice: boolean; commercial: boolean; roles: number; applications: number; geography: boolean; expiry: boolean; provenance: boolean; approved: boolean; revoked: boolean }): boolean {
   return !input.revoked && input.owner && input.written && input.face && input.voice && input.commercial && input.roles > 0 && input.applications > 0 && input.geography && input.expiry && input.provenance && input.approved;
 }
