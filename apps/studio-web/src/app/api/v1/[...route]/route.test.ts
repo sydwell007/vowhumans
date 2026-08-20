@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, beforeEach } from "vitest";
-import { POST } from "./route";
+import { GET, POST } from "./route";
+
+function get(resource: string) {
+  const request = new NextRequest(`http://localhost/api/v1/${resource}`);
+  return GET(request, { params: Promise.resolve({ route: resource.split("/") }) });
+}
 
 function post(resource: string, body: unknown) {
   const request = new NextRequest(`http://localhost/api/v1/${resource}`, {
@@ -48,6 +53,15 @@ describe("api/v1 route mock fallback", () => {
 // it does not exercise post-auth business logic, which needs real DB access
 // this test suite deliberately doesn't set up (see docs/MULTILINGUAL_IMPLEMENTATION_REPORT.md).
 describe("multilingual endpoints require a session", () => {
+  it("GET languages exposes only the safe English demo option without a session", async () => {
+    const res = await get("languages");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.items).toEqual([
+      expect.objectContaining({ code: "en-ZA", enabled: true }),
+    ]);
+  });
+
   it("POST languages/:code (org language settings)", async () => {
     const res = await post("languages/en-ZA", { enabled: true });
     expect(res.status).toBe(401);

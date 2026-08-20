@@ -5,6 +5,7 @@ import { adminSections, portalSections } from "@/data/commercial";
 import { BrandLogo } from "./BrandLogo";
 import { PortalAction } from "./CommercialInteractive";
 import { MarketingShell } from "./MarketingShell";
+import { EditorialVisual } from "./EditorialVisual";
 
 const sectionTitle = (value: string) => value.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
 
@@ -76,7 +77,15 @@ export function PartnerPortal({ path = [] }: { path?: string[] }) {
   const area = path[0] ?? "programme";
   return (
     <MarketingShell>
-      <section className="commercial-page-hero"><p className="commercial-kicker"><span />PARTNER ECOSYSTEM</p><h1>{area === "portal" ? "Partner portal foundation" : "Build services, integrations and capability with VowHumans."}</h1><p>Technology, solution, referral, training and content partners share clear approval, entitlement and attribution boundaries.</p><div className="page-cta-row"><Link className="public-button" href="/partner-apply">Apply to partner <ArrowRight size={15} /></Link><Link className="public-button ghost" href="/developers">Developer resources</Link></div></section>
+      <section className="commercial-page-hero has-editorial-visual">
+        <div className="commercial-page-hero-copy">
+          <p className="commercial-kicker"><span />PARTNER ECOSYSTEM</p>
+          <h1>{area === "portal" ? "Partner portal foundation" : "Build services, integrations and capability with VowHumans."}</h1>
+          <p>Technology, solution, referral, training and content partners share clear approval, entitlement and attribution boundaries.</p>
+          <div className="page-cta-row"><Link className="public-button" href="/partner-apply">Apply to partner <ArrowRight size={15} /></Link><Link className="public-button ghost" href="/developers">Developer resources</Link></div>
+        </div>
+        <EditorialVisual variant="enterprise" priority />
+      </section>
       <section className="commercial-page-body"><div className="content-card-grid">{["Technology partner", "Solution partner", "Referral partner", "Training partner", "Content partner", "Strategic partner"].map((title, index) => <article className="content-card" key={title}><span className="commercial-status">{index < 2 ? "LAUNCH PROGRAMME" : "APPLICATION REVIEW"}</span><h2>{title}</h2><p>Access scoped enablement, technical documentation and co-selling foundations after commercial, security and brand approval.</p></article>)}</div></section>
     </MarketingShell>
   );

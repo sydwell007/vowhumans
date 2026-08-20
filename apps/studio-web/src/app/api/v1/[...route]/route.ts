@@ -398,7 +398,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // equivalent rather than offering 11 languages nobody can actually use yet.
   if (resource === "languages" && !route[1]) {
     const organisationId = await requireOrganisation(request);
-    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    if (!organisationId) {
+      return response({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
+    }
     if (!flagEnabled("ENABLE_MULTILINGUAL")) {
       return response({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
     }

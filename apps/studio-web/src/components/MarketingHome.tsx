@@ -5,6 +5,7 @@ import { plans } from "@vowhumans/commercial-core";
 import { employeeRoles, industries, integrations, products, templates } from "@/data/commercial";
 import { humans } from "@/data/platform";
 import { MarketingShell } from "./MarketingShell";
+import { EditorialVisual } from "./EditorialVisual";
 
 const outcomes = [
   [Clock3, "24/7 availability", "Extend service beyond office hours without hiding that the interaction is AI."],
@@ -45,6 +46,21 @@ export function MarketingHome() {
       </section>
 
       <section className="trust-strip"><p>Built for GoalVow platforms</p><div><span>PLUGCONNECT <small>INTERNAL DEMO</small></span><span>GOALVOW ACADEMIES <small>PILOT FOUNDATION</small></span><span>VOWLMS <small>INTERNAL DEMO</small></span><span>VOWSUPPORT <small>PLANNED</small></span><span>VOWTOOLS <small>PLANNED</small></span></div></section>
+
+      <section className="editorial-manifesto">
+        <EditorialVisual variant="enterprise" priority sizes="(max-width: 860px) 100vw, 58vw" />
+        <div className="editorial-manifesto-copy">
+          <p>THE WORKFORCE, REIMAGINED RESPONSIBLY</p>
+          <h2>AI presence that strengthens human capability.</h2>
+          <span>VowHumans gives organisations a governed way to create digital colleagues while keeping people, consent and accountability visibly in control.</span>
+          <dl>
+            <div><dt>Human</dt><dd>judgement and escalation</dd></div>
+            <div><dt>AI</dt><dd>availability and consistency</dd></div>
+            <div><dt>One</dt><dd>governance foundation</dd></div>
+          </dl>
+          <Link href="/platform" className="text-link light-text">Explore the platform architecture <ArrowRight size={14}/></Link>
+        </div>
+      </section>
 
       <section className="commercial-section light outcomes-section"><div className="section-heading"><p>OUTCOMES BEFORE AVATARS</p><h2>Make every interaction more useful.</h2><span>Digital employees work best when their role, knowledge, escalation and economics are clear.</span></div><div className="outcome-grid">{outcomes.map(([Icon,title,copy])=><article key={title}><span><Icon size={20}/></span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
 

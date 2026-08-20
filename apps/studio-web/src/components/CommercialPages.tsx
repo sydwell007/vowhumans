@@ -7,21 +7,45 @@ import { humans } from "@/data/platform";
 import { MarketingShell } from "./MarketingShell";
 import { InlineAction } from "./CommercialInteractive";
 import { PricingCatalog, TemplateCatalog } from "./CommercialCatalogs";
+import { EditorialVisual, type EditorialVisualVariant } from "./EditorialVisual";
 
 function Crumb({ items }: { items: { label: string; href?: string }[] }) {
   return <nav className="commercial-breadcrumb" aria-label="Breadcrumb"><Link href="/">Home</Link>{items.map((item)=><span key={item.label}>/ {item.href?<Link href={item.href}>{item.label}</Link>:item.label}</span>)}</nav>;
 }
 
-function Hero({ eyebrow, title, summary, crumbs = [], actions = true }: { eyebrow: string; title: string; summary: string; crumbs?: {label:string;href?:string}[]; actions?: boolean }) {
-  return <section className="commercial-page-hero">{crumbs.length>0?<Crumb items={crumbs}/>:null}<p className="commercial-kicker"><span/>{eyebrow}</p><h1>{title}</h1><p>{summary}</p>{actions?<div className="page-cta-row"><Link href="/sign-up" className="public-button">Start building <ArrowRight size={16}/></Link><Link href="/book-demo" className="public-button ghost">Book a demo</Link></div>:null}</section>;
+function inferHeroVisual(eyebrow: string, title: string): EditorialVisualVariant {
+  const context = `${eyebrow} ${title}`.toLowerCase();
+  if (/legal|privacy|terms|responsible|security|trust|status/.test(context)) return "governance";
+  if (/academy|course|learning|resource/.test(context)) return "learning";
+  if (/industry|solution|customer/.test(context)) return "experience";
+  if (/investor|partner|about|company|journal/.test(context)) return "enterprise";
+  return "workforce";
 }
+
+function Hero({ eyebrow, title, summary, crumbs = [], actions = true, visual }: { eyebrow: string; title: string; summary: string; crumbs?: {label:string;href?:string}[]; actions?: boolean; visual?: EditorialVisualVariant | false }) {
+  const resolvedVisual = visual === undefined ? inferHeroVisual(eyebrow, title) : visual;
+  return <section className={`commercial-page-hero${resolvedVisual ? " has-editorial-visual" : ""}`}><div className="commercial-page-hero-copy">{crumbs.length>0?<Crumb items={crumbs}/>:null}<p className="commercial-kicker"><span/>{eyebrow}</p><h1>{title}</h1><p>{summary}</p>{actions?<div className="page-cta-row"><Link href="/sign-up" className="public-button">Start building <ArrowRight size={16}/></Link><Link href="/book-demo" className="public-button ghost">Book a demo</Link></div>:null}</div>{resolvedVisual?<EditorialVisual variant={resolvedVisual} priority/>:null}</section>;
+}
+
+const publicVisuals: Partial<Record<keyof typeof publicPages, EditorialVisualVariant>> = {
+  about: "enterprise",
+  blog: "enterprise",
+  documentation: "workforce",
+  investors: "enterprise",
+  platform: "workforce",
+  resources: "learning",
+  security: "governance",
+  solutions: "experience",
+  status: "governance",
+  trust: "governance",
+};
 
 export function PublicContentPage({ slug }: { slug: keyof typeof publicPages }) {
   const page = publicPages[slug];
   const isTrustPage = slug === "security" || slug === "trust";
   return (
     <MarketingShell>
-      <Hero eyebrow={page.eyebrow} title={page.title} summary={page.summary} />
+      <Hero eyebrow={page.eyebrow} title={page.title} summary={page.summary} visual={publicVisuals[slug] ?? "workforce"} />
       <section className="commercial-page-body">
         {slug === "investors" ? (
           <section className="investor-snapshot" aria-label="Platform snapshot">
@@ -167,7 +191,7 @@ export function LegalPage({ slug }: { slug: string }) {
 
   return (
     <MarketingShell>
-      <Hero eyebrow={profile.eyebrow} title={title} summary={profile.summary} actions={false} crumbs={[{ label: "Legal" }, { label: title }]} />
+      <Hero eyebrow={profile.eyebrow} title={title} summary={profile.summary} actions={false} visual="governance" crumbs={[{ label: "Legal" }, { label: title }]} />
       <section className="legal-page-shell">
         <div className="legal-document-layout">
           <aside className="legal-document-sidebar" aria-label={`${title} document navigation`}>
