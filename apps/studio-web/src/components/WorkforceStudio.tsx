@@ -178,13 +178,17 @@ async function workforceApi<T>(path = "", init?: RequestInit): Promise<T> {
   const payload = (await response.json().catch(() => null)) as {
     success?: boolean;
     data?: T;
+    code?: string;
     message?: string;
     detail?: unknown;
+    meta?: { request_id?: string };
   } | null;
-  if (!response.ok || !payload?.success)
+  if (!response.ok || !payload?.success) {
+    const requestId = payload?.meta?.request_id;
     throw new Error(
-      payload?.message || "The workforce request could not be completed.",
+      `${payload?.message || "The workforce request could not be completed."}${requestId ? ` Request ID: ${requestId}` : ""}`,
     );
+  }
   return payload.data as T;
 }
 

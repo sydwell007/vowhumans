@@ -37,3 +37,7 @@ Date: 2026-08-22
 ## Manual render conclusion
 
 The captured pages present a coherent premium operating system rather than a disconnected feature addition. The identity/behaviour/work separation reads immediately, action hierarchy is clear, provider truth is visible, and the mobile catalogue remains usable without clipping or contrast loss.
+
+## Template workflow regression capture
+
+`qa/workforce-template-flow-fixed-1440.png` records the repaired dashboard after creating an AI Receptionist through the visible template UI, saving the full configuration, passing readiness, recording human approval, deploying to the governed work queue and completing a reviewed work item.

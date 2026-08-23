@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "turbo dev --filter=@vowhumans/studio-web",
+    "prebuild": "node scripts/migrate-workforce.mjs",
     "build": "npm run security:scan && turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

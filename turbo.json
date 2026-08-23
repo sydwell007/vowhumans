@@ -8,6 +8,8 @@
       "env": [
         "NEXT_PUBLIC_API_BASE_URL",
         "NODE_ENV",
+        "VERCEL_ENV",
+        "RUN_WORKFORCE_MIGRATIONS",
         "API_GATEWAY_URL",
         "VOWHUMANS_*",
         "AUTH_SECRET",
@@ -58,4 +60,3 @@
     }
   }
 }
-

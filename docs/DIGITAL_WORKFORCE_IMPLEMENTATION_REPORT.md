@@ -48,6 +48,14 @@ Apply in order:
 1. `017_digital_workforce.sql`
 2. `018_digital_workforce_seed_templates.sql`
 
+Production Vercel builds now run `scripts/migrate-workforce.mjs` before the
+Studio build. The runner uses the configured PostgreSQL connection, holds an
+advisory lock, applies migration 017 only when the workforce schema is absent,
+upserts migration 018 safely, and verifies that all workforce tables and at
+least 25 published templates exist before allowing the deployment to continue.
+Afrihost SQL remains a separate MySQL/MariaDB adapter and does not migrate the
+canonical PostgreSQL database used by Studio authentication and persistence.
+
 The schema covers teams, colleagues, role configuration, approved knowledge, tool policy, workflows, objectives/KPIs, guardrails, collaboration, tests, approvals, deployments, work items/events/products/reviews, escalations, costs, scheduled-job definitions and model policies. Organisation tables use RLS; control-plane entities are audited; approvals/events/reviews are append-only.
 
 ### Authenticated API

@@ -11,8 +11,17 @@ import postgres from "postgres";
 // Vercel injects variables directly and has no repository .env file to load.
 if (!process.env.VERCEL) {
   try {
-    const repositoryRoot = existsSync(path.join(process.cwd(), "apps", "studio-web")) ? process.cwd() : path.resolve(process.cwd(), "../..");
-    loadEnvConfig(repositoryRoot, process.env.NODE_ENV !== "production", console, true);
+    const repositoryRoot = existsSync(
+      path.join(process.cwd(), "apps", "studio-web"),
+    )
+      ? process.cwd()
+      : path.resolve(process.cwd(), "../..");
+    loadEnvConfig(
+      repositoryRoot,
+      process.env.NODE_ENV !== "production",
+      console,
+      true,
+    );
   } catch {
     // Not fatal — see comment above.
   }
@@ -30,6 +39,7 @@ const connectionString =
   process.env.DATABASE_URL ??
   process.env.POSTGRES_URL ??
   process.env.DATABASE_POSTGRES_URL ??
+  process.env.database_DATABASE_URL ??
   process.env.database_POSTGRES_URL ??
   process.env.database_POSTGRES_URL_NO_SSL ??
   "";
@@ -39,7 +49,8 @@ export const databaseConfigured = connectionString.length > 0;
 let localConnection = false;
 try {
   const hostname = new URL(connectionString).hostname.replace(/^\[|\]$/g, "");
-  localConnection = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  localConnection =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 } catch {
   // postgres.js reports the more useful invalid connection-string error below.
 }

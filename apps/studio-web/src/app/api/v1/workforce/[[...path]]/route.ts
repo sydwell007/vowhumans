@@ -65,6 +65,53 @@ function failure(
   );
 }
 
+function workforceRequestFailure(error: unknown, operation: string) {
+  const requestId = randomUUID();
+  const databaseCode =
+    error && typeof error === "object" && "code" in error
+      ? String(error.code)
+      : "UNKNOWN";
+  console.error("[workforce-api] request failed", {
+    operation,
+    request_id: requestId,
+    database_code: databaseCode,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  if (databaseCode === "42P01") {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "WORKFORCE_SCHEMA_NOT_READY",
+        message:
+          "Digital Workforce database setup is incomplete. Apply PostgreSQL migrations 017 and 018, then try again.",
+        meta: { mode: "live", request_id: requestId },
+      },
+      { status: 503 },
+    );
+  }
+  return NextResponse.json(
+    {
+      success: false,
+      code: "WORKFORCE_REQUEST_FAILED",
+      message:
+        "The workforce request could not be completed. Please retry or give support this request ID.",
+      meta: { mode: "live", request_id: requestId },
+    },
+    { status: 500 },
+  );
+}
+
+async function withWorkforceErrors(
+  operation: string,
+  action: () => Promise<NextResponse>,
+) {
+  try {
+    return await action();
+  } catch (error) {
+    return workforceRequestFailure(error, operation);
+  }
+}
+
 function flagEnabled(name: string, fallback = false) {
   const value = process.env[name];
   return value === undefined ? fallback : value.toLowerCase() === "true";
@@ -1054,187 +1101,193 @@ async function generateRole(body: JsonRecord) {
 }
 
 export async function GET(request: NextRequest, context: RouteParams) {
-  if (!databaseConfigured)
-    return failure(
-      "DATABASE_NOT_CONFIGURED",
-      "Studio persistence is not configured.",
-      503,
-    );
-  const user = await userFor(request);
-  if (!user)
-    return failure(
-      "UNAUTHENTICATED",
-      "Sign in to access the Digital Workforce.",
-      401,
-    );
-  const path = (await context.params).path ?? [];
-  if (path.length === 0)
-    return success(await dashboardData(user.organisationId));
-  if (path[0] === "templates") return success({ items: workforceTemplates });
-  if (path[0] === "reference")
-    return success(await referenceData(user.organisationId));
-  if (path[0] === "colleagues" && path[1]) {
-    const colleague = await detailedColleague(user.organisationId, path[1]);
-    return colleague
-      ? success(colleague)
-      : failure("NOT_FOUND", "Digital Colleague not found.", 404);
-  }
-  if (path[0] === "tasks") {
-    const data = await tasksData(user.organisationId, path[1]);
-    return data
-      ? success(data)
-      : failure("NOT_FOUND", "Work item not found.", 404);
-  }
-  if (path[0] === "analytics") {
-    const [status, work, reviews, costs] = await Promise.all([
-      sql`SELECT status, count(*)::int AS count FROM digital_colleagues WHERE organisation_id = ${user.organisationId} GROUP BY status ORDER BY status`,
-      sql`SELECT status, count(*)::int AS count FROM work_items WHERE organisation_id = ${user.organisationId} GROUP BY status ORDER BY status`,
-      sql`SELECT decision, count(*)::int AS count FROM work_product_reviews WHERE organisation_id = ${user.organisationId} GROUP BY decision ORDER BY decision`,
-      sql`SELECT date_trunc('day', recorded_at) AS day, currency, sum(amount_minor)::bigint AS amount_minor FROM colleague_costs WHERE organisation_id = ${user.organisationId} GROUP BY day, currency ORDER BY day DESC LIMIT 90`,
-    ]);
-    return success({
-      colleague_status: status,
-      work_status: work,
-      review_decisions: reviews,
-      costs,
-      disclosure:
-        "Only recorded operational events are shown. Empty metrics remain empty; no demo totals are substituted.",
-    });
-  }
-  return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+  return withWorkforceErrors("GET", async () => {
+    if (!databaseConfigured)
+      return failure(
+        "DATABASE_NOT_CONFIGURED",
+        "Studio persistence is not configured.",
+        503,
+      );
+    const user = await userFor(request);
+    if (!user)
+      return failure(
+        "UNAUTHENTICATED",
+        "Sign in to access the Digital Workforce.",
+        401,
+      );
+    const path = (await context.params).path ?? [];
+    if (path.length === 0)
+      return success(await dashboardData(user.organisationId));
+    if (path[0] === "templates") return success({ items: workforceTemplates });
+    if (path[0] === "reference")
+      return success(await referenceData(user.organisationId));
+    if (path[0] === "colleagues" && path[1]) {
+      const colleague = await detailedColleague(user.organisationId, path[1]);
+      return colleague
+        ? success(colleague)
+        : failure("NOT_FOUND", "Digital Colleague not found.", 404);
+    }
+    if (path[0] === "tasks") {
+      const data = await tasksData(user.organisationId, path[1]);
+      return data
+        ? success(data)
+        : failure("NOT_FOUND", "Work item not found.", 404);
+    }
+    if (path[0] === "analytics") {
+      const [status, work, reviews, costs] = await Promise.all([
+        sql`SELECT status, count(*)::int AS count FROM digital_colleagues WHERE organisation_id = ${user.organisationId} GROUP BY status ORDER BY status`,
+        sql`SELECT status, count(*)::int AS count FROM work_items WHERE organisation_id = ${user.organisationId} GROUP BY status ORDER BY status`,
+        sql`SELECT decision, count(*)::int AS count FROM work_product_reviews WHERE organisation_id = ${user.organisationId} GROUP BY decision ORDER BY decision`,
+        sql`SELECT date_trunc('day', recorded_at) AS day, currency, sum(amount_minor)::bigint AS amount_minor FROM colleague_costs WHERE organisation_id = ${user.organisationId} GROUP BY day, currency ORDER BY day DESC LIMIT 90`,
+      ]);
+      return success({
+        colleague_status: status,
+        work_status: work,
+        review_decisions: reviews,
+        costs,
+        disclosure:
+          "Only recorded operational events are shown. Empty metrics remain empty; no demo totals are substituted.",
+      });
+    }
+    return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+  });
 }
 
 export async function POST(request: NextRequest, context: RouteParams) {
-  if (!databaseConfigured)
-    return failure(
-      "DATABASE_NOT_CONFIGURED",
-      "Studio persistence is not configured.",
-      503,
-    );
-  const user = await userFor(request);
-  if (!user)
-    return failure(
-      "UNAUTHENTICATED",
-      "Sign in to manage the Digital Workforce.",
-      401,
-    );
-  const body = await bodyFor(request);
-  if (!body) return failure("INVALID_JSON", "Send a valid JSON object.", 400);
-  const path = (await context.params).path ?? [];
-  if (path.length === 0) {
-    if (!ensureRole(user, writeRoles))
+  return withWorkforceErrors("POST", async () => {
+    if (!databaseConfigured)
       return failure(
-        "FORBIDDEN",
-        "Your role cannot create Digital Colleagues.",
-        403,
+        "DATABASE_NOT_CONFIGURED",
+        "Studio persistence is not configured.",
+        503,
       );
-    const result = await createColleague(user, body);
-    return result.error ?? success(result.data, 201);
-  }
-  if (path[0] === "generate-role") return generateRole(body);
-  if (path[0] === "tools") {
-    if (!ensureRole(user, writeRoles))
-      return failure("FORBIDDEN", "Your role cannot register tools.", 403);
-    return createTool(user, body);
-  }
-  if (
-    path[0] === "colleagues" &&
-    path[1] &&
-    path[2] === "tests" &&
-    path[3] === "run"
-  ) {
-    if (!ensureRole(user, writeRoles))
+    const user = await userFor(request);
+    if (!user)
       return failure(
-        "FORBIDDEN",
-        "Your role cannot run configuration tests.",
-        403,
+        "UNAUTHENTICATED",
+        "Sign in to manage the Digital Workforce.",
+        401,
       );
-    return runReadinessTests(user, path[1]);
-  }
-  if (path[0] === "colleagues" && path[1] && path[2] === "approvals") {
-    if (!ensureRole(user, approvalRoles))
-      return failure(
-        "FORBIDDEN",
-        "Only an owner, administrator or reviewer can approve a Digital Colleague.",
-        403,
-      );
-    return approveColleague(user, path[1], body);
-  }
-  if (path[0] === "colleagues" && path[1] && path[2] === "deployments") {
-    if (!ensureRole(user, deploymentRoles))
-      return failure(
-        "FORBIDDEN",
-        "Only an owner or administrator can deploy a Digital Colleague.",
-        403,
-      );
-    return deployColleague(user, path[1], body);
-  }
-  if (path[0] === "tasks" && path.length === 1) {
-    if (!ensureRole(user, writeRoles))
-      return failure("FORBIDDEN", "Your role cannot assign work.", 403);
-    return createTask(user, body);
-  }
-  if (path[0] === "tasks" && path[1] && path[2] === "review-brief") {
-    if (!ensureRole(user, writeRoles))
-      return failure(
-        "FORBIDDEN",
-        "Your role cannot prepare work products.",
-        403,
-      );
-    return createReviewBrief(user, path[1]);
-  }
-  if (path[0] === "tasks" && path[1] && path[2] === "execute") {
-    if (!ensureRole(user, writeRoles))
-      return failure("FORBIDDEN", "Your role cannot execute work.", 403);
-    return executeTaskWithModel(user, path[1]);
-  }
-  if (path[0] === "products" && path[1] && path[2] === "reviews") {
-    if (!ensureRole(user, approvalRoles))
-      return failure(
-        "FORBIDDEN",
-        "Only an owner, administrator or reviewer can review work products.",
-        403,
-      );
-    return reviewProduct(user, path[1], body);
-  }
-  return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+    const body = await bodyFor(request);
+    if (!body) return failure("INVALID_JSON", "Send a valid JSON object.", 400);
+    const path = (await context.params).path ?? [];
+    if (path.length === 0) {
+      if (!ensureRole(user, writeRoles))
+        return failure(
+          "FORBIDDEN",
+          "Your role cannot create Digital Colleagues.",
+          403,
+        );
+      const result = await createColleague(user, body);
+      return result.error ?? success(result.data, 201);
+    }
+    if (path[0] === "generate-role") return generateRole(body);
+    if (path[0] === "tools") {
+      if (!ensureRole(user, writeRoles))
+        return failure("FORBIDDEN", "Your role cannot register tools.", 403);
+      return createTool(user, body);
+    }
+    if (
+      path[0] === "colleagues" &&
+      path[1] &&
+      path[2] === "tests" &&
+      path[3] === "run"
+    ) {
+      if (!ensureRole(user, writeRoles))
+        return failure(
+          "FORBIDDEN",
+          "Your role cannot run configuration tests.",
+          403,
+        );
+      return runReadinessTests(user, path[1]);
+    }
+    if (path[0] === "colleagues" && path[1] && path[2] === "approvals") {
+      if (!ensureRole(user, approvalRoles))
+        return failure(
+          "FORBIDDEN",
+          "Only an owner, administrator or reviewer can approve a Digital Colleague.",
+          403,
+        );
+      return approveColleague(user, path[1], body);
+    }
+    if (path[0] === "colleagues" && path[1] && path[2] === "deployments") {
+      if (!ensureRole(user, deploymentRoles))
+        return failure(
+          "FORBIDDEN",
+          "Only an owner or administrator can deploy a Digital Colleague.",
+          403,
+        );
+      return deployColleague(user, path[1], body);
+    }
+    if (path[0] === "tasks" && path.length === 1) {
+      if (!ensureRole(user, writeRoles))
+        return failure("FORBIDDEN", "Your role cannot assign work.", 403);
+      return createTask(user, body);
+    }
+    if (path[0] === "tasks" && path[1] && path[2] === "review-brief") {
+      if (!ensureRole(user, writeRoles))
+        return failure(
+          "FORBIDDEN",
+          "Your role cannot prepare work products.",
+          403,
+        );
+      return createReviewBrief(user, path[1]);
+    }
+    if (path[0] === "tasks" && path[1] && path[2] === "execute") {
+      if (!ensureRole(user, writeRoles))
+        return failure("FORBIDDEN", "Your role cannot execute work.", 403);
+      return executeTaskWithModel(user, path[1]);
+    }
+    if (path[0] === "products" && path[1] && path[2] === "reviews") {
+      if (!ensureRole(user, approvalRoles))
+        return failure(
+          "FORBIDDEN",
+          "Only an owner, administrator or reviewer can review work products.",
+          403,
+        );
+      return reviewProduct(user, path[1], body);
+    }
+    return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+  });
 }
 
 export async function PUT(request: NextRequest, context: RouteParams) {
-  if (!databaseConfigured)
-    return failure(
-      "DATABASE_NOT_CONFIGURED",
-      "Studio persistence is not configured.",
-      503,
-    );
-  const user = await userFor(request);
-  if (!user)
-    return failure(
-      "UNAUTHENTICATED",
-      "Sign in to manage the Digital Workforce.",
-      401,
-    );
-  if (!ensureRole(user, writeRoles))
-    return failure(
-      "FORBIDDEN",
-      "Your role cannot edit Digital Colleagues.",
-      403,
-    );
-  const body = await bodyFor(request);
-  if (!body) return failure("INVALID_JSON", "Send a valid JSON object.", 400);
-  const path = (await context.params).path ?? [];
-  if (path[0] === "colleagues" && path[1] && path[2] === "steps" && path[3]) {
-    try {
-      return await saveStep(user, path[1], path[3], body);
-    } catch (error) {
-      if (error instanceof Error && error.message === "AUTONOMY_RISK")
-        return failure(
-          "RISK_POLICY_VIOLATION",
-          "The requested autonomy exceeds the selected risk policy.",
-          422,
-        );
-      throw error;
+  return withWorkforceErrors("PUT", async () => {
+    if (!databaseConfigured)
+      return failure(
+        "DATABASE_NOT_CONFIGURED",
+        "Studio persistence is not configured.",
+        503,
+      );
+    const user = await userFor(request);
+    if (!user)
+      return failure(
+        "UNAUTHENTICATED",
+        "Sign in to manage the Digital Workforce.",
+        401,
+      );
+    if (!ensureRole(user, writeRoles))
+      return failure(
+        "FORBIDDEN",
+        "Your role cannot edit Digital Colleagues.",
+        403,
+      );
+    const body = await bodyFor(request);
+    if (!body) return failure("INVALID_JSON", "Send a valid JSON object.", 400);
+    const path = (await context.params).path ?? [];
+    if (path[0] === "colleagues" && path[1] && path[2] === "steps" && path[3]) {
+      try {
+        return await saveStep(user, path[1], path[3], body);
+      } catch (error) {
+        if (error instanceof Error && error.message === "AUTONOMY_RISK")
+          return failure(
+            "RISK_POLICY_VIOLATION",
+            "The requested autonomy exceeds the selected risk policy.",
+            422,
+          );
+        throw error;
+      }
     }
-  }
-  return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+    return failure("NOT_FOUND", "Workforce endpoint not found.", 404);
+  });
 }
