@@ -8,7 +8,7 @@ import { calculateRoi, plans } from "@vowhumans/commercial-core";
 type LeadKind = "demo" | "contact" | "partner" | "investor" | "trust" | "support";
 
 const copy: Record<LeadKind,{title:string;summary:string;button:string}> = {
-  demo:{title:"Book a VowHumans demonstration",summary:"Tell us what a useful, responsible digital employee would do in your organisation.",button:"Request demonstration"},
+  demo:{title:"Book a VowHumans demonstration",summary:"Tell us what a useful, responsible Digital Colleague would do in your organisation.",button:"Request demonstration"},
   contact:{title:"Talk to the VowHumans team",summary:"Share your commercial, technical or governance question.",button:"Send enquiry"},
   partner:{title:"Apply to become a VowHumans partner",summary:"Choose a technology, solution, referral, training or content partnership.",button:"Validate application"},
   investor:{title:"Contact investor relations",summary:"Request the approved company overview or begin a confidential conversation.",button:"Request investor contact"},

@@ -12,10 +12,10 @@ export function MarketingShell({ children, tone = "light" }: { children: React.R
       <footer className="public-footer">
         <div className="footer-lead">
           <Link href="/" className="public-brand" aria-label="VowHumans home"><BrandLogo variant="lockup" /></Link>
-          <p>Secure, branded digital employees that talk, teach, sell, interview and support—honestly.</p>
+          <p>Secure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.</p>
           <span><ShieldCheck size={15} /> AI disclosure and consent at the centre</span>
         </div>
-        <div><strong>Platform</strong><Link href="/products/studio">Studio</Link><Link href="/products/live">Live</Link><Link href="/products/present">Present</Link><Link href="/products/connect">Connect</Link><Link href="/marketplace">Marketplace</Link></div>
+        <div><strong>Platform</strong><Link href="/workforce">Digital Workforce</Link><Link href="/workforce/roles">Roles</Link><Link href="/products/studio">Studio</Link><Link href="/products/live">Live</Link><Link href="/products/present">Present</Link></div>
         <div><strong>Build</strong><Link href="/developers">Developers</Link><Link href="/api-reference">API reference</Link><Link href="/sdks">SDKs</Link><Link href="/templates">Templates</Link><Link href="/integrations">Integrations</Link></div>
         <div><strong>Company</strong><Link href="/about">About</Link><Link href="/customers">Customers</Link><Link href="/partners">Partners</Link><Link href="/investors">Investors</Link><Link href="/contact">Contact</Link></div>
         <div><strong>Trust</strong><Link href="/security">Security</Link><Link href="/trust">Trust Centre</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/terms">Terms</Link><Link href="/legal/responsible-ai">Responsible AI</Link></div>

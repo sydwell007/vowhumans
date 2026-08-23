@@ -2,12 +2,15 @@ import {
   Activity,
   AppWindow,
   AudioLines,
+  BadgeCheck,
   BookOpenText,
   Bot,
   Boxes,
   BrainCircuit,
+  BriefcaseBusiness,
   ChartNoAxesCombined,
   CircleGauge,
+  ClipboardList,
   FileKey2,
   Fingerprint,
   KeyRound,
@@ -119,42 +122,60 @@ export const identityAlertCount = identityRecords.filter((record) => record.stat
 
 export const navigation = [
   {
-    label: "Workspace",
+    label: "Overview",
     items: [
       { slug: "", label: "Dashboard", icon: CircleGauge },
+      { slug: "workforce", label: "Digital Workforce", icon: BriefcaseBusiness },
+    ],
+  },
+  {
+    label: "Build",
+    items: [
       { slug: "digital-humans", label: "Digital Humans", icon: Bot },
-      { slug: "faces", label: "Faces", icon: Fingerprint },
-      { slug: "voices", label: "Voices", icon: AudioLines },
-      { slug: "knowledge", label: "Knowledge", icon: LibraryBig },
       { slug: "personas", label: "Personas", icon: BrainCircuit },
+      { slug: "knowledge", label: "Knowledge", icon: LibraryBig },
+      { slug: "voices", label: "Voices", icon: AudioLines },
+      { slug: "faces", label: "Faces", icon: Fingerprint },
       { slug: "gesture-profiles", label: "Gesture Profiles", icon: Sparkles },
     ],
   },
   {
     label: "Operate",
     items: [
+      { slug: "tasks", label: "Work Queue", icon: ClipboardList },
       { slug: "live-sessions", label: "Live Sessions", icon: Radio },
       { slug: "presenter-studio", label: "Presenter Studio", icon: Video },
       { slug: "languages", label: "Languages", icon: Languages },
       { slug: "applications", label: "Applications", icon: AppWindow },
-      { slug: "usage", label: "Usage", icon: ChartNoAxesCombined },
     ],
   },
   {
     label: "Govern",
     items: [
+      { slug: "approvals", label: "Approvals", icon: BadgeCheck },
       { slug: "identity-consent", label: "Identity & Consent", icon: UsersRound },
       { slug: "api-keys", label: "API Keys", icon: KeyRound },
       { slug: "webhooks", label: "Webhooks", icon: Webhook },
       { slug: "safety", label: "Safety", icon: ShieldCheck },
-      { slug: "audit-logs", label: "Audit Logs", icon: ScrollText },
       { slug: "settings", label: "Settings", icon: Settings },
+    ],
+  },
+  {
+    label: "Measure",
+    items: [
+      { slug: "workforce-analytics", label: "Workforce Analytics", icon: Activity },
+      { slug: "usage", label: "Usage", icon: ChartNoAxesCombined },
+      { slug: "audit-logs", label: "Audit Logs", icon: ScrollText },
     ],
   },
 ];
 
 export const pageMeta: Record<string, { eyebrow: string; title: string; description: string; action: string }> = {
-  dashboard: { eyebrow: "", title: "", description: "Here’s what your digital humans are doing across GoalVow today.", action: "Create digital human" },
+  dashboard: { eyebrow: "", title: "", description: "Here’s what your governed Digital Humans and Digital Colleagues are doing today.", action: "Create Digital Colleague" },
+  workforce: { eyebrow: "Operating model", title: "Digital Workforce", description: "Design, test, approve, deploy and supervise accountable Digital Colleagues without blurring identity, behaviour and work.", action: "Create Digital Colleague" },
+  tasks: { eyebrow: "Governed operations", title: "Work Queue", description: "Assign bounded work, inspect event trails and review every Digital Colleague output before release.", action: "New work item" },
+  approvals: { eyebrow: "Human authority", title: "Approvals", description: "Review configuration snapshots, work products and exceptions with append-only decision history.", action: "Review queue" },
+  "workforce-analytics": { eyebrow: "Evidence, not theatre", title: "Workforce Analytics", description: "Measure recorded lifecycle, work, review and provider-cost events without fabricated productivity claims.", action: "Refresh analytics" },
   "digital-humans": { eyebrow: "Identity + voice + Persona", title: "Digital Humans", description: "Manage every disclosed AI representative and the applications they can serve.", action: "New digital human" },
   personas: { eyebrow: "Behaviour layer", title: "Personas", description: "Design roles, guardrails, objectives, knowledge and conversation style with immutable published versions.", action: "New Persona" },
   knowledge: { eyebrow: "Retrieval with citations", title: "Knowledge", description: "Control the approved sources that ground tutors, interviewers and advisers.", action: "Add source" },

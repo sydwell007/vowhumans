@@ -13,12 +13,12 @@ const navigationGroups: NavigationGroup[] = [
   {
     label: "Platform",
     eyebrow: "Build, deploy and govern",
-    featured: { label: "Explore the platform", description: "One operating layer for an organisation-owned AI workforce.", href: "/platform" },
+    featured: { label: "Explore the Digital Workforce", description: "One operating layer for disclosed identities, bounded roles and accountable work.", href: "/workforce" },
     items: [
-      { label: "VowHumans Studio", description: "Create identities, Personas and governed knowledge.", href: "/products/studio" },
+      { label: "Digital Workforce", description: "Design roles, work, reviews and deployment.", href: "/workforce" },
+      { label: "VowHumans Studio", description: "Configure the governed 12-step workflow.", href: "/products/studio" },
       { label: "Live", description: "Real-time voice and video experiences.", href: "/products/live" },
       { label: "Present", description: "Reusable presenter media and scenes.", href: "/products/present" },
-      { label: "Connect", description: "APIs, SDKs, webhooks and integrations.", href: "/products/connect" },
     ],
   },
   {

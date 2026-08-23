@@ -6,10 +6,10 @@ import "./brand.css";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://vowhumans.com"),
   title: { default: "VowHumans | AI Digital Workforce Platform", template: "%s · VowHumans" },
-  description: "Build, deploy and govern disclosed AI digital employees across live conversations, presentations, websites and enterprise workflows.",
+  description: "Build, deploy and govern disclosed AI Digital Colleagues across live conversations, presentations, websites and enterprise workflows.",
   alternates: { canonical: "/" },
   openGraph: { title: "VowHumans | AI Digital Workforce Platform", description: "Create a governed AI digital workforce with VowHumans Studio, Live, Present, Connect, Marketplace and Academy.", url: "/", siteName: "VowHumans", type: "website" },
-  twitter: { card: "summary_large_image", title: "VowHumans", description: "AI digital employees, built for responsible commercial work." },
+  twitter: { card: "summary_large_image", title: "VowHumans", description: "AI Digital Colleagues, built for responsible commercial work." },
   icons: {
     icon: [{ url: "/favicon.ico", sizes: "any" }, { url: "/brand/vowhumans-icon-192.png", type: "image/png", sizes: "192x192" }],
     apple: [{ url: "/brand/vowhumans-apple-touch-icon.png", type: "image/png", sizes: "180x180" }],

@@ -48,9 +48,13 @@ export function StudioShell({ section, children }: { section: string; children: 
 
   function quickAction() {
     if (section === "dashboard") {
-      router.push("/studio/digital-humans");
+      router.push("/studio/workforce/create");
       return;
     }
+    if (section === "workforce") { router.push("/studio/workforce/create"); return; }
+    if (section === "tasks") { document.querySelector<HTMLElement>("#studio-primary-action")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (section === "approvals") { document.querySelector<HTMLElement>(".approvals-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (section === "workforce-analytics") { window.location.reload(); return; }
     if (section === "digital-humans") {
       window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
       return;

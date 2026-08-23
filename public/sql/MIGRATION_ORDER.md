@@ -4,4 +4,7 @@
 2. `002_seed_reference_data.sql`
 3. `003_commercial_expansion.sql` — additive customer portal, billing, marketplace, partners, Academy, analytics and governance tables
 
+4. `004_digital_workforce.sql` — additive Digital Colleague configuration, work, approval, deployment and evidence tables
+5. `005_digital_workforce_seed_templates.sql` — idempotent 25-role governed starter catalogue
+
 Do not import the PostgreSQL migrations into Afrihost MySQL. Do not expose this folder through a public web route; the PHP `.htaccess` blocks SQL/config artefacts but uploads should remain outside the API document root when possible.

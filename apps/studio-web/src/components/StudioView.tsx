@@ -61,6 +61,7 @@ import {
   ProductionUsage,
   ProductionWebhooks,
 } from "./ProductionControlPlane";
+import { WorkforceStudio } from "./WorkforceStudio";
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
@@ -3590,6 +3591,10 @@ function LanguageTestPanel({ languageCode, personas }: { languageCode: string; p
 export function StudioView({ section }: { section: string }) {
   switch(section){
     case 'dashboard': return <ProductionDashboard/>;
+    case 'workforce': return <WorkforceStudio/>;
+    case 'tasks': return <WorkforceStudio mode="tasks"/>;
+    case 'approvals': return <WorkforceStudio mode="approvals"/>;
+    case 'workforce-analytics': return <WorkforceStudio mode="analytics"/>;
     case 'digital-humans': return <DigitalHumans/>;
     case 'personas': return <Personas/>;
     case 'knowledge': return <Knowledge/>;

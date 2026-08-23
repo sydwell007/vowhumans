@@ -8,6 +8,15 @@ describe("commercial platform contracts", () => {
   it("rejects an unknown plan at runtime", () => expect(() => planById("invalid" as "starter")).toThrow());
   it("enforces least privilege for viewers", () => expect(hasPermission("viewer", "audit:read")).toBe(false));
   it("allows security reviewers to inspect audits", () => expect(hasPermission("security_reviewer", "audit:read")).toBe(true));
+  it("separates workforce deployment from workforce creation", () => {
+    expect(hasPermission("creator", "workforce:create")).toBe(true);
+    expect(hasPermission("creator", "workforce:deploy")).toBe(false);
+    expect(hasPermission("org_admin", "workforce:deploy")).toBe(true);
+  });
+  it("lets reviewers approve work without deploying it", () => {
+    expect(hasPermission("security_reviewer", "workforce:approve")).toBe(true);
+    expect(hasPermission("security_reviewer", "workforce:deploy")).toBe(false);
+  });
   it("calculates marketplace commission deterministically", () => expect(marketplaceCommissionMinor(10_000)).toBe(2_000));
   it("rejects invalid marketplace rates", () => expect(() => marketplaceCommissionMinor(100, 1.1)).toThrow());
   it("returns labelled ROI estimates without guaranteeing savings", () => {
