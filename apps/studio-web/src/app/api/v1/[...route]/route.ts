@@ -374,7 +374,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           (SELECT coalesce(sum(estimated_cost_minor),0)::int FROM usage_records WHERE organisation_id = ${organisationId} AND recorded_at >= date_trunc('month', now())) AS usage_cost_minor,
           (SELECT count(*)::int FROM usage_records WHERE organisation_id = ${organisationId} AND recorded_at >= date_trunc('month', now())) AS usage_events
       `,
-      sql`SELECT id, name, role, disclosure, state, created_at FROM digital_humans WHERE organisation_id = ${organisationId} ORDER BY created_at DESC LIMIT 5`,
+      sql`
+        SELECT dh.id, dh.name, dh.role, dh.disclosure, dh.state, dh.created_at,
+          (SELECT hfa.face_asset_id FROM human_face_assignments hfa
+           WHERE hfa.organisation_id = dh.organisation_id AND hfa.human_slug = dh.id::text
+           LIMIT 1) AS face_asset_id
+        FROM digital_humans dh
+        WHERE dh.organisation_id = ${organisationId}
+        ORDER BY dh.created_at DESC LIMIT 5
+      `,
       sql`SELECT action, resource_type, occurred_at FROM audit_logs WHERE organisation_id = ${organisationId} ORDER BY occurred_at DESC LIMIT 5`,
       fetchGatewayHealth(),
     ]);
@@ -545,7 +553,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (resource === "digital-humans" && !route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const rows = await sql`SELECT id, name, role, disclosure, state, created_at, updated_at FROM digital_humans WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    const rows = await sql`
+      SELECT dh.id, dh.name, dh.role, dh.disclosure, dh.state, dh.created_at, dh.updated_at,
+        (SELECT hfa.face_asset_id FROM human_face_assignments hfa
+         WHERE hfa.organisation_id = dh.organisation_id AND hfa.human_slug = dh.id::text
+         LIMIT 1) AS face_asset_id
+      FROM digital_humans dh
+      WHERE dh.organisation_id = ${organisationId}
+      ORDER BY dh.created_at DESC
+    `;
     return response({ items: rows });
   }
 

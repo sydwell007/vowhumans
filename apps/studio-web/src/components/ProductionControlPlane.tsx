@@ -52,10 +52,19 @@ function PanelTitle({ eyebrow, title, action }: { eyebrow?: string; title: strin
 
 type DashboardData = {
   counts: { digital_humans: number; published_personas: number; sessions_today: number; live_now: number; pending_identities: number; active_consents: number; usage_cost_minor: number; usage_events: number };
-  humans: { id: string; name: string; role: string; disclosure: string; state: string; created_at: string }[];
+  humans: { id: string; name: string; role: string; disclosure: string; state: string; created_at: string; face_asset_id: string | null }[];
   activity: { action: string; resource_type: string; occurred_at: string }[];
   gateway: { gateway_reachable: boolean; realtime_configured: boolean; realtime_check_available: boolean; avatar_configured: boolean };
 };
+
+function HumanThumb({ human }: { human: DashboardData["humans"][number] }) {
+  const [failed, setFailed] = useState(false);
+  return <span className="human-thumb">
+    {human.face_asset_id && !failed
+      ? <Image src={`/api/v1/faces/${human.face_asset_id}/image`} alt={`${human.name} portrait`} fill sizes="46px" unoptimized onError={() => setFailed(true)} />
+      : <Bot size={20} />}
+  </span>;
+}
 
 export function ProductionDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -76,7 +85,7 @@ export function ProductionDashboard() {
     <ViewState loading={!data && !error} error={error}/>
     {data && <>
       <section className="metric-grid">{metrics.map(([label,value,note,Icon]) => <article className="metric-card" key={label}><span className="metric-icon cyan"><Icon size={20}/></span><p>{label}</p><strong>{String(value)}</strong><small>{note}</small></article>)}</section>
-      <section className="split-grid wide-left"><div className="panel"><PanelTitle title="Digital humans" eyebrow={`${data.humans.length} most recent`} action={<Link className="text-link" href="/studio/digital-humans">Manage <ArrowRight size={15}/></Link>}/>{data.humans.length ? <div className="human-list">{data.humans.map((human) => <Link className="human-row" href="/studio/digital-humans" key={human.id}><span className="human-thumb"><Bot size={20}/></span><span className="human-row-copy"><strong>{human.name}</strong><small>{human.role} · {human.disclosure}</small></span><StatusPill tone={human.state === "active" ? "good" : "warn"}>{human.state}</StatusPill><ArrowRight size={16}/></Link>)}</div> : <ViewState loading={false} empty="Create your first governed digital human to populate this workspace."/>}</div>
+      <section className="split-grid wide-left"><div className="panel"><PanelTitle title="Digital humans" eyebrow={`${data.humans.length} most recent`} action={<Link className="text-link" href="/studio/digital-humans">Manage <ArrowRight size={15}/></Link>}/>{data.humans.length ? <div className="human-list">{data.humans.map((human) => <Link className="human-row" href="/studio/digital-humans" key={human.id}><HumanThumb human={human}/><span className="human-row-copy"><strong>{human.name}</strong><small>{human.role} · {human.disclosure}</small></span><StatusPill tone={human.state === "active" ? "good" : "warn"}>{human.state}</StatusPill><ArrowRight size={16}/></Link>)}</div> : <ViewState loading={false} empty="Create your first governed digital human to populate this workspace."/>}</div>
       <div className="panel readiness-panel"><PanelTitle title="Provider truth" eyebrow="Measured now"/><div className="readiness-list"><div><span>API gateway</span><StatusPill tone={data.gateway.gateway_reachable ? "good" : "warn"}>{data.gateway.gateway_reachable ? "Reachable" : "Not reachable"}</StatusPill></div><div><span>Realtime voice</span><StatusPill tone={data.gateway.realtime_configured ? "good" : "muted"}>{data.gateway.realtime_check_available ? (data.gateway.realtime_configured ? "Configured" : "Unavailable") : "Not checked"}</StatusPill></div><div><span>Avatar worker</span><StatusPill tone={data.gateway.avatar_configured ? "good" : "muted"}>{data.gateway.avatar_configured ? "Configured" : "Audio fallback"}</StatusPill></div></div></div></section>
       <section className="panel"><PanelTitle title="Recent workspace activity" eyebrow="Append-only audit events"/>{data.activity.length ? <div className="activity-list">{data.activity.map((event,index) => <div className="activity-row" key={`${event.action}-${event.occurred_at}-${index}`}><i className="cyan"/><span><strong>{event.action.replaceAll("_", " ")}</strong><small>{event.resource_type}</small></span><time>{formatDate(event.occurred_at)}</time></div>)}</div> : <ViewState loading={false} empty="Saved workspace changes will appear here automatically."/>}</section>
     </>}

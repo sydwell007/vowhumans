@@ -196,7 +196,7 @@ function Dashboard() {
   );
 }
 
-type DigitalHumanSummary = { id: string; name: string; role: string; disclosure: string; state: string; created_at: string; updated_at: string };
+type DigitalHumanSummary = { id: string; name: string; role: string; disclosure: string; state: string; created_at: string; updated_at: string; face_asset_id: string | null };
 type DigitalHumanProfile = {
   human: DigitalHumanSummary;
   face: { id: string; media_type: string; detector_provider: string | null; preprocessing_state: string; state: string } | null;
@@ -382,7 +382,11 @@ function DigitalHumans() {
           <div className="persona-list">
             {items.map((human) => (
               <button key={human.id} className={selectedId === human.id ? 'selected' : ''} onClick={() => { setSelectedId(human.id); setError(null); }}>
-                <span className="persona-glyph"><Bot size={19} /></span>
+                <span className="persona-glyph">
+                  {human.face_asset_id
+                    ? <Image src={`/api/v1/faces/${human.face_asset_id}/image`} alt={`${human.name} portrait`} fill sizes="34px" unoptimized />
+                    : <Bot size={19} />}
+                </span>
                 <span><strong>{human.name}</strong><small>{human.role}</small></span>
                 <StatusPill tone={human.state === 'active' ? 'good' : human.state === 'draft' ? 'warn' : 'muted'}>{human.state}</StatusPill>
               </button>
