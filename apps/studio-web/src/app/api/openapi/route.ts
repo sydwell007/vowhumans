@@ -155,6 +155,36 @@ export function GET() {
           },
         },
       },
+      "/workforce/colleagues/{id}/runtime": {
+        get: {
+          summary: "Read deployment, provider and five-category readiness truth",
+          responses: { "200": { description: "Version-aware runtime readiness" } },
+        },
+      },
+      "/workforce/testing": {
+        get: {
+          summary: "List Digital Humans, Digital Colleagues and retained test history",
+          responses: { "200": { description: "Tenant-scoped Test Centre" } },
+        },
+      },
+      "/workforce/testing/runs": {
+        post: {
+          summary: "Run a presence, role, work or escalation test in Sandbox",
+          responses: { "201": { description: "Immutable test result evidence" } },
+        },
+      },
+      "/workforce/providers/health": {
+        get: {
+          summary: "Read safely redacted runtime provider health",
+          responses: { "200": { description: "Provider capability states" } },
+        },
+      },
+      "/workforce/providers/health/test": {
+        post: {
+          summary: "Run live, server-side provider connection probes",
+          responses: { "200": { description: "Provider health updated" }, "403": { description: "Owner or administrator required" } },
+        },
+      },
       "/workforce/tasks": {
         get: {
           summary: "List tenant-scoped work items and reviewable products",
@@ -179,6 +209,12 @@ export function GET() {
             "201": { description: "Model draft awaiting human review" },
             "503": { description: "Provider disabled" },
           },
+        },
+      },
+      "/workforce/tasks/{id}/cancel": {
+        post: {
+          summary: "Cancel open work while retaining its evidence trail",
+          responses: { "200": { description: "Work item cancelled" }, "409": { description: "Work item is already closed" } },
         },
       },
       "/workforce/products/{id}/reviews": {

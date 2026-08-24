@@ -24,7 +24,7 @@ function notConfigured<T>(): OpenAIResult<T> {
   return { ok: false, status: 503, code: "PROVIDER_DISABLED", message: "OpenAI is not configured." };
 }
 
-export async function chatComplete(args: {
+export type ChatCompleteArgs = {
   system?: string;
   messages: { role: "user" | "assistant"; content: string }[];
   jsonMode?: boolean;
@@ -37,15 +37,32 @@ export async function chatComplete(args: {
   // with zero tokens left for output, which reads to the caller as "empty response".
   // Only sent when a caller opts in, since a non-reasoning model may reject the param.
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-}): Promise<OpenAIResult<string>> {
+};
+
+export type ChatCompletionMetadata = {
+  content: string;
+  provider: "openai";
+  model: string;
+  providerRequestId: string | null;
+  latencyMs: number;
+  usage: { inputTokens: number; outputTokens: number; cachedTokens: number };
+};
+
+export function configuredChatModel() {
+  return CHAT_MODEL;
+}
+
+export async function chatCompleteDetailed(args: ChatCompleteArgs): Promise<OpenAIResult<ChatCompletionMetadata>> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return notConfigured();
+  const model = args.model || CHAT_MODEL;
+  const startedAt = Date.now();
   try {
     const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: args.model || CHAT_MODEL,
+        model,
         messages: [...(args.system ? [{ role: "system", content: args.system }] : []), ...args.messages],
         ...(args.jsonMode ? { response_format: { type: "json_object" } } : {}),
         ...(args.reasoningEffort ? { reasoning_effort: args.reasoningEffort } : {}),
@@ -55,19 +72,44 @@ export async function chatComplete(args: {
     });
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
-      return { ok: false, status: 502, code: "GENERATION_FAILED", message: detail.slice(0, 300) || "Could not generate a response." };
+      const budgetBlocked = /insufficient_quota|credit_balance_exhausted|billing_hard_limit/i.test(detail);
+      return { ok: false, status: budgetBlocked ? 402 : 502, code: budgetBlocked ? "BUDGET_BLOCKED" : "GENERATION_FAILED", message: detail.slice(0, 300) || "Could not generate a response." };
     }
-    const body = (await upstream.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+    const body = (await upstream.json()) as {
+      id?: string;
+      model?: string;
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
+    };
     const choice = body.choices?.[0];
     const content = choice?.message?.content;
     if (!content) {
       const reasonHint = choice?.finish_reason === "length" ? " (ran out of tokens — try again with reasoning effort lowered or a larger token budget)" : "";
       return { ok: false, status: 502, code: "GENERATION_FAILED", message: `The model returned an empty response${reasonHint}.` };
     }
-    return { ok: true, data: content };
+    return {
+      ok: true,
+      data: {
+        content,
+        provider: "openai",
+        model: body.model || model,
+        providerRequestId: upstream.headers.get("x-request-id") || body.id || null,
+        latencyMs: Date.now() - startedAt,
+        usage: {
+          inputTokens: Number(body.usage?.prompt_tokens ?? 0),
+          outputTokens: Number(body.usage?.completion_tokens ?? 0),
+          cachedTokens: Number(body.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        },
+      },
+    };
   } catch (err) {
     return { ok: false, status: 502, code: "GENERATION_FAILED", message: err instanceof Error ? err.message : "Could not reach OpenAI." };
   }
+}
+
+export async function chatComplete(args: ChatCompleteArgs): Promise<OpenAIResult<string>> {
+  const result = await chatCompleteDetailed(args);
+  return result.ok ? { ok: true, data: result.data.content } : result;
 }
 
 export async function embedBatch(texts: string[]): Promise<OpenAIResult<number[][]>> {

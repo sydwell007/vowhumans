@@ -155,7 +155,10 @@ export const navigation = [
   {
     label: "Operate",
     items: [
+      { slug: "test-centre", label: "Test Centre", icon: ClipboardList },
+      { slug: "operations", label: "Operations", icon: Activity },
       { slug: "tasks", label: "Work Queue", icon: ClipboardList },
+      { slug: "work-products", label: "Work Products", icon: Boxes },
       { slug: "live-sessions", label: "Live Sessions", icon: Radio },
       { slug: "presenter-studio", label: "Presenter Studio", icon: Video },
       { slug: "languages", label: "Languages", icon: Languages },
@@ -186,7 +189,10 @@ export const navigation = [
 export const pageMeta: Record<string, { eyebrow: string; title: string; description: string; action: string }> = {
   dashboard: { eyebrow: "", title: "", description: "Here’s what your governed Digital Humans and Digital Colleagues are doing today.", action: "Create Digital Colleague" },
   workforce: { eyebrow: "Operating model", title: "Digital Workforce", description: "Design, test, approve, deploy and supervise accountable Digital Colleagues without blurring identity, behaviour and work.", action: "Create Digital Colleague" },
+  "test-centre": { eyebrow: "Safe proof before scale", title: "Test Centre", description: "Test Digital Human presence, Digital Colleague behaviour and deployed work as separate, version-aware evidence.", action: "Run test" },
+  operations: { eyebrow: "Post-deployment command", title: "Operations", description: "Observe runtime health, supervise deployments and pause work without losing configuration or evidence.", action: "Test connections" },
   tasks: { eyebrow: "Governed operations", title: "Work Queue", description: "Assign bounded work, inspect event trails and review every Digital Colleague output before release.", action: "New work item" },
+  "work-products": { eyebrow: "Human-verifiable output", title: "Work Products", description: "Review grounded outputs, sources, assumptions, model identity and append-only human decisions.", action: "Open Work Queue" },
   approvals: { eyebrow: "Human authority", title: "Approvals", description: "Review configuration snapshots, work products and exceptions with append-only decision history.", action: "Review queue" },
   "workforce-analytics": { eyebrow: "Evidence, not theatre", title: "Workforce Analytics", description: "Measure recorded lifecycle, work, review and provider-cost events without fabricated productivity claims.", action: "Refresh analytics" },
   "digital-humans": { eyebrow: "Identity + voice + Persona", title: "Digital Humans", description: "Manage every disclosed AI representative and the applications they can serve.", action: "New digital human" },

@@ -41,6 +41,15 @@ type CapabilityState = {
   model_execution: boolean;
   tool_execution: boolean;
   schedules: boolean;
+  test_centre?: boolean;
+  sandbox_task_runner?: boolean;
+  runtime_health?: boolean;
+  work_queue?: boolean;
+  work_products?: boolean;
+  human_reviews?: boolean;
+  provider_health?: boolean;
+  deployment_promotion?: boolean;
+  production_runtime?: boolean;
 };
 type References = {
   humans: RecordItem[];
@@ -863,6 +872,14 @@ function ConfigurationStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [runtimeReadiness, setRuntimeReadiness] = useState<RecordItem | null>(null);
+  const colleagueId = stringValue(value(colleague, "id"));
+  useEffect(() => {
+    if (step !== "deployment" || colleague.deployments.length === 0) return;
+    workforceApi<RecordItem>(`/colleagues/${colleagueId}/runtime`)
+      .then(setRuntimeReadiness)
+      .catch((reason: Error) => setError(reason.message));
+  }, [step, colleagueId, colleague.deployments.length]);
   const items = recordList(form.items);
   function setItems(next: RecordItem[]) {
     setForm({ ...form, items: next });
@@ -1000,8 +1017,7 @@ function ConfigurationStep({
     setBusy(true);
     setError("");
     try {
-      onUpdated(
-        await workforceApi<ColleagueDetail>(
+      const updated = await workforceApi<ColleagueDetail>(
           `/colleagues/${stringValue(value(colleague, "id"))}/deployments`,
           {
             method: "POST",
@@ -1010,7 +1026,10 @@ function ConfigurationStep({
               channels: ["work_queue"],
             }),
           },
-        ),
+        );
+      onUpdated(updated);
+      setRuntimeReadiness(
+        await workforceApi<RecordItem>(`/colleagues/${colleagueId}/runtime`),
       );
       setNotice("Governed work-queue deployment created.");
     } catch (reason) {
@@ -1022,6 +1041,10 @@ function ConfigurationStep({
     }
     setBusy(false);
   }
+  const runtimeScores = runtimeReadiness
+    ? (value(runtimeReadiness, "scores") as RecordItem | undefined)
+    : undefined;
+  const latestDeployment = colleague.deployments[0];
   return (
     <section
       className="workforce-panel workforce-step-card"
@@ -1432,6 +1455,53 @@ function ConfigurationStep({
       )}
       {step === "deployment" && (
         <div className="deployment-step">
+          {colleague.deployments.length > 0 && (
+            <section className="post-deployment-success" aria-labelledby="deployment-success-title">
+              <div className="post-deployment-success-mark">
+                <BadgeCheck size={34} />
+              </div>
+              <div className="post-deployment-success-copy">
+                <p className="eyebrow">Deployment complete · next: prove the work</p>
+                <h3 id="deployment-success-title">
+                  {stringValue(value(colleague, "name"))} is available in {humanStatus(value(latestDeployment, "environment") || "sandbox")}
+                </h3>
+                <p>
+                  The role is deployed as an operating policy. Validate presence, role boundaries,
+                  task execution and escalation before requesting a higher-environment promotion.
+                </p>
+              </div>
+              <div className="post-deployment-actions">
+                <Link className="primary-button" href={`/studio/test-centre?colleague=${colleagueId}`}>
+                  <Play size={17} /> Run post-deployment tests
+                </Link>
+                <Link className="secondary-button" href={`/studio/tasks?colleague=${colleagueId}`}>
+                  <ClipboardCheck size={17} /> Assign sandbox work
+                </Link>
+                <Link className="secondary-button" href="/studio/operations">
+                  <Gauge size={17} /> Open Operations
+                </Link>
+              </div>
+              {runtimeScores && (
+                <div className="runtime-score-grid" aria-label="Deployment readiness categories">
+                  {["configuration", "governance", "runtime", "conversation", "channels", "operational"].map((key) => (
+                    <div key={key}>
+                      <strong>{numberValue(value(runtimeScores, key))}%</strong>
+                      <span>{humanStatus(key)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {Array.isArray(value(runtimeReadiness, "blockers")) && (value(runtimeReadiness, "blockers") as unknown[]).length > 0 && (
+                <div className="workforce-alert warn">
+                  <CircleAlert size={18} />
+                  <div>
+                    <strong>Runtime follow-ups remain</strong>
+                    <p>{(value(runtimeReadiness, "blockers") as unknown[]).map(stringValue).join(" ")}</p>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
           <div className="workforce-alert info">
             <Rocket size={19} />
             <div>
@@ -1453,7 +1523,9 @@ function ConfigurationStep({
                 }
               >
                 <option value="sandbox">Sandbox</option>
+                <option value="test">Test</option>
                 <option value="pilot">Pilot</option>
+                <option value="staging">Staging</option>
                 <option value="production">Production</option>
               </select>
             </label>
@@ -2177,6 +2249,8 @@ function TasksWorkspace() {
     digital_colleague_id: "",
     title: "",
     request: "",
+    task_type: "general",
+    expected_output: "",
     priority: "normal",
     risk_level: "medium",
   });
@@ -2211,6 +2285,8 @@ function TasksWorkspace() {
         digital_colleague_id: form.digital_colleague_id,
         title: "",
         request: "",
+        task_type: "general",
+        expected_output: "",
         priority: "normal",
         risk_level: value(selectedColleague, "risk_level") || "medium",
       });
@@ -2252,6 +2328,19 @@ function TasksWorkspace() {
     }
     setBusy("");
   }
+  async function cancelTask() {
+    if (!selectedTask || !window.confirm("Cancel this work item? Completed evidence and event history will be retained.")) return;
+    const id = stringValue(value(selectedTask, "id"));
+    setBusy("cancel");
+    try {
+      await workforceApi(`/tasks/${id}/cancel`, { method: "POST", body: "{}" });
+      setSelectedTask(await workforceApi<RecordItem>(`/tasks/${id}`));
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not cancel this work item.");
+    }
+    setBusy("");
+  }
   async function review(productId: string, decision: string) {
     setBusy(productId);
     try {
@@ -2263,7 +2352,13 @@ function TasksWorkspace() {
             notes:
               decision === "approved"
                 ? "Reviewed and approved by the accountable Studio user."
-                : "Returned for accountable revision.",
+                : decision === "rejected"
+                  ? "Rejected by the accountable reviewer; this output must not be released."
+                  : decision === "rerun"
+                    ? "A new governed run is required before another human review."
+                    : decision === "escalated"
+                      ? "Escalated to the named human owner for an accountable decision."
+                      : "Returned for accountable revision with the current evidence retained.",
           }),
         }),
       );
@@ -2345,6 +2440,16 @@ function TasksWorkspace() {
               </select>
             </label>
             <label>
+              Task type
+              <select value={stringValue(form.task_type)} onChange={(event) => setForm({ ...form, task_type: event.target.value })}>
+                <option value="general">General bounded work</option>
+                <option value="research">Research brief</option>
+                <option value="support">Support response</option>
+                <option value="content">Content draft</option>
+                <option value="analysis">Analysis</option>
+              </select>
+            </label>
+            <label>
               Task title
               <input
                 value={stringValue(form.title)}
@@ -2377,6 +2482,10 @@ function TasksWorkspace() {
                 }
                 placeholder="Describe the outcome, constraints and information the colleague may use."
               />
+            </label>
+            <label className="span-two">
+              Expected output and acceptance criteria
+              <textarea rows={3} value={stringValue(form.expected_output)} onChange={(event) => setForm({ ...form, expected_output: event.target.value })} placeholder="Describe the format, evidence and human decision this work product must support." />
             </label>
             <button
               type="button"
@@ -2471,6 +2580,17 @@ function TasksWorkspace() {
                   <Play size={17} />
                   Generate model draft
                 </button>
+                {!['completed', 'failed', 'cancelled'].includes(stringValue(value(selectedTask, "status"))) && (
+                  <button className="secondary-button" type="button" onClick={() => void cancelTask()} disabled={Boolean(busy)}>
+                    <Trash2 size={16} /> Cancel work
+                  </button>
+                )}
+              </div>
+              <div className="work-product-evidence">
+                <span><b>Environment</b>{humanStatus(value(selectedTask, "environment") || "sandbox")}</span>
+                <span><b>Task type</b>{humanStatus(value(selectedTask, "task_type") || "general")}</span>
+                <span><b>Progress</b>{numberValue(value(selectedTask, "progress"))}%</span>
+                <span><b>Approval</b>{humanStatus(value(selectedTask, "approval_status") || "not required")}</span>
               </div>
               {!data.capabilities.model_execution && (
                 <p className="panel-note">
@@ -2521,10 +2641,31 @@ function TasksWorkspace() {
                         >
                           Request changes
                         </button>
+                        <button type="button" className="secondary-button" onClick={() => void review(stringValue(value(product, "id")), "rerun")} disabled={Boolean(busy)}>
+                          <RefreshCw size={15} /> Re-run
+                        </button>
+                        <button type="button" className="secondary-button" onClick={() => void review(stringValue(value(product, "id")), "escalated")} disabled={Boolean(busy)}>
+                          <CircleAlert size={15} /> Escalate
+                        </button>
+                        <button type="button" className="secondary-button" onClick={() => void review(stringValue(value(product, "id")), "rejected")} disabled={Boolean(busy)}>
+                          Reject
+                        </button>
                       </div>
                     )}
                   </article>
                 ))}
+              </div>
+              <div className="runtime-event-timeline">
+                <h3>Runtime and decision trail</h3>
+                {[...recordList(value(selectedTask, "events")), ...recordList(value(selectedTask, "runtime_events"))]
+                  .sort((a, b) => new Date(stringValue(value(a, "occurred_at"))).getTime() - new Date(stringValue(value(b, "occurred_at"))).getTime())
+                  .map((event, index) => (
+                    <div key={`${stringValue(value(event, "id"))}-${index}`}>
+                      <i />
+                      <span><strong>{humanStatus(value(event, "event_type"))}</strong><small>{dateLabel(value(event, "occurred_at"))} · {humanStatus(value(event, "actor_type"))}</small></span>
+                      {Boolean(value(event, "status")) && <StatusBadge status={value(event, "status")} />}
+                    </div>
+                  ))}
               </div>
             </>
           )}
@@ -2687,6 +2828,121 @@ function ApprovalsWorkspace() {
   );
 }
 
+function TestCentreWorkspace() {
+  const [data, setData] = useState<RecordItem | null>(null);
+  const [form, setForm] = useState<RecordItem>({ entity_type: "digital_colleague", entity_id: "", test_suite: "role" });
+  const [selectedRun, setSelectedRun] = useState<RecordItem | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(() => workforceApi<RecordItem>("/testing").then(setData).catch((reason: Error) => setError(reason.message)), []);
+  useEffect(() => { void load(); }, [load]);
+  async function run() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await workforceApi<RecordItem>("/testing/runs", { method: "POST", body: JSON.stringify(form) });
+      setSelectedRun(result);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not run the selected test.");
+    }
+    setBusy(false);
+  }
+  if (!data && !error) return <LoadingState />;
+  if (!data) return <ErrorBanner message={error} />;
+  const entityType = stringValue(form.entity_type);
+  const entities = recordList(value(data, entityType === "digital_human" ? "humans" : "colleagues"));
+  const runs = recordList(value(data, "runs"));
+  const results = recordList(value(selectedRun, "results"));
+  const suites = entityType === "digital_human"
+    ? [["presence", "Test Presence"], ["voice", "Voice"], ["realtime", "Realtime"], ["avatar", "Avatar"]]
+    : [["role", "Test Role"], ["work", "Test Work"], ["knowledge", "Knowledge"], ["guardrail", "Guardrails"], ["escalation", "Escalation"]];
+  return (
+    <div className="content-stack post-deployment-workspace">
+      {error && <ErrorBanner message={error} />}
+      <section className="workforce-panel post-deployment-hero" id="studio-primary-action">
+        <div>
+          <p className="eyebrow">Safe proof before scale</p>
+          <h2>Test Centre</h2>
+          <p>Test identity and presence separately from role behaviour and deployed work. Every run is tenant-scoped, version-aware and retained as evidence.</p>
+        </div>
+        <div className="test-mental-model">
+          <span><UserRound size={18} /><b>Digital Human</b><small>Test Presence</small></span>
+          <ArrowRight size={18} />
+          <span><BrainCircuit size={18} /><b>Digital Colleague</b><small>Test Role</small></span>
+          <ArrowRight size={18} />
+          <span><BriefcaseBusiness size={18} /><b>Deployed colleague</b><small>Test Work</small></span>
+        </div>
+      </section>
+      <div className="workforce-task-layout">
+        <section className="workforce-panel">
+          <div className="workforce-panel-heading"><div><p className="eyebrow">Create test run</p><h2>Choose what to prove</h2></div></div>
+          <div className="form-grid">
+            <label>Test subject<select value={entityType} onChange={(event) => setForm({ entity_type: event.target.value, entity_id: "", test_suite: event.target.value === "digital_human" ? "presence" : "role" })}><option value="digital_human">Digital Human · presence</option><option value="digital_colleague">Digital Colleague · role and work</option></select></label>
+            <label>{entityType === "digital_human" ? "Digital Human" : "Digital Colleague"}<select value={stringValue(form.entity_id)} onChange={(event) => setForm({ ...form, entity_id: event.target.value })}><option value="">Choose a configured subject…</option>{entities.map((item) => <option key={stringValue(value(item, "id"))} value={stringValue(value(item, "id"))}>{stringValue(value(item, "name"))} · {humanStatus(value(item, entityType === "digital_human" ? "state" : "deployment_status"))}</option>)}</select></label>
+            <label>Test suite<select value={stringValue(form.test_suite)} onChange={(event) => setForm({ ...form, test_suite: event.target.value })}>{suites.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+            <button className="primary-button" type="button" onClick={run} disabled={busy || !form.entity_id}><Play size={17} />{busy ? "Running checks…" : "Run test in Sandbox"}</button>
+          </div>
+          <p className="panel-note">Tests never publish, contact customers or commit an external action. Provider-dependent checks are marked blocked or degraded instead of being reported as passed.</p>
+        </section>
+        <section className="workforce-panel">
+          <div className="workforce-panel-heading"><div><p className="eyebrow">Latest evidence</p><h2>{selectedRun ? humanStatus(value(selectedRun, "test_suite")) : "Select or run a test"}</h2></div>{selectedRun && <StatusBadge status={value(selectedRun, "status")} />}</div>
+          {!selectedRun ? <EmptyState icon={ClipboardCheck} title="No test selected" copy="Run a new test or choose a retained result from Test History." /> : <div className="readiness-checks">{results.map((item) => <div key={stringValue(value(item, "id"))} className={value(item, "status") === "passed" ? "passed" : "failed"}>{value(item, "status") === "passed" ? <Check size={16} /> : <CircleAlert size={16} />}<div><strong>{stringValue(value(item, "label"))}</strong><small>{stringValue(value(item, "detail"))}</small></div><StatusBadge status={value(item, "status")} /></div>)}</div>}
+        </section>
+      </div>
+      <section className="workforce-panel">
+        <div className="workforce-panel-heading"><div><p className="eyebrow">Version-aware evidence</p><h2>Test History</h2></div></div>
+        {runs.length === 0 ? <EmptyState title="No retained test runs" copy="The first post-deployment test will create an immutable, tenant-scoped evidence record." /> : <div className="task-list">{runs.map((item) => <button type="button" key={stringValue(value(item, "id"))} onClick={() => setSelectedRun(item)}><span><strong>{stringValue(value(item, "colleague_name") || value(item, "human_name"))} · {humanStatus(value(item, "test_suite"))}</strong><small>{dateLabel(value(item, "created_at"))} · configuration {stringValue(value(item, "configuration_revision") || "—")} · deployment {stringValue(value(item, "deployment_version") || "—")}</small></span><StatusBadge status={value(item, "status")} /></button>)}</div>}
+      </section>
+    </div>
+  );
+}
+
+function OperationsWorkspace() {
+  const [data, setData] = useState<RecordItem | null>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = useCallback(() => workforceApi<RecordItem>("/operations").then(setData).catch((reason: Error) => setError(reason.message)), []);
+  useEffect(() => { void load(); }, [load]);
+  async function testConnections() {
+    setBusy("providers"); setError("");
+    try { await workforceApi("/providers/health/test", { method: "POST", body: "{}" }); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not test providers."); }
+    setBusy("");
+  }
+  async function runtimeAction(id: string, action: "pause" | "resume") {
+    if (action === "pause" && !window.confirm("Pause this Digital Colleague and block new work? Existing evidence is retained.")) return;
+    setBusy(id); setError("");
+    try { await workforceApi(`/colleagues/${id}/${action}`, { method: "POST", body: JSON.stringify({ confirm: true }) }); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update runtime state."); }
+    setBusy("");
+  }
+  if (!data && !error) return <LoadingState />;
+  if (!data) return <ErrorBanner message={error} />;
+  const providers = recordList(value(data, "providers"));
+  const colleagues = recordList(value(data, "colleagues"));
+  const unhealthy = providers.filter((item) => !["healthy", "disabled", "not_configured"].includes(stringValue(value(item, "status"))));
+  return (
+    <div className="content-stack post-deployment-workspace operations-workspace">
+      {error && <ErrorBanner message={error} />}
+      <section className="workforce-panel post-deployment-hero" id="studio-primary-action"><div><p className="eyebrow">Post-deployment command</p><h2>Operations</h2><p>Observe runtime truth, supervise deployed colleagues and keep provider faults separate from configuration validity.</p></div><button className="primary-button" type="button" onClick={testConnections} disabled={Boolean(busy)}><RefreshCw className={busy === "providers" ? "spin" : ""} size={17} />Test provider connections</button></section>
+      {unhealthy.length > 0 && <div className="workforce-alert warn"><CircleAlert size={20} /><div><strong>{unhealthy.length} provider capabilities need attention</strong><p>Configured roles remain intact. Open the health cards below for safe fallback guidance.</p></div></div>}
+      <section className="runtime-provider-grid">{providers.map((item) => <article className="workforce-panel" key={`${stringValue(value(item, "provider"))}-${stringValue(value(item, "capability"))}`}><div><span className="runtime-provider-icon"><Gauge size={19} /></span><StatusBadge status={value(item, "status")} /></div><h3>{stringValue(value(item, "provider"))}</h3><p>{humanStatus(value(item, "capability"))}</p><small>{stringValue((value(item, "safe_detail") as RecordItem | undefined)?.detail || value(item, "detail"))}</small><footer><span>{value(item, "latency_ms") === null || value(item, "latency_ms") === undefined ? "Not live-tested" : `${stringValue(value(item, "latency_ms"))} ms`}</span><span>{dateLabel(value(item, "checked_at"))}</span></footer></article>)}</section>
+      <section className="workforce-panel"><div className="workforce-panel-heading"><div><p className="eyebrow">Deployed operating policies</p><h2>Digital Colleague runtime</h2></div><Link href="/studio/tasks" className="secondary-button">Open Work Queue <ArrowRight size={16} /></Link></div>{colleagues.length === 0 ? <EmptyState title="No Digital Colleagues" copy="Configure, approve and deploy a role before it appears in Operations." /> : <div className="operations-list">{colleagues.map((item) => { const paused = value(item, "status") === "paused"; return <article key={stringValue(value(item, "id"))}><div><strong>{stringValue(value(item, "name"))}</strong><small>{stringValue(value(item, "role_title"))} · {numberValue(value(item, "open_work_count"))} open work item(s)</small></div><StatusBadge status={value(item, "deployment_status")} /><div><Link className="secondary-button" href={`/studio/test-centre?colleague=${stringValue(value(item, "id"))}`}>Test</Link>{["deployed", "paused"].includes(stringValue(value(item, "status"))) && <button className="secondary-button" type="button" disabled={busy === stringValue(value(item, "id"))} onClick={() => void runtimeAction(stringValue(value(item, "id")), paused ? "resume" : "pause")}>{paused ? <Play size={15} /> : <CircleAlert size={15} />}{paused ? "Resume" : "Pause"}</button>}</div></article>; })}</div>}</section>
+    </div>
+  );
+}
+
+function WorkProductsWorkspace() {
+  const [data, setData] = useState<RecordItem | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { workforceApi<RecordItem>("/products").then(setData).catch((reason: Error) => setError(reason.message)); }, []);
+  if (!data && !error) return <LoadingState />;
+  if (!data) return <ErrorBanner message={error} />;
+  const products = recordList(value(data, "items"));
+  return <div className="content-stack post-deployment-workspace"><section className="workforce-panel post-deployment-hero"><div><p className="eyebrow">Human-verifiable output</p><h2>Work Products</h2><p>Inspect model identity, source references, assumptions and append-only review history before any output is released.</p></div><Link href="/studio/tasks" className="primary-button"><Plus size={17} />Assign work</Link></section><section className="workforce-panel">{products.length === 0 ? <EmptyState icon={ClipboardCheck} title="No work products yet" copy="Create a work item, then prepare a deterministic brief or run an approved provider-backed draft." action={<Link href="/studio/tasks" className="secondary-button">Open Work Queue</Link>} /> : <div className="work-products-catalogue">{products.map((item) => <article key={stringValue(value(item, "id"))}><header><div><small>{stringValue(value(item, "work_item_public_id"))} · {humanStatus(value(item, "environment"))}</small><h3>{stringValue(value(item, "title"))}</h3><p>{stringValue(value(item, "colleague_name"))} · {dateLabel(value(item, "created_at"))}</p></div><StatusBadge status={value(item, "status")} /></header><div className="work-product-evidence"><span><b>Provider</b>{stringValue(value(item, "model_provider")) || "Deterministic VowHumans runtime"}</span><span><b>Model</b>{stringValue(value(item, "model_name")) || "No external model"}</span><span><b>Sources</b>{recordList(value(item, "source_refs")).length}</span><span><b>Reviews</b>{recordList(value(item, "reviews")).length}</span></div><Link className="secondary-button" href={`/studio/tasks?task=${stringValue(value(item, "work_item_id"))}`}>Open review trail <ArrowRight size={15} /></Link></article>)}</div>}</section></div>;
+}
+
 function AnalyticsWorkspace() {
   const [data, setData] = useState<RecordItem | null>(null);
   const [error, setError] = useState("");
@@ -2791,7 +3047,15 @@ export function WorkforceStudio({
   path = [],
 }: {
   mode?:
-    "dashboard" | "builder" | "tasks" | "approvals" | "analytics" | "create";
+    | "dashboard"
+    | "builder"
+    | "tasks"
+    | "approvals"
+    | "analytics"
+    | "create"
+    | "test-centre"
+    | "operations"
+    | "work-products";
   path?: string[];
 }) {
   if (mode === "create") return <CreateColleague />;
@@ -2800,5 +3064,8 @@ export function WorkforceStudio({
   if (mode === "tasks") return <TasksWorkspace />;
   if (mode === "approvals") return <ApprovalsWorkspace />;
   if (mode === "analytics") return <AnalyticsWorkspace />;
+  if (mode === "test-centre") return <TestCentreWorkspace />;
+  if (mode === "operations") return <OperationsWorkspace />;
+  if (mode === "work-products") return <WorkProductsWorkspace />;
   return <WorkforceDashboard />;
 }

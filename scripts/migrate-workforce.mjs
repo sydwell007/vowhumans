@@ -52,6 +52,13 @@ const migration018 = await readFile(
   ),
   "utf8",
 );
+const migration019 = await readFile(
+  new URL(
+    "../packages/database/migrations/019_post_deployment_runtime.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const requiredTables = [
   "workforce_templates",
@@ -78,6 +85,13 @@ const requiredTables = [
   "colleague_costs",
   "workforce_scheduled_jobs",
   "workforce_model_policies",
+  "runtime_test_runs",
+  "runtime_test_results",
+  "provider_health",
+  "deployment_readiness",
+  "runtime_events",
+  "runtime_usage",
+  "deployment_promotions",
 ];
 
 const sql = postgres(connectionString, {
@@ -103,6 +117,17 @@ try {
     await connection.unsafe(migration017);
   }
 
+  // Migration 018 is an idempotent upsert. Re-running it keeps the bounded role
+  // catalogue current without creating duplicate templates.
+  console.log("[workforce-migrate] applying migration 018 seed catalogue");
+  await connection.unsafe(migration018);
+
+  // Migration 019 is deliberately idempotent. Always apply it so a deployment
+  // safely completes an earlier interrupted/partial SQL-editor run as well as
+  // adding newly introduced columns to an existing workforce schema.
+  console.log("[workforce-migrate] applying migration 019 post-deployment runtime");
+  await connection.unsafe(migration019);
+
   const existing = await connection`
     SELECT tablename
     FROM pg_catalog.pg_tables
@@ -115,11 +140,6 @@ try {
       `[workforce-migrate] incomplete schema after migration: ${missing.join(", ")}`,
     );
   }
-
-  // Migration 018 is an idempotent upsert. Re-running it keeps the bounded role
-  // catalogue current without creating duplicate templates.
-  console.log("[workforce-migrate] applying migration 018 seed catalogue");
-  await connection.unsafe(migration018);
 
   const [catalogue] = await connection`
     SELECT count(*)::int AS count

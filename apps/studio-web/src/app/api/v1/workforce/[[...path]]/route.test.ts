@@ -65,6 +65,11 @@ describe("Digital Workforce API access boundary", () => {
       ["colleagues", colleagueId, "tests", "run"],
       ["colleagues", colleagueId, "approvals"],
       ["colleagues", colleagueId, "deployments"],
+      ["testing", "runs"],
+      ["providers", "health", "test"],
+      ["colleagues", colleagueId, "pause"],
+      ["tasks", colleagueId, "cancel"],
+      ["deployments", colleagueId, "promote"],
     ]) {
       const response = await POST(
         new NextRequest(`http://localhost/api/v1/workforce/${path.join("/")}`, {
@@ -75,6 +80,22 @@ describe("Digital Workforce API access boundary", () => {
         context(path),
       );
       expect(response.status, path.join("/") || "create").toBe(401);
+    }
+  });
+
+  it("protects every post-deployment read surface", async () => {
+    for (const path of [
+      ["testing"],
+      ["operations"],
+      ["products"],
+      ["providers", "health"],
+      ["colleagues", colleagueId, "runtime"],
+    ]) {
+      const response = await GET(
+        new NextRequest(`http://localhost/api/v1/workforce/${path.join("/")}`),
+        context(path),
+      );
+      expect(response.status, path.join("/")).toBe(401);
     }
   });
 });

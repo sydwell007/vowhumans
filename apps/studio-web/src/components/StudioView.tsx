@@ -577,6 +577,7 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   const [disclosure, setDisclosure] = useState('AI-generated digital human. Not a real person.');
   const [creatingIdentity, setCreatingIdentity] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [activated, setActivated] = useState(false);
   const [templateFaceAssignments, setTemplateFaceAssignments] = useState<FaceAssignment[]>([]);
   const [templateVoiceAssignments, setTemplateVoiceAssignments] = useState<VoiceAssignment[]>([]);
 
@@ -651,8 +652,9 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
       const res = await fetch(`/api/v1/digital-humans/${activeHumanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: 'active' }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not activate this digital human.');
+      setChanged(true);
+      setActivated(true);
       setActivating(false);
-      onClose(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not activate this digital human.');
       setActivating(false);
@@ -708,9 +710,11 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
           {step === 5 && activeHumanId && <WizardPersonaStep humanId={activeHumanId} role={role} onDone={advance} />}
           {step === 6 && activeHumanId && <WizardGestureStep humanId={activeHumanId} onDone={advance} />}
           {step === 7 && activeHumanId && <WizardApplicationsStep humanId={activeHumanId} onDone={advance} />}
-          {step === 8 && activeHumanId && <WizardReviewStep humanId={activeHumanId} activating={activating} onActivate={finish} />}
+          {step === 8 && activeHumanId && (activated
+            ? <DigitalHumanDeploymentSuccess humanId={activeHumanId} onDone={() => onClose(true)} />
+            : <WizardReviewStep humanId={activeHumanId} activating={activating} onActivate={finish} />)}
         </div>
-        {step > 1 && (
+        {step > 1 && !activated && (
           <div className="wizard-footer editor-actions">
             {step > minStep && <button className="secondary-button" type="button" onClick={() => setStep(step - 1)}><ArrowLeft size={16} />Back</button>}
             <button className="plain-button" type="button" onClick={skip}><SkipForward size={16} />{step >= DIGITAL_HUMAN_BUILDER_STEPS.length ? 'Save as draft' : 'Skip for now'}</button>
@@ -1379,6 +1383,40 @@ function WizardReviewStep({ humanId, activating, onActivate }: { humanId: string
         </div>
       )}
     </div>
+  );
+}
+
+function DigitalHumanDeploymentSuccess({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [profile, setProfile] = useState<DigitalHumanProfile | null>(null);
+  useEffect(() => {
+    fetch(`/api/v1/digital-humans/${humanId}`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body?.success) throw new Error(body?.message || 'Could not load the activated Digital Human.');
+        return body.data as DigitalHumanProfile;
+      })
+      .then(setProfile)
+      .catch(() => setProfile(null));
+  }, [humanId]);
+  return (
+    <section className="digital-human-deployment-success" aria-labelledby="digital-human-success-title">
+      <span className="complete-icon"><BadgeCheck size={28} /></span>
+      <p className="eyebrow">Digital Human activated</p>
+      <h3 id="digital-human-success-title">{profile?.human.name || 'Your Digital Human'} is ready to prove its presence.</h3>
+      <p>Activation preserves the separation between identity, approved Persona and knowledge. Test the visible experience before assigning this identity to a Digital Colleague role.</p>
+      <div className="post-deployment-action-cards">
+        <Link href={`/studio/test-centre?human=${humanId}`} className="post-deployment-action-card">
+          <Play size={20} /><span><strong>Test Presence</strong><small>Verify identity, disclosure, voice, avatar fallback and application channel.</small></span><ArrowRight size={16} />
+        </Link>
+        <Link href="/studio/live-sessions" className="post-deployment-action-card">
+          <Radio size={20} /><span><strong>Start a test conversation</strong><small>Run a disclosed, consent-gated session with honest media fallback.</small></span><ArrowRight size={16} />
+        </Link>
+        <Link href="/studio/workforce/create" className="post-deployment-action-card">
+          <BrainCircuit size={20} /><span><strong>Create a Digital Colleague</strong><small>Attach this identity to a bounded role, governance policy and 12-step deployment.</small></span><ArrowRight size={16} />
+        </Link>
+      </div>
+      <button className="secondary-button" type="button" onClick={onDone}>Return to Digital Humans</button>
+    </section>
   );
 }
 
@@ -3938,7 +3976,10 @@ export function StudioView({ section }: { section: string }) {
   switch(section){
     case 'dashboard': return <ProductionDashboard/>;
     case 'workforce': return <WorkforceStudio/>;
+    case 'test-centre': return <WorkforceStudio mode="test-centre"/>;
+    case 'operations': return <WorkforceStudio mode="operations"/>;
     case 'tasks': return <WorkforceStudio mode="tasks"/>;
+    case 'work-products': return <WorkforceStudio mode="work-products"/>;
     case 'approvals': return <WorkforceStudio mode="approvals"/>;
     case 'workforce-analytics': return <WorkforceStudio mode="analytics"/>;
     case 'digital-humans': return <DigitalHumans/>;

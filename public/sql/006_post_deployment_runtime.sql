@@ -1,0 +1,11 @@
+-- Sanitized manual reference copy for VowHumans PostgreSQL/Neon.
+-- Source of truth: packages/database/migrations/019_post_deployment_runtime.sql
+--
+-- This public/manual package intentionally contains no credentials or production
+-- data. Do not import it into Afrihost MariaDB: PostgreSQL syntax and canonical
+-- Neon tables are required. Run the source migration through the Vercel build or
+-- an approved Neon migration process instead.
+--
+-- Kept as a non-executable pointer so operators cannot accidentally create a
+-- second runtime data store in MariaDB.
+SELECT 'Use packages/database/migrations/019_post_deployment_runtime.sql on Neon/PostgreSQL' AS operator_instruction;
