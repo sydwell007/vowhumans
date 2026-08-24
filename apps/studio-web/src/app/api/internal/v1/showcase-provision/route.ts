@@ -40,11 +40,50 @@ async function targetOrganisation() {
 export async function GET(request: NextRequest) {
   if (!authorised(request)) return NextResponse.json({ success: false }, { status: 401 });
   const organisation = await targetOrganisation();
-  const [humans, colleagues] = await Promise.all([
+  const [humans, colleagues, humanReadiness, colleagueReadiness] = await Promise.all([
     sql`SELECT name, role, state, count(*)::int AS copies FROM digital_humans WHERE organisation_id=${organisation.id} GROUP BY name,role,state ORDER BY name,state`,
     sql`SELECT name, role_title, status, deployment_status, builder_step FROM digital_colleagues WHERE organisation_id=${organisation.id} ORDER BY created_at`,
+    sql`
+      SELECT dh.name, dh.state,
+        (hfa.face_asset_id IS NOT NULL AND fa.state = 'active' AND mb.size_bytes > 0) AS face_ready,
+        (hva.voice_id IS NOT NULL AND v.state = 'active') AS voice_ready,
+        (hpa.persona_version_id IS NOT NULL AND pv.state = 'published') AS persona_ready,
+        (hga.gesture_profile_id IS NOT NULL AND gp.state = 'active') AS gestures_ready,
+        (SELECT count(*)::int FROM human_knowledge_assignments hka WHERE hka.organisation_id=dh.organisation_id AND hka.human_slug=dh.id::text) AS knowledge_sources,
+        (SELECT count(*)::int FROM digital_human_applications dha WHERE dha.organisation_id=dh.organisation_id AND dha.digital_human_id=dh.id AND dha.enabled=true) AS applications
+      FROM digital_humans dh
+      JOIN identities i ON i.id=dh.identity_id AND i.provenance->>'source'='vowhumans-showcase'
+      LEFT JOIN human_face_assignments hfa ON hfa.organisation_id=dh.organisation_id AND hfa.human_slug=dh.id::text
+      LEFT JOIN face_assets fa ON fa.id=hfa.face_asset_id
+      LEFT JOIN media_blobs mb ON mb.organisation_id=dh.organisation_id AND mb.object_key=fa.object_key
+      LEFT JOIN human_voice_assignments hva ON hva.organisation_id=dh.organisation_id AND hva.human_slug=dh.id::text
+      LEFT JOIN voices v ON v.id=hva.voice_id
+      LEFT JOIN human_persona_assignments hpa ON hpa.organisation_id=dh.organisation_id AND hpa.human_slug=dh.id::text
+      LEFT JOIN persona_versions pv ON pv.id=hpa.persona_version_id
+      LEFT JOIN human_gesture_assignments hga ON hga.organisation_id=dh.organisation_id AND hga.human_slug=dh.id::text
+      LEFT JOIN gesture_profiles gp ON gp.id=hga.gesture_profile_id
+      WHERE dh.organisation_id=${organisation.id} AND dh.state <> 'archived'
+      ORDER BY dh.name
+    `,
+    sql`
+      SELECT dc.name, dc.status, dc.deployment_status, dc.builder_step,
+        (dc.digital_human_id IS NOT NULL) AS human_linked,
+        (dc.persona_version_id IS NOT NULL) AS persona_linked,
+        (dc.human_owner_user_id IS NOT NULL AND dc.escalation_owner_user_id IS NOT NULL) AS human_routes_ready,
+        (SELECT count(*)::int FROM colleague_functions x WHERE x.digital_colleague_id=dc.id) AS functions,
+        (SELECT count(*)::int FROM colleague_skills x WHERE x.digital_colleague_id=dc.id) AS skills,
+        (SELECT count(*)::int FROM colleague_knowledge_sources x WHERE x.digital_colleague_id=dc.id AND x.status='active') AS knowledge_sources,
+        (SELECT count(*)::int FROM colleague_workflows x WHERE x.digital_colleague_id=dc.id AND x.status='active') AS workflows,
+        (SELECT count(*)::int FROM colleague_guardrails x WHERE x.digital_colleague_id=dc.id) AS guardrails,
+        (SELECT count(*)::int FROM colleague_tests x WHERE x.digital_colleague_id=dc.id AND x.status='passed') AS tests_passed,
+        (SELECT count(*)::int FROM colleague_approvals x WHERE x.digital_colleague_id=dc.id AND x.decision='approved') AS approvals,
+        (SELECT count(*)::int FROM colleague_deployments x WHERE x.digital_colleague_id=dc.id AND x.status='deployed') AS deployments
+      FROM digital_colleagues dc
+      WHERE dc.organisation_id=${organisation.id} AND dc.configuration->>'source'='vowhumans-showcase'
+      ORDER BY dc.name
+    `,
   ]);
-  return NextResponse.json({ success: true, data: { organisation: { id: organisation.id, name: organisation.name, slug: organisation.slug }, humans, colleagues } });
+  return NextResponse.json({ success: true, data: { organisation: { id: organisation.id, name: organisation.name, slug: organisation.slug }, humans, colleagues, humanReadiness, colleagueReadiness } });
 }
 
 export async function POST(request: NextRequest) {

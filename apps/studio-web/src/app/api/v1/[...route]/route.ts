@@ -365,7 +365,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         usage_cost_minor: number; usage_events: number;
       }[]>`
         SELECT
-          (SELECT count(*)::int FROM digital_humans WHERE organisation_id = ${organisationId}) AS digital_humans,
+          (SELECT count(*)::int FROM digital_humans WHERE organisation_id = ${organisationId} AND state <> 'archived') AS digital_humans,
           (SELECT count(*)::int FROM persona_versions WHERE organisation_id = ${organisationId} AND state = 'published') AS published_personas,
           (SELECT count(*)::int FROM sessions WHERE organisation_id = ${organisationId} AND created_at >= current_date) AS sessions_today,
           (SELECT count(*)::int FROM sessions WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active') AND created_at > now() - interval '30 minutes') AS live_now,
@@ -380,8 +380,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
            WHERE hfa.organisation_id = dh.organisation_id AND hfa.human_slug = dh.id::text
            LIMIT 1) AS face_asset_id
         FROM digital_humans dh
-        WHERE dh.organisation_id = ${organisationId}
-        ORDER BY dh.created_at DESC LIMIT 5
+        WHERE dh.organisation_id = ${organisationId} AND dh.state <> 'archived'
+        ORDER BY
+          CASE WHEN EXISTS (
+            SELECT 1 FROM identities i
+            WHERE i.id = dh.identity_id
+              AND i.provenance->>'source' = 'vowhumans-showcase'
+          ) THEN 0 ELSE 1 END,
+          dh.updated_at DESC
+        LIMIT 5
       `,
       sql`SELECT action, resource_type, occurred_at FROM audit_logs WHERE organisation_id = ${organisationId} ORDER BY occurred_at DESC LIMIT 5`,
       fetchGatewayHealth(),
@@ -559,7 +566,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
          WHERE hfa.organisation_id = dh.organisation_id AND hfa.human_slug = dh.id::text
          LIMIT 1) AS face_asset_id
       FROM digital_humans dh
-      WHERE dh.organisation_id = ${organisationId}
+      WHERE dh.organisation_id = ${organisationId} AND dh.state <> 'archived'
       ORDER BY dh.created_at DESC
     `;
     return response({ items: rows });
