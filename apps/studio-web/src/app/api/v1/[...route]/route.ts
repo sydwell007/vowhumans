@@ -114,6 +114,10 @@ function audioObjectKeyFromSettings(settings: unknown): string | null {
 export const maxDuration = 120;
 
 function response(data: unknown, status = 200) {
+  return NextResponse.json({ success: true, data, meta: { mode: "live", request_id: randomUUID() } }, { status, headers: { "x-vowhumans-mode": "live" } });
+}
+
+function previewResponse(data: unknown, status = 200) {
   return NextResponse.json({ success: true, data, meta: { mode: "development-mock", request_id: randomUUID() } }, { status, headers: { "x-vowhumans-mode": "development-mock" } });
 }
 
@@ -604,10 +608,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (resource === "languages" && !route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) {
-      return response({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
+      return previewResponse({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
     }
     if (!flagEnabled("ENABLE_MULTILINGUAL")) {
-      return response({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
+      return previewResponse({ items: [{ code: "en-ZA", english_name: "English (South Africa)", native_name: "English", enabled: true, default_voice_id: null, capabilities: [] }] });
     }
     const [languages, capabilities, orgLanguages, usageStats, reviewStats] = await Promise.all([
       sql<{ code: string; english_name: string; native_name: string; sort_order: number }[]>`SELECT code, english_name, native_name, sort_order FROM languages ORDER BY sort_order`,
@@ -961,12 +965,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new NextResponse(body, { headers: { "content-type": format === "vtt" ? "text/vtt; charset=utf-8" : "application/x-subrip; charset=utf-8", "cache-control": "private, max-age=3600" } });
   }
 
-  if (resource === "plans") return response({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
-  if (resource === "integrations") return response({ items: integrations });
-  if (resource === "templates" || resource === "marketplace") return response({ items: templates, purchases_enabled: false });
-  if (resource === "academy") return response({ items: academyCourses, progress_persistent: false });
-  if (resource === "usage" || resource === "analytics" || resource === "billing") return response({ sessions: 0, minutes: 0, estimated_cost_minor: 0, currency: "ZAR", source_connected: false, private_content_included: false });
-  return response({ items: [], resource, persistent: false });
+  if (resource === "plans") return previewResponse({ items: plans, pricing_status: "proposed-configurable", currency: "ZAR" });
+  if (resource === "integrations") return previewResponse({ items: integrations });
+  if (resource === "templates" || resource === "marketplace") return previewResponse({ items: templates, purchases_enabled: false });
+  if (resource === "academy") return previewResponse({ items: academyCourses, progress_persistent: false });
+  if (resource === "usage" || resource === "analytics" || resource === "billing") return previewResponse({ sessions: 0, minutes: 0, estimated_cost_minor: 0, currency: "ZAR", source_connected: false, private_content_included: false });
+  return previewResponse({ items: [], resource, persistent: false });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
@@ -2325,7 +2329,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const isPublicRequest=resource.endsWith("-requests") || (resource === "organisations" && !request.headers.get("authorization"));
-  return response({ id: randomUUID(), resource, state: isPublicRequest ? "validated-preview" : "draft", persistent: false, message: "Validated in safe preview. Configure the production API to persist and deliver this request.", received_fields: Object.keys(body as object).filter(key=>!key.toLowerCase().includes("password")), disclosure_required: true }, isPublicRequest ? 202 : 201);
+  return previewResponse({ id: randomUUID(), resource, state: isPublicRequest ? "validated-preview" : "draft", persistent: false, message: "Validated in safe preview. Configure the production API to persist and deliver this request.", received_fields: Object.keys(body as object).filter(key=>!key.toLowerCase().includes("password")), disclosure_required: true }, isPublicRequest ? 202 : 201);
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ route: string[] }> }) {
@@ -2453,7 +2457,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return response({ id: route[1], deleted: Boolean(deleted) }, 202);
   }
   if (route[0] !== "sessions") return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
-  return response({ id: route[1] ?? null, deletion: "mock-queued", private_content_included: false }, 202);
+  return previewResponse({ id: route[1] ?? null, deletion: "mock-queued", private_content_included: false }, 202);
 }
 
 // New draft-only edit path — publishing forks a new version (POST persona-versions)

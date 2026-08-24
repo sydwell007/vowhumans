@@ -1,0 +1,545 @@
+{
+  "generatedAt": "2026-08-24T06:21:30.757Z",
+  "baseUrl": "https://vowhumans.com",
+  "passed": true,
+  "account": {
+    "email": "vowhumans.audit.20260824055512@example.com",
+    "workspace": "VowHumans Workflow Audit 20260824055512",
+    "userId": "5a72070b-f7fc-486b-b55f-0d58ac51e00d",
+    "role": "owner"
+  },
+  "evidence": {
+    "health": {
+      "status": "ok",
+      "service": "vowhumans-web-control-plane",
+      "mode": "live",
+      "checkedAt": "2026-08-24T06:19:50.966Z",
+      "persistence": true,
+      "capabilities": {
+        "staticPortrait": true,
+        "studio": true,
+        "presenterDraft": true,
+        "voice": "adapter-ready",
+        "realtime": "disabled",
+        "billing": "disabled",
+        "email": "disabled",
+        "gpu": "disabled"
+      },
+      "dependencies": {
+        "database": "reachable",
+        "schema": {
+          "control_plane_ready": true,
+          "workforce_ready": true,
+          "audit_ready": true
+        },
+        "afrihostApi": "not-verified",
+        "livekit": "not-configured",
+        "objectStorage": "not-configured"
+      }
+    },
+    "account": {
+      "email": "vowhumans.audit.20260824055512@example.com",
+      "workspace": "VowHumans Workflow Audit 20260824055512",
+      "userId": "5a72070b-f7fc-486b-b55f-0d58ac51e00d",
+      "role": "owner"
+    },
+    "assets": {
+      "faceId": "00de20df-01b8-4342-9554-94746a68fb6d",
+      "voiceId": "7e8641e4-57df-4461-b593-07fe1a1d3f70",
+      "knowledgeId": "dbbdfd51-ff9b-4a6e-ad26-cba313297b85",
+      "personaId": "0d757c59-04f7-40e5-bfc3-69263bc41e49",
+      "personaVersionId": "bd0e8083-2ed1-49bd-aca3-ed1a12ad9230",
+      "applicationId": "4d2016d2-9eeb-4835-b75e-8efd1e1438b2"
+    },
+    "digitalHuman": {
+      "id": "3d45daf5-ad62-474a-8e9f-6e50e02a22f3",
+      "state": "active",
+      "builderSteps": 8
+    },
+    "workforce": {
+      "id": "232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5",
+      "publicId": "dc_1dd81ba3277742a79ccb14c9",
+      "status": "deployed",
+      "deploymentStatus": "deployed",
+      "readinessScore": 100,
+      "builderSteps": 12,
+      "deterministicTests": 8,
+      "approvals": 1,
+      "deployments": 1
+    }
+  },
+  "checks": [
+    {
+      "name": "production health is live and fully ready",
+      "passed": true,
+      "durationMs": 695,
+      "mode": "live",
+      "database": "reachable"
+    },
+    {
+      "name": "temporary audit account signs in through the production UI",
+      "passed": true,
+      "durationMs": 4046,
+      "email": "vowhumans.audit.20260824055512@example.com",
+      "role": "owner",
+      "resumed": true
+    },
+    {
+      "name": "production assets persist for the governed builders",
+      "passed": true,
+      "durationMs": 413,
+      "faceId": "00de20df-01b8-4342-9554-94746a68fb6d",
+      "voiceId": "7e8641e4-57df-4461-b593-07fe1a1d3f70",
+      "knowledgeId": "dbbdfd51-ff9b-4a6e-ad26-cba313297b85",
+      "personaId": "0d757c59-04f7-40e5-bfc3-69263bc41e49",
+      "personaVersionId": "bd0e8083-2ed1-49bd-aca3-ed1a12ad9230",
+      "applicationId": "4d2016d2-9eeb-4835-b75e-8efd1e1438b2"
+    },
+    {
+      "name": "8-step Digital Human builder completes and activates",
+      "passed": true,
+      "durationMs": 11273,
+      "id": "3d45daf5-ad62-474a-8e9f-6e50e02a22f3",
+      "state": "active",
+      "builderSteps": 8
+    },
+    {
+      "name": "12-step Digital Workforce builder tests, approves, and deploys",
+      "passed": true,
+      "durationMs": 84190,
+      "id": "232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5",
+      "publicId": "dc_1dd81ba3277742a79ccb14c9",
+      "status": "deployed",
+      "deploymentStatus": "deployed",
+      "readinessScore": 100,
+      "builderSteps": 12,
+      "deterministicTests": 8,
+      "approvals": 1,
+      "deployments": 1
+    },
+    {
+      "name": "authenticated production session remains isolated and healthy",
+      "passed": true,
+      "durationMs": 662,
+      "persistedColleagues": 1
+    }
+  ],
+  "apiSummary": {
+    "total": 82,
+    "failures": [],
+    "entries": [
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/auth/login"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-human-applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-humans"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-humans/3d45daf5-ad62-474a-8e9f-6e50e02a22f3"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/faces/00de20df-01b8-4342-9554-94746a68fb6d/image"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/voices"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/face-assignments"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/voices"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/voice-assignments"
+      },
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/voice-assignments"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/knowledge-bases"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/languages"
+      },
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/knowledge-assignments"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/personas"
+      },
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/persona-assignments"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/gesture-profiles"
+      },
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/gesture-assignments"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-human-applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-human-applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-humans/3d45daf5-ad62-474a-8e9f-6e50e02a22f3"
+      },
+      {
+        "method": "PATCH",
+        "status": 200,
+        "url": "/api/v1/digital-humans/3d45daf5-ad62-474a-8e9f-6e50e02a22f3"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-humans"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-human-applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/digital-humans/3d45daf5-ad62-474a-8e9f-6e50e02a22f3"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/applications"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/voices"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/role"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/functions"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/skills"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/knowledge"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/tools"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/workflows"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/objectives"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/guardrails"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "PUT",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/steps/collaboration"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "POST",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/tests/run"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "POST",
+        "status": 201,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/approvals"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/reference"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "url": "/api/v1/dashboard"
+      },
+      {
+        "method": "POST",
+        "status": 201,
+        "url": "/api/v1/workforce/colleagues/232e5be3-83b9-44c5-bf33-cbd0a1f5c5d5/deployments"
+      }
+    ]
+  },
+  "runtimeErrors": [],
+  "cleanup": "Audit account and persisted records intentionally retained pending separate user confirmation for deletion. The generated password was not written to disk."
+}

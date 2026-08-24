@@ -120,6 +120,19 @@ export const identityRecords = [
 
 export const identityAlertCount = identityRecords.filter((record) => record.status === "Blocked").length;
 
+// The customer-facing Digital Human builder deliberately remains eight clear
+// stages. Persona and Knowledge are linked layers, never folded into identity.
+export const DIGITAL_HUMAN_BUILDER_STEPS = [
+  "Identity",
+  "Face",
+  "Voice",
+  "Knowledge",
+  "Persona",
+  "Gesture",
+  "Applications",
+  "Review",
+] as const;
+
 export const navigation = [
   {
     label: "Overview",

@@ -4,7 +4,9 @@ import "./commercial.css";
 import "./brand.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://vowhumans.com"),
+  // Canonical metadata must remain stable even if a preview environment sets a
+  // local or deployment-specific NEXT_PUBLIC_SITE_URL value.
+  metadataBase: new URL("https://vowhumans.com"),
   title: { default: "VowHumans | AI Digital Workforce Platform", template: "%s · VowHumans" },
   description: "Build, deploy and govern disclosed AI Digital Colleagues across live conversations, presentations, websites and enterprise workflows.",
   alternates: { canonical: "/" },

@@ -1,0 +1,47 @@
+{
+  "baseUrl": "http://localhost:3100",
+  "passed": true,
+  "checks": [
+    {
+      "name": "desktop navigation menus open and close",
+      "passed": true,
+      "durationMs": 1721
+    },
+    {
+      "name": "mobile navigation opens without page overflow",
+      "passed": true,
+      "durationMs": 1194
+    },
+    {
+      "name": "public search submits and returns matching content",
+      "passed": true,
+      "durationMs": 1278
+    },
+    {
+      "name": "lead form validates and reports successful safe submission",
+      "passed": true,
+      "durationMs": 2229
+    },
+    {
+      "name": "ROI calculator recalculates and downloads CSV",
+      "passed": true,
+      "durationMs": 847
+    },
+    {
+      "name": "interview demo completes its disclosed workflow",
+      "passed": true,
+      "durationMs": 2873
+    },
+    {
+      "name": "course tutor demo accepts a question and returns citations",
+      "passed": true,
+      "durationMs": 1610
+    },
+    {
+      "name": "unauthenticated Studio routes are protected",
+      "passed": true,
+      "durationMs": 727
+    }
+  ],
+  "runtimeErrors": []
+}

@@ -156,6 +156,27 @@ function objectArray(value: unknown, maxItems = 50): JsonRecord[] {
     .slice(0, maxItems);
 }
 
+function jsonRecord(value: unknown): JsonRecord {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as JsonRecord : {};
+  } catch {
+    return {};
+  }
+}
+
+function configurationRevision(value: unknown): number {
+  const revision = Number(jsonRecord(value).revision ?? 1);
+  return Number.isInteger(revision) && revision > 0 ? revision : 1;
+}
+
+function artifactRevision(value: unknown): number | null {
+  const revision = Number(jsonRecord(value).configuration_revision);
+  return Number.isInteger(revision) && revision > 0 ? revision : null;
+}
+
 function riskLevel(value: unknown): WorkforceRiskLevel {
   return value === "low" || value === "high" || value === "regulated"
     ? value
@@ -238,6 +259,14 @@ async function detailedColleague(
     sql`SELECT ca.*, u.display_name AS approved_by_name FROM colleague_approvals ca JOIN users u ON u.id = ca.approved_by WHERE ca.organisation_id = ${organisationId} AND ca.digital_colleague_id = ${colleagueId} ORDER BY ca.created_at DESC`,
     sql`SELECT cd.*, u.display_name AS deployed_by_name FROM colleague_deployments cd LEFT JOIN users u ON u.id = cd.deployed_by WHERE cd.organisation_id = ${organisationId} AND cd.digital_colleague_id = ${colleagueId} ORDER BY cd.created_at DESC`,
   ]);
+  const currentRevision = configurationRevision(colleague.configuration);
+  const currentTests = tests.filter(
+    (item) => artifactRevision(item.result) === currentRevision,
+  );
+  const currentApprovals = approvals.filter(
+    (item) => artifactRevision(item.snapshot) === currentRevision,
+  );
+  const latestCurrentDecision = currentApprovals[0]?.decision;
   const readiness = evaluateWorkforceReadiness({
     name: String(colleague.name ?? ""),
     roleTitle: String(colleague.role_title ?? ""),
@@ -277,11 +306,9 @@ async function detailedColleague(
         item.status === "approved" &&
         item.tool_status === "approved",
     ).length,
-    testCount: tests.length,
-    passingTestCount: tests.filter((item) => item.status === "passed").length,
-    approvalCount:
-      approvals.filter((item) => item.decision === "approved").length -
-      approvals.filter((item) => item.decision === "revoked").length,
+    testCount: currentTests.length,
+    passingTestCount: currentTests.filter((item) => item.status === "passed").length,
+    approvalCount: latestCurrentDecision === "approved" ? 1 : 0,
     riskLevel: riskLevel(colleague.risk_level),
     autonomyLevel: autonomyLevel(colleague.autonomy_level),
   });
@@ -299,6 +326,7 @@ async function detailedColleague(
     tests: tests as unknown as JsonRecord[],
     approvals: approvals as unknown as JsonRecord[],
     deployments: deployments as unknown as JsonRecord[],
+    configuration_revision: currentRevision,
     readiness,
   };
 }
@@ -381,9 +409,12 @@ async function createColleague(user: SessionUser, body: JsonRecord) {
         purpose, risk_level, autonomy_level, human_owner_user_id, escalation_owner_user_id, status,
         builder_step, configuration, created_by
       ) VALUES (
-        ${user.organisationId}, ${text(body.workspace_id, 60) || null}, ${text(body.workforce_team_id, 60) || null}, ${templateRow?.id ?? null},
+        ${user.organisationId},
+        (SELECT id FROM workspaces WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.workspace_id, 60)} LIMIT 1),
+        (SELECT id FROM workforce_teams WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.workforce_team_id, 60)} LIMIT 1),
+        ${templateRow?.id ?? null},
         ${name}, ${roleTitle}, ${department}, ${purpose}, ${risk}, ${autonomy}, ${user.id}, ${user.id},
-        'configuring', 1, ${JSON.stringify({ source: template ? "template" : "manual", template_slug: template?.slug ?? null })}::jsonb, ${user.id}
+        'configuring', 1, jsonb_build_object('source', ${template ? "template" : "manual"}, 'template_slug', ${template?.slug ?? null}, 'revision', 1), ${user.id}
       ) RETURNING *
     `;
     if (template) {
@@ -474,9 +505,11 @@ async function saveStep(
           role_title = COALESCE(NULLIF(${text(body.role_title, 180)}, ''), role_title),
           department = ${text(body.department, 120)}, team_name = ${text(body.team_name, 120)},
           purpose = COALESCE(NULLIF(${text(body.purpose, 2_000)}, ''), purpose), seniority = ${text(body.seniority, 80)},
-          digital_human_id = ${text(body.digital_human_id, 60) || null}, persona_version_id = ${text(body.persona_version_id, 60) || null},
-          workforce_team_id = ${text(body.workforce_team_id, 60) || null}, human_owner_user_id = ${text(body.human_owner_user_id, 60) || user.id},
-          escalation_owner_user_id = ${text(body.escalation_owner_user_id, 60) || user.id},
+          digital_human_id = (SELECT id FROM digital_humans WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.digital_human_id, 60)} LIMIT 1),
+          persona_version_id = (SELECT id FROM persona_versions WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.persona_version_id, 60)} LIMIT 1),
+          workforce_team_id = (SELECT id FROM workforce_teams WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.workforce_team_id, 60)} LIMIT 1),
+          human_owner_user_id = (SELECT id FROM users WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.human_owner_user_id, 60) || user.id} LIMIT 1),
+          escalation_owner_user_id = (SELECT id FROM users WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.escalation_owner_user_id, 60) || user.id} LIMIT 1),
           supported_languages = ${stringArray(body.supported_languages, 20, 20).length ? stringArray(body.supported_languages, 20, 20) : ["en-ZA"]}::text[],
           risk_level = ${risk}, autonomy_level = ${autonomy}, status = 'configuring'
         WHERE organisation_id = ${user.organisationId} AND id = ${colleagueId}
@@ -528,7 +561,7 @@ async function saveStep(
         const label = text(item.label, 180);
         if (!label) continue;
         const [objective] =
-          await tx`INSERT INTO colleague_objectives (organisation_id, digital_colleague_id, label, description, owner_user_id, target_date) VALUES (${user.organisationId}, ${colleagueId}, ${label}, ${text(item.description, 1_000)}, ${text(item.owner_user_id, 60) || user.id}, ${text(item.target_date, 20) || null}) RETURNING id`;
+            await tx`INSERT INTO colleague_objectives (organisation_id, digital_colleague_id, label, description, owner_user_id, target_date) VALUES (${user.organisationId}, ${colleagueId}, ${label}, ${text(item.description, 1_000)}, (SELECT id FROM users WHERE organisation_id = ${user.organisationId} AND id::text = ${text(item.owner_user_id, 60) || user.id} LIMIT 1), ${text(item.target_date, 20) || null}) RETURNING id`;
         for (const kpi of objectArray(item.kpis, 10)) {
           const name = text(kpi.name, 180);
           if (name)
@@ -559,10 +592,25 @@ async function saveStep(
           : "human_escalation";
         const condition = text(item.condition, 1_000);
         if (condition)
-          await tx`INSERT INTO colleague_collaboration_routes (organisation_id, digital_colleague_id, route_type, target_user_id, target_digital_colleague_id, condition, service_level_minutes, channel) VALUES (${user.organisationId}, ${colleagueId}, ${routeType}, ${text(item.target_user_id, 60) || null}, ${text(item.target_digital_colleague_id, 60) || null}, ${condition}, ${Math.max(1, Number(item.service_level_minutes) || 60)}, ${text(item.channel, 80) || "work_queue"})`;
+          await tx`INSERT INTO colleague_collaboration_routes (organisation_id, digital_colleague_id, route_type, target_user_id, target_digital_colleague_id, condition, service_level_minutes, channel) VALUES (${user.organisationId}, ${colleagueId}, ${routeType}, (SELECT id FROM users WHERE organisation_id = ${user.organisationId} AND id::text = ${text(item.target_user_id, 60)} LIMIT 1), (SELECT id FROM digital_colleagues WHERE organisation_id = ${user.organisationId} AND id::text = ${text(item.target_digital_colleague_id, 60)} LIMIT 1), ${condition}, ${Math.max(1, Number(item.service_level_minutes) || 60)}, ${text(item.channel, 80) || "work_queue"})`;
       }
     }
-    await tx`UPDATE digital_colleagues SET builder_step = GREATEST(builder_step, ${Math.min(12, number + 1)}), status = CASE WHEN status = 'draft' THEN 'configuring' ELSE status END WHERE organisation_id = ${user.organisationId} AND id = ${colleagueId}`;
+    // Any configuration mutation creates a new logical revision. Readiness
+    // tests and approvals are evaluated only against this revision, so an old
+    // approval can never silently authorise changed work.
+    await tx`
+      UPDATE digital_colleagues SET
+        builder_step = GREATEST(builder_step, ${Math.min(12, number + 1)}),
+        status = 'configuring',
+        approved_at = NULL,
+        configuration = jsonb_set(
+          CASE WHEN jsonb_typeof(configuration) = 'object' THEN configuration ELSE '{}'::jsonb END,
+          '{revision}',
+          to_jsonb(COALESCE((configuration->>'revision')::integer, 0) + 1),
+          true
+        )
+      WHERE organisation_id = ${user.organisationId} AND id = ${colleagueId}
+    `;
   });
   return success(await detailedColleague(user.organisationId, colleagueId));
 }
@@ -571,6 +619,7 @@ async function runReadinessTests(user: SessionUser, colleagueId: string) {
   const colleague = await detailedColleague(user.organisationId, colleagueId);
   if (!colleague)
     return failure("NOT_FOUND", "Digital Colleague not found.", 404);
+  const revision = configurationRevision(colleague.configuration);
   const checks = [
     {
       code: "identity_link",
@@ -646,7 +695,7 @@ async function runReadinessTests(user: SessionUser, colleagueId: string) {
     for (const test of checks) {
       await tx`
         INSERT INTO colleague_tests (organisation_id, digital_colleague_id, test_code, name, test_type, expected_policy, status, result, run_by, run_at)
-        VALUES (${user.organisationId}, ${colleagueId}, ${test.code}, ${test.name}, 'readiness', ${JSON.stringify({ requirement: test.detail })}::jsonb, ${test.passed ? "passed" : "failed"}, ${JSON.stringify({ passed: test.passed, detail: test.detail, deterministic: true })}::jsonb, ${user.id}, now())
+        VALUES (${user.organisationId}, ${colleagueId}, ${test.code}, ${test.name}, 'readiness', ${JSON.stringify({ requirement: test.detail })}::jsonb, ${test.passed ? "passed" : "failed"}, ${JSON.stringify({ passed: test.passed, detail: test.detail, deterministic: true, configuration_revision: revision })}::jsonb, ${user.id}, now())
         ON CONFLICT (digital_colleague_id, test_code) DO UPDATE SET status = EXCLUDED.status, result = EXCLUDED.result, run_by = EXCLUDED.run_by, run_at = EXCLUDED.run_at
       `;
     }
@@ -678,6 +727,7 @@ async function approveColleague(
       422,
     );
   const snapshot = {
+    configuration_revision: configurationRevision(colleague.configuration),
     colleague: {
       id: colleague.id,
       public_id: colleague.public_id,
@@ -744,15 +794,16 @@ async function deployColleague(
       "Only the governed work queue is enabled until external tool execution is configured.",
       409,
     );
+  const revision = configurationRevision(colleague.configuration);
   const [approval] = colleague.approvals.filter(
-    (item: JsonRecord) => item.decision === "approved",
+    (item: JsonRecord) => item.decision === "approved" && artifactRevision(item.snapshot) === revision,
   );
   const approvalId = String(approval.id);
   const [versionRow] =
     await sql`SELECT COALESCE(max(version),0)::int + 1 AS version FROM colleague_deployments WHERE organisation_id = ${user.organisationId} AND digital_colleague_id = ${colleagueId} AND environment = ${environment}`;
   const deploymentVersion = Number(versionRow.version);
   await sql.begin(async (tx) => {
-    await tx`INSERT INTO colleague_deployments (organisation_id, digital_colleague_id, approval_id, environment, channels, version, status, configuration_snapshot, deployed_by, deployed_at) VALUES (${user.organisationId}, ${colleagueId}, ${approvalId}, ${environment}, ${channels}::text[], ${deploymentVersion}, 'deployed', ${JSON.stringify({ approval_id: approvalId, channels, environment, readiness_score: colleague.readiness.score })}::jsonb, ${user.id}, now())`;
+    await tx`INSERT INTO colleague_deployments (organisation_id, digital_colleague_id, approval_id, environment, channels, version, status, configuration_snapshot, deployed_by, deployed_at) VALUES (${user.organisationId}, ${colleagueId}, ${approvalId}, ${environment}, ${channels}::text[], ${deploymentVersion}, 'deployed', ${JSON.stringify({ approval_id: approvalId, channels, environment, readiness_score: colleague.readiness.score, configuration_revision: revision })}::jsonb, ${user.id}, now())`;
     await tx`UPDATE digital_colleagues SET status = 'deployed', deployment_status = 'deployed', deployed_at = now() WHERE organisation_id = ${user.organisationId} AND id = ${colleagueId}`;
   });
   return success(
@@ -812,7 +863,15 @@ async function createTask(user: SessionUser, body: JsonRecord) {
   const taskRisk = riskLevel(body.risk_level ?? colleague.risk_level);
   const [item] = await sql`
     INSERT INTO work_items (organisation_id, workspace_id, digital_colleague_id, function_id, workflow_id, title, request, input_data, priority, risk_level, assigned_by, due_at)
-    VALUES (${user.organisationId}, ${text(body.workspace_id, 60) || null}, ${colleagueId}, ${text(body.function_id, 60) || null}, ${text(body.workflow_id, 60) || null}, ${title}, ${request}, ${JSON.stringify(body.input_data && typeof body.input_data === "object" ? body.input_data : {})}::jsonb, ${["low", "normal", "high", "urgent"].includes(text(body.priority, 20)) ? text(body.priority, 20) : "normal"}, ${taskRisk}, ${user.id}, ${text(body.due_at, 40) || null})
+    VALUES (
+      ${user.organisationId},
+      (SELECT id FROM workspaces WHERE organisation_id = ${user.organisationId} AND id::text = ${text(body.workspace_id, 60)} LIMIT 1),
+      ${colleagueId},
+      (SELECT id FROM colleague_functions WHERE organisation_id = ${user.organisationId} AND digital_colleague_id = ${colleagueId} AND id::text = ${text(body.function_id, 60)} LIMIT 1),
+      (SELECT id FROM colleague_workflows WHERE organisation_id = ${user.organisationId} AND digital_colleague_id = ${colleagueId} AND id::text = ${text(body.workflow_id, 60)} LIMIT 1),
+      ${title}, ${request}, ${JSON.stringify(body.input_data && typeof body.input_data === "object" ? body.input_data : {})}::jsonb,
+      ${["low", "normal", "high", "urgent"].includes(text(body.priority, 20)) ? text(body.priority, 20) : "normal"}, ${taskRisk}, ${user.id}, ${text(body.due_at, 40) || null}
+    )
     RETURNING *
   `;
   await sql`INSERT INTO work_item_events (organisation_id, work_item_id, event_type, actor_type, actor_id, safe_detail) VALUES (${user.organisationId}, ${item.id}, 'work_item.created', 'user', ${user.id}, ${JSON.stringify({ title, priority: item.priority, risk_level: taskRisk })}::jsonb)`;

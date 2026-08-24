@@ -3522,3 +3522,72 @@ body {
   .workforce-conversion > div:last-child { width: 100%; flex-direction: column; }
   .workforce-conversion .public-button { justify-content: center; }
 }
+
+/* Production readability baseline
+ *
+ * The original concept artwork used 6–10px labels to imitate a dense product
+ * mock-up. These are real customer surfaces now, so supporting copy and
+ * controls retain the premium hierarchy without dropping below a readable
+ * 12px desktop baseline. Inputs are deliberately larger for scanning and
+ * touch use. */
+.commercial-site :where(p, li, dt, dd, label, small) {
+  font-size: clamp(12px, 0.82vw, 14px) !important;
+  line-height: 1.6;
+}
+.commercial-site :where(.commercial-kicker, .commercial-status, .filter-chips span, .pricing-recommended, .role-policy span, .journey-compare > div > p, .journey-compare li > span, .role-preview-grid article > span, .public-role-grid > article > div:first-child small, .public-role-grid h3, .public-role-grid aside span, .public-role-grid > article > a, .model-node small, .model-human small, .model-human strong, .collaboration-map small, .collaboration-bridge span) {
+  font-size: 12px !important;
+  line-height: 1.45;
+}
+.commercial-site :where(.public-nav a, .dev-nav a, .resource-menu > summary, .public-button, .text-link, button, input, select, textarea) {
+  font-size: 13px !important;
+}
+.commercial-site :where(input, select, textarea) { line-height: 1.45; }
+
+.studio-shell :where(small, label, .eyebrow, .panel-note, .text-link, .status-pill, .table-row, .nav-group > p, .form-status, .input-note) {
+  font-size: 12px !important;
+  line-height: 1.45;
+}
+.studio-shell :where(.panel p, .metric-card p, .activity-row strong, .governance-card strong, .readiness-list > div, .health-grid > div, .human-row-copy strong, .application-card p, .workforce-step-card p, .choice-grid p, .readiness-checks strong, .blocker-list strong, .history-list strong, .task-list strong) {
+  font-size: 13px !important;
+  line-height: 1.55;
+}
+.studio-shell :where(button, .primary-button, .secondary-button, .plain-button, .button-light, .button-ghost, .demo-primary, .nav-item) {
+  font-size: 13px !important;
+}
+.studio-shell :where(input, select, textarea) {
+  font-size: 14px !important;
+  line-height: 1.45;
+}
+.studio-shell .wizard-steps small { font-size: 11px !important; }
+.studio-shell .workforce-builder-rail nav strong { font-size: 12px !important; }
+.studio-shell .workforce-builder-rail nav small,
+.studio-shell .workforce-step-card .form-grid small,
+.studio-shell .readiness-checks small,
+.studio-shell .blocker-list small,
+.studio-shell .history-list small { font-size: 11px !important; }
+
+.studio-shell .wizard-body button.application-toggle-row {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: var(--vh-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.studio-shell .wizard-body button.application-toggle-row:hover,
+.studio-shell .wizard-body button.application-toggle-row.selected {
+  border-color: rgba(67, 231, 255, 0.3) !important;
+  background: rgba(67, 231, 255, 0.06);
+}
+.studio-shell .wizard-review-summary { display: grid; gap: 18px; }
+.studio-shell .wizard-review-summary > div:first-child { display: grid; gap: 4px; }
+.studio-shell .wizard-review-summary > div:first-child strong { font-size: 20px; }
+.studio-shell .wizard-review-summary .requirement-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 700px) {
+  .studio-shell .wizard-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 4px; }
+  .studio-shell .wizard-steps > div::after { display: none; }
+  .studio-shell .wizard-review-summary .requirement-list { grid-template-columns: 1fr; }
+}

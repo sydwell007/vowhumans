@@ -51,6 +51,15 @@ describe("api/v1 route mock fallback", () => {
     expect(body.data.persistent).toBe(false);
     expect(body.meta.mode).toBe("development-mock");
   });
+
+  it("reports the real authentication session endpoint as live, even when signed out", async () => {
+    const res = await get("auth/session");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.authenticated).toBe(false);
+    expect(body.meta.mode).toBe("live");
+    expect(res.headers.get("x-vowhumans-mode")).toBe("live");
+  });
 });
 
 // No session cookie means requireOrganisation() returns null without ever
@@ -70,6 +79,7 @@ describe("multilingual endpoints require a session", () => {
     expect(body.data.items).toEqual([
       expect.objectContaining({ code: "en-ZA", enabled: true }),
     ]);
+    expect(body.meta.mode).toBe("development-mock");
   });
 
   it("POST languages/:code (org language settings)", async () => {

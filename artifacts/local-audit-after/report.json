@@ -1,0 +1,3583 @@
+{
+  "generatedAt": "2026-08-24T05:30:36.347Z",
+  "baseUrl": "http://localhost:3100/",
+  "sitemapStatus": 200,
+  "sitemapUsesLocalhost": false,
+  "testedPageCount": 124,
+  "discoveredInternalLinkCount": 146,
+  "results": [
+    {
+      "requestedUrl": "http://localhost:3100/",
+      "finalUrl": "http://localhost:3100/",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans | AI Digital Workforce Platform",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 122,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nAI DIGITAL WORKFORCE PLATFORM\n\nHuman presence.\nAI intelligence.\n\nBuild a secure, branded AI digital workforce that teaches, interviews, sells, guides and supports people across websites, applications and enterprise systems.\n\nStart building\nBook an enterprise demo\nWatch the platform overview\nSafe sandbox included\nNo card for evaluation\nPOPIA-aware foundations\nWorkforce operations\nSAFE DEMO\nAI-GENERATED\nTHANDI IS\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/platform",
+      "finalUrl": "http://localhost:3100/platform",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Platform · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nAI DIGITAL WORKFORCE PLATFORM\n\nOne control plane for every Digital Colleague.\n\nCreate, govern, deploy and measure branded AI representatives across customer, learner and employee journeys.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLATFORM FOUNDATION\nOrganisation owned\n\nPersonas, knowledge, integrations and usage remain scoped to the organisation that cont"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce",
+      "finalUrl": "http://localhost:3100/workforce",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Digital Workforce · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nAI DIGITAL WORKFORCE\n\nDigital colleagues.\nHuman authority.\n\nBuild an AI Digital Workforce from disclosed identities, bounded Personas and accountable Digital Colleagues that operate inside approved knowledge, tools and workflows.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\nStyle · instruc"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce/roles",
+      "finalUrl": "http://localhost:3100/workforce/roles",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Digital Colleague Roles · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 99,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nDIGITAL COLLEAGUE ROLES\n\nA role catalogue with\nthe boundaries included.\n\nChoose a proven starting point across customer experience, operations, learning, sales, people, finance, risk, technology and more.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\nStyle · instructions · boundaries\n\nACCOU"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce/how-it-works",
+      "finalUrl": "http://localhost:3100/workforce/how-it-works",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "How the Digital Workforce Works · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nFROM IDEA TO ACCOUNTABLE WORK\n\nEight steps outside.\nTwelve controls inside.\n\nThe public journey stays easy to understand. Studio gives enterprise administrators the deeper controls needed for actual deployment.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\nStyle · instructions · boundaries\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce/deployment",
+      "finalUrl": "http://localhost:3100/workforce/deployment",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Digital Workforce Deployment · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nWORKFORCE DEPLOYMENT\n\nMove from draft to work\nwithout skipping governance.\n\nDeploy Digital Colleagues through an evidence-backed lifecycle with clear provider truth and reversible operating controls.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\nStyle · instructions · boundaries\n\nACCOUNTABL"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce/human-collaboration",
+      "finalUrl": "http://localhost:3100/workforce/human-collaboration",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Human and Digital Collaboration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nHUMAN + DIGITAL COLLABORATION\n\nDigital scale where it helps.\nPeople where it matters.\n\nDesign Digital Colleagues to prepare, coordinate and escalate work while named people retain authority for judgement, relationships and high-stakes outcomes.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/workforce/governance",
+      "finalUrl": "http://localhost:3100/workforce/governance",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Digital Workforce Governance · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nDIGITAL WORKFORCE GOVERNANCE\n\nGovern the work,\nnot only the avatar.\n\nMake disclosure, role scope, risk, knowledge, tools, testing, human authority and deployment truth part of the operating system.\n\nBuild a Digital Colleague\nExplore the operating model\nHuman accountable\nAI disclosed\nLeast privilege\nIDENTITY\nDigital Human\n\nFace · voice · presence\n\nBEHAVIOUR\nPersona\n\nStyle · instructions · boundaries\n\nACCOUNTABLE "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products",
+      "finalUrl": "http://localhost:3100/products",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Products · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 79,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nPRODUCT FAMILY\n\nOne platform. Seven ways to deploy value.\n\nCreate in Studio, converse with Live, publish with Present, integrate through Connect and scale with Marketplace, Academy and Enterprise.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCREATE AND GOVERN\nVowHumans Studio\n\nDesign identities, voices, Personas, knowledge, applications and safety controls in"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/solutions",
+      "finalUrl": "http://localhost:3100/solutions",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nBUSINESS OUTCOMES\n\nApply Digital Colleagues where repetition meets human value.\n\nReduce waiting, extend availability and redirect teams toward work that benefits from human judgement.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPLATFORM FOUNDATION\nCustomer journeys\n\nGuide, answer and escalate across support, sales and onboarding.\n\nPLATFORM FOUNDATION"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries",
+      "finalUrl": "http://localhost:3100/industries",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Industries · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 85,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nINDUSTRY SOLUTIONS\n\nOperational patterns with the boundaries written down.\n\nExplore recommended roles, integrations, plans and safety controls for thirteen commercial sectors.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nRECOMMENDED: PROFESSIONAL\nEducation\n\nGive every learner a patient, governed guide.\n\nCourse tutor\nLesson presenter\nAdmissions guide\nE"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans",
+      "finalUrl": "http://localhost:3100/digital-humans",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Digital Human Gallery · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 77,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nAI HUMAN GALLERY\n\nFictional launch identities. Visible disclosure.\n\nExplore role-ready digital humans without implying that synthetic placeholders are real actors or licensed customer identities.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\n5 launch identities\nFictional identity\nStatic portrait\nLive-ready architecture\nPresenter compatible\n Fictional AI-genera"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates",
+      "finalUrl": "http://localhost:3100/templates",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Templates · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 11,
+        "linkCount": 80,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nTEMPLATE LIBRARY\n\nStart with a role that already knows its boundaries.\n\nSearch reviewed Persona, objective, guardrail, knowledge and channel recommendations, then install a safe draft workspace.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nSearch templates\nAll\nRecruitment & HR\nEducation\nCustomer experience\nSales\nEnterprise operations\n8 templates\nAVAILABLE\nAI "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations",
+      "finalUrl": "http://localhost:3100/integrations",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Integrations · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 83,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nINTEGRATIONS\n\nConnect systems without overstating readiness.\n\nEvery connector shows authentication, data scope and implementation status before installation.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nAVAILABLE\nPlugConnect\n\nCandidate practice sessions and candidate-owned feedback\n\nRecruitment · Scoped service key\nView integration\nAVAILABLE\nGoalVow Academies"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/pricing",
+      "finalUrl": "http://localhost:3100/pricing",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Pricing · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 7,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nCONFIGURABLE PRICING\n\nStart safely. Scale when the economics are clear.\n\nProposed launch pricing in South African rand. Annual billing currently models a 15% discount; final tax and commercial approval remain configurable.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nMonthly\nAnnual\nFlexible monthly billing\n\nEvaluation and prototypes\n\nSandbox\nR 0/month\nBilled "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/customers",
+      "finalUrl": "http://localhost:3100/customers",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Customer Stories · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nCUSTOMER AND INTERNAL STORIES\n\nEvidence with the status left intact.\n\nThese are internal demonstrations, pilot foundations and planned use cases—not fabricated customer endorsements.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nINTERNAL DEMONSTRATION\nPlugConnect AI Interview Practice\n\nCandidates need private, repeatable preparation.\n\nReview case struc"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/marketplace",
+      "finalUrl": "http://localhost:3100/marketplace",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Marketplace · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 11,
+        "linkCount": 72,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS MARKETPLACE\n\nDiscover All reviewed assets.\n\nBrowse reviewed templates, Personas, knowledge packs, integrations and presentation assets. Purchases and payouts stay disabled until payment, tax and legal controls are approved.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCatalogue preview active\nPurchases, seller payouts and reviews are feature-gated.\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy",
+      "finalUrl": "http://localhost:3100/academy",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Academy · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 84,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS ACADEMY\n\nBuild a capable digital workforce\n\nRole-based learning for creators, administrators, developers, partners and governance teams, supported by disclosed digital tutors.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nIntroduction to VowHumans\n\nFoundation · 4 lessons\n\nView course\nAVAILABLE\nCreating Your First Digital "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/developers",
+      "finalUrl": "http://localhost:3100/developers",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Developers · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [
+          {
+            "text": "Quick start",
+            "size": "11px"
+          },
+          {
+            "text": "API reference",
+            "size": "11px"
+          },
+          {
+            "text": "SDKs",
+            "size": "11px"
+          },
+          {
+            "text": "Webhooks",
+            "size": "11px"
+          },
+          {
+            "text": "Status",
+            "size": "11px"
+          }
+        ],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS CONNECT\n\nAPIs that preserve the boundary.\n\nVersioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nQuick start\nAPI reference\nSDKs\nWebhooks\nStatus\nSANDBOX READY\ndevelopers\n\nUse server-side credentials only. The browser receives short-lived, scoped "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/docs",
+      "finalUrl": "http://localhost:3100/docs",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Developer Quick Start · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [
+          {
+            "text": "Quick start",
+            "size": "11px"
+          },
+          {
+            "text": "API reference",
+            "size": "11px"
+          },
+          {
+            "text": "SDKs",
+            "size": "11px"
+          },
+          {
+            "text": "Webhooks",
+            "size": "11px"
+          },
+          {
+            "text": "Status",
+            "size": "11px"
+          }
+        ],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS CONNECT\n\nAPIs that preserve the boundary.\n\nVersioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nQuick start\nAPI reference\nSDKs\nWebhooks\nStatus\nSANDBOX READY\nquick start\n\nUse server-side credentials only. The browser receives short-lived, scoped"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/api-reference",
+      "finalUrl": "http://localhost:3100/api-reference",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "API Reference · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [
+          {
+            "text": "Quick start",
+            "size": "11px"
+          },
+          {
+            "text": "API reference",
+            "size": "11px"
+          },
+          {
+            "text": "SDKs",
+            "size": "11px"
+          },
+          {
+            "text": "Webhooks",
+            "size": "11px"
+          },
+          {
+            "text": "Status",
+            "size": "11px"
+          }
+        ],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS CONNECT\n\nAPIs that preserve the boundary.\n\nVersioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nQuick start\nAPI reference\nSDKs\nWebhooks\nStatus\nSANDBOX READY\napi reference\n\nUse server-side credentials only. The browser receives short-lived, scop"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/sdks",
+      "finalUrl": "http://localhost:3100/sdks",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "SDKs · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [
+          {
+            "text": "Quick start",
+            "size": "11px"
+          },
+          {
+            "text": "API reference",
+            "size": "11px"
+          },
+          {
+            "text": "SDKs",
+            "size": "11px"
+          },
+          {
+            "text": "Webhooks",
+            "size": "11px"
+          },
+          {
+            "text": "Status",
+            "size": "11px"
+          }
+        ],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS CONNECT\n\nAPIs that preserve the boundary.\n\nVersioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nQuick start\nAPI reference\nSDKs\nWebhooks\nStatus\nSANDBOX READY\nsdks\n\nUse server-side credentials only. The browser receives short-lived, scoped sessio"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/webhooks",
+      "finalUrl": "http://localhost:3100/webhooks",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Webhooks · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [
+          {
+            "text": "Quick start",
+            "size": "11px"
+          },
+          {
+            "text": "API reference",
+            "size": "11px"
+          },
+          {
+            "text": "SDKs",
+            "size": "11px"
+          },
+          {
+            "text": "Webhooks",
+            "size": "11px"
+          },
+          {
+            "text": "Status",
+            "size": "11px"
+          }
+        ],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS CONNECT\n\nAPIs that preserve the boundary.\n\nVersioned server APIs, short-lived session tokens, SDKs, signed webhooks and a safe sandbox for every integration.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nQuick start\nAPI reference\nSDKs\nWebhooks\nStatus\nSANDBOX READY\nwebhooks\n\nUse server-side credentials only. The browser receives short-lived, scoped se"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/status",
+      "finalUrl": "http://localhost:3100/status",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Status · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nPLATFORM STATUS\n\nProvider truth at a glance.\n\nWeb control-plane health is live. Realtime, payment and GPU status depend on separately configured services.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nPLATFORM FOUNDATION\nWeb platform\n\nOperational on Vercel when the production health endpoint returns OK.\n\nPLATFORM FOUNDATION\nAfrihost API\n\nUploaded; DNS "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/security",
+      "finalUrl": "http://localhost:3100/security",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Security Centre · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSECURITY CENTRE\n\nTrust is an operating discipline.\n\nVowHumans is designed with controls supporting tenant isolation, consent governance, privacy and auditability.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nPLATFORM FOUNDATION\nAccess control\n\nLeast-privilege roles, scoped keys and explicit organisation context.\n\nPLATFORM FOUNDATION\nIdentity governanc"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/trust",
+      "finalUrl": "http://localhost:3100/trust",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Trust Centre · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nTRUST CENTRE\n\nSee what is active, gated and still under assessment.\n\nReview AI transparency, subprocessors, privacy controls, service status and the responsible-AI policy.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nPLATFORM FOUNDATION\nAI transparency\n\nEvery interactive or generated experience must disclose that it is AI generated.\n\nPLATFORM FOUNDATI"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/resources",
+      "finalUrl": "http://localhost:3100/resources",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Resources · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nRESOURCES\n\nPlan, build and govern with clarity.\n\nBrowse launch guides, architecture notes, customer demonstrations and responsible-AI resources.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLATFORM FOUNDATION\nBuyer guides\n\nScope a use case, estimate usage and prepare integrations.\n\nPLATFORM FOUNDATION\nCreator resources\n\nDesign Personas, kn"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/blog",
+      "finalUrl": "http://localhost:3100/blog",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Journal · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nVOWHUMANS JOURNAL\n\nPractical digital workforce thinking.\n\nA file-based publication foundation with draft, review, scheduled, published and archived states.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nHuman + AI collaboration\nConceptual visual\nPLATFORM FOUNDATION\nDesigning a Digital Colleague\n\nWhy role scope and escalation matter more than visual novelty.\n\nPLATFORM FOUNDATION\nConsent as infrastructu"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/about",
+      "finalUrl": "http://localhost:3100/about",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "About · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nABOUT VOWHUMANS\n\nTechnology that extends teams without pretending to replace people.\n\nVowHumans is a GoalVow platform for secure, branded and measurable Digital Colleagues.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nHuman + AI collaboration\nConceptual visual\nPLATFORM FOUNDATION\nHuman centred\n\nEscalation, consent and honest disclosure stay visible.\n\nPLATFORM FOUNDATION\nSouth African foundation\n\nDes"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/partners",
+      "finalUrl": "http://localhost:3100/partners",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Partners · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 72,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nPARTNER ECOSYSTEM\n\nBuild services, integrations and capability with VowHumans.\n\nTechnology, solution, referral, training and content partners share clear approval, entitlement and attribution boundaries.\n\nApply to partner\nDeveloper resources\nAI-GENERATED EDITORIAL VISUAL\nHuman + AI collaboration\nConceptual visual\nLAUNCH PROGRAMME\nTechnology partner\n\nAccess scoped enablement, technical documentation and co-sellin"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/investors",
+      "finalUrl": "http://localhost:3100/investors",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Investors · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nINVESTOR OVERVIEW\n\nInfrastructure for the organisation-owned AI workforce.\n\nVowHumans combines digital-human creation, realtime experiences, reusable media, APIs and governance within the GoalVow ecosystem.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nHuman + AI collaboration\nConceptual visual\n7\nconnected product surfaces\n13\nindustry deployment patterns\n1\nshared governance layer\nGlobal\narchitecture "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/contact",
+      "finalUrl": "http://localhost:3100/contact",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Contact · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nTalk to the VowHumans team\n\nShare your commercial, technical or governance question.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nSend enquiry\n\nSecure, branded Digital Colleagues that talk, teach, sell, intervi"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/book-demo",
+      "finalUrl": "http://localhost:3100/book-demo",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Book a Demo · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nBook a VowHumans demonstration\n\nTell us what a useful, responsible Digital Colleague would do in your organisation.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nRequest demonstration\n\nSecure, branded Digital Co"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/roi-calculator",
+      "finalUrl": "http://localhost:3100/roi-calculator",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "ROI Calculator · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nTRANSPARENT BUSINESS CASE\n\nModel the value before making the promise.\n\nChange the operational assumptions and export a directional estimate. This calculator is not a quote, financial advice or a guarantee of savings.\n\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nInteractions per month\nMinutes per interaction\nLoaded staff cost / hour (ZAR)\nEstimated automation share: 55%\nPlan\nSandbox\nSta"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/studio",
+      "finalUrl": "http://localhost:3100/products/studio",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Studio · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Studio\n\nCREATE AND GOVERN\n\nVowHumans Studio\n\nDesign identities, voices, Personas, knowledge, applications and safety controls in one consent-first workspace.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Studio\nPROVIDER MODE\nFunctional Studio\nDISCLOSURE\nRequired in every experience\nOpen Studio\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/live",
+      "finalUrl": "http://localhost:3100/products/live",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Live · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Live\n\nCONVERSE IN REAL TIME\n\nVowHumans Live\n\nDeploy disclosed Digital Colleagues for support, learning, interviews, reception and guided sales across web and applications.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Live\nPROVIDER MODE\nFeature-gated\nDISCLOSURE\nRequired in every experience\nPlan"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/present",
+      "finalUrl": "http://localhost:3100/products/present",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Present · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Present\n\nTURN SCRIPTS INTO MEDIA\n\nVowHumans Present\n\nBuild scenes, voice, captions and reusable course or product presentations with an approval-first workflow.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Present\nPROVIDER MODE\nFeature-gated\nDISCLOSURE\nRequired in every experience\nPlan this de"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/connect",
+      "finalUrl": "http://localhost:3100/products/connect",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Connect · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Connect\n\nBUILD WITH APIS\n\nVowHumans Connect\n\nEmbed sessions and workflows with versioned APIs, SDKs, signed webhooks and sandbox-first developer tooling.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Connect\nPROVIDER MODE\nSDK + API foundation\nDISCLOSURE\nRequired in every experience\nPlan this de"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/marketplace",
+      "finalUrl": "http://localhost:3100/products/marketplace",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Marketplace · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Marketplace\n\nSTART FROM TRUSTED ASSETS\n\nVowHumans Marketplace\n\nDiscover reviewed templates, Personas, knowledge packs, themes and integration connectors with clear licensing.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Marketplace\nPROVIDER MODE\nFeature-gated\nDISCLOSURE\nRequired in eve"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/academy",
+      "finalUrl": "http://localhost:3100/products/academy",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Academy · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Academy\n\nBUILD CAPABILITY\n\nVowHumans Academy\n\nTrain creators, developers and governance teams with role-based learning paths and responsible-AI certification foundations.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Academy\nPROVIDER MODE\nFeature-gated\nDISCLOSURE\nRequired in "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/products/enterprise",
+      "finalUrl": "http://localhost:3100/products/enterprise",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans Enterprise · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Products\n/ VowHumans Enterprise\n\nCONTROL AT SCALE\n\nVowHumans Enterprise\n\nPrepare for SSO, multiple workspaces, regional controls, procurement, custom retention and private deployment patterns.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nCOMMERCIAL FOUNDATION\nPRODUCT\nVowHumans Enterprise\nPROVIDER MODE\nFeature-gated\nDISCLOSURE\nRequired in every experienc"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/education",
+      "finalUrl": "http://localhost:3100/industries/education",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Education solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Education\n\nEDUCATION SOLUTION\n\nGive every learner a patient, governed guide.\n\nDeploy bounded Digital Colleagues for course-grounded q&a, student onboarding, multilingual explanations with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nProfessional\nPRIMARY "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/recruitment-hr",
+      "finalUrl": "http://localhost:3100/industries/recruitment-hr",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Recruitment & HR solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Recruitment & HR\n\nRECRUITMENT & HR SOLUTION\n\nPrepare candidates and onboard teams without invasive scoring.\n\nDeploy bounded Digital Colleagues for candidate-owned practice, recruitment faqs, employee policy guidance with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOM"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/customer-service",
+      "finalUrl": "http://localhost:3100/industries/customer-service",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Customer service solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Customer service\n\nCUSTOMER SERVICE SOLUTION\n\nResolve routine questions and escalate with context.\n\nDeploy bounded Digital Colleagues for first-line support, ticket triage, human handoff with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nProfessional\nPRIMA"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/retail-ecommerce",
+      "finalUrl": "http://localhost:3100/industries/retail-ecommerce",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Retail & e-commerce solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Retail & e-commerce\n\nRETAIL & E-COMMERCE SOLUTION\n\nGuide customers from discovery to confident purchase.\n\nDeploy bounded Digital Colleagues for product comparison, guided selling, returns information with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nProf"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/financial-services",
+      "finalUrl": "http://localhost:3100/industries/financial-services",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Financial services solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Financial services\n\nFINANCIAL SERVICES SOLUTION\n\nMake product and process information easier to navigate.\n\nDeploy bounded Digital Colleagues for product education, application preparation, support routing with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/insurance",
+      "finalUrl": "http://localhost:3100/industries/insurance",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Insurance solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Insurance\n\nINSURANCE SOLUTION\n\nExplain policies and claims processes consistently.\n\nDeploy bounded Digital Colleagues for policy explanation, document checklists, claims routing with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nEnterprise\nPRIMARY ROLE\nPo"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/government",
+      "finalUrl": "http://localhost:3100/industries/government",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Government & municipalities solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Government & municipalities\n\nGOVERNMENT & MUNICIPALITIES SOLUTION\n\nHelp residents find the right public service.\n\nDeploy bounded Digital Colleagues for service navigation, licence guidance, multilingual information with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMM"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/hospitality-tourism",
+      "finalUrl": "http://localhost:3100/industries/hospitality-tourism",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Hospitality & tourism solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Hospitality & tourism\n\nHOSPITALITY & TOURISM SOLUTION\n\nWelcome guests with always-available local guidance.\n\nDeploy bounded Digital Colleagues for facility information, booking guidance, guest onboarding with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/healthcare-information",
+      "finalUrl": "http://localhost:3100/industries/healthcare-information",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Healthcare information solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [
+          "http://localhost:3100/_next/image?url=%2Fbrand%2Fvowhumans-horizontal-lockup.png&w=256&q=75"
+        ],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Healthcare information\n\nHEALTHCARE INFORMATION SOLUTION\n\nGuide people through approved health administration and education.\n\nDeploy bounded Digital Colleagues for facility navigation, preparation checklists, approved information with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHI"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/manufacturing-mining",
+      "finalUrl": "http://localhost:3100/industries/manufacturing-mining",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Manufacturing & mining solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Manufacturing & mining\n\nMANUFACTURING & MINING SOLUTION\n\nDeliver repeatable induction and procedure guidance.\n\nDeploy bounded Digital Colleagues for contractor onboarding, skills refresh, compliance reminders with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/real-estate",
+      "finalUrl": "http://localhost:3100/industries/real-estate",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Real estate solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [
+          "http://localhost:3100/_next/image?url=%2Fbrand%2Fvowhumans-horizontal-lockup.png&w=256&q=75"
+        ],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Real estate\n\nREAL ESTATE SOLUTION\n\nTurn property information into guided conversations.\n\nDeploy bounded Digital Colleagues for property discovery, viewing preparation, lead capture with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nProfessional\nPRIMARY RO"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/automotive",
+      "finalUrl": "http://localhost:3100/industries/automotive",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Automotive solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Automotive\n\nAUTOMOTIVE SOLUTION\n\nExplain vehicles, ownership and service journeys clearly.\n\nDeploy bounded Digital Colleagues for model comparison, service preparation, dealer onboarding with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nBusiness\nPRIMARY "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/industries/telecommunications",
+      "finalUrl": "http://localhost:3100/industries/telecommunications",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Telecommunications solutions · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Industries\n/ Telecommunications\n\nTELECOMMUNICATIONS SOLUTION\n\nMake plans, devices and troubleshooting easier to understand.\n\nDeploy bounded Digital Colleagues for plan selection, troubleshooting, store guidance with explicit integration and security controls.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nPILOT ARCHITECTURE\nRECOMMENDED PLAN\nEnterp"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans/thandi-mokoena",
+      "finalUrl": "http://localhost:3100/digital-humans/thandi-mokoena",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Thandi Mokoena · Fictional AI-generated identity · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Digital Humans\n/ Thandi Mokoena\n\nFICTIONAL AI-GENERATED IDENTITY\n\nThandi Mokoena\n\nTalent Partner. PlugConnect interview practice. This placeholder identity is synthetic and must never be represented as a real actor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nREADY\nRole and applications\n\nTalent Partner for PlugConnect.\n\nIdentity classification\n\nFiction"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans/sipho-daniels",
+      "finalUrl": "http://localhost:3100/digital-humans/sipho-daniels",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Sipho Daniels · Fictional AI-generated identity · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Digital Humans\n/ Sipho Daniels\n\nFICTIONAL AI-GENERATED IDENTITY\n\nSipho Daniels\n\nRecruitment Consultant. PlugConnect interview practice. This placeholder identity is synthetic and must never be represented as a real actor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nREADY\nRole and applications\n\nRecruitment Consultant for PlugConnect.\n\nIdentity classific"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans/goalvow-tutor",
+      "finalUrl": "http://localhost:3100/digital-humans/goalvow-tutor",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "GoalVow Tutor · Fictional AI-generated identity · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Digital Humans\n/ GoalVow Tutor\n\nFICTIONAL AI-GENERATED IDENTITY\n\nGoalVow Tutor\n\nDigital Course Facilitator. GoalVow course lessons. This placeholder identity is synthetic and must never be represented as a real actor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nREADY\nRole and applications\n\nDigital Course Facilitator for GoalVow Academies, VowLMS.\n\nIden"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans/vowsupport-adviser",
+      "finalUrl": "http://localhost:3100/digital-humans/vowsupport-adviser",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Lerato Maseko · Fictional AI-generated identity · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Digital Humans\n/ Lerato Maseko\n\nFICTIONAL AI-GENERATED IDENTITY\n\nLerato Maseko\n\nVowSupport Adviser. Customer support triage and escalation. This placeholder identity is synthetic and must never be represented as a real actor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nDRAFT\nRole and applications\n\nVowSupport Adviser for VowSupport.\n\nIdentity classifica"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/digital-humans/vowtools-coach",
+      "finalUrl": "http://localhost:3100/digital-humans/vowtools-coach",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Kabelo Ndlovu · Fictional AI-generated identity · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 76,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Digital Humans\n/ Kabelo Ndlovu\n\nFICTIONAL AI-GENERATED IDENTITY\n\nKabelo Ndlovu\n\nVowTools Coach. Guided productivity coaching. This placeholder identity is synthetic and must never be represented as a real actor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nDRAFT\nRole and applications\n\nVowTools Coach for VowTools.\n\nIdentity classification\n\nFictional AI-g"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/interview-practice-coach",
+      "finalUrl": "http://localhost:3100/templates/interview-practice-coach",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Interview Practice Coach · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Interview Practice Coach\n\nRECRUITMENT & HR\n\nAI Interview Practice Coach\n\nCandidate-owned rehearsal with structured feedback and no employer access to answers.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nAVAILABLE\nINDUSTRY\nRecruitment\nCHANNELS\nWeb, Mobile\nLICENCE\nIncluded from Starter\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nP"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/course-tutor",
+      "finalUrl": "http://localhost:3100/templates/course-tutor",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Course Tutor · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Course Tutor\n\nEDUCATION\n\nAI Course Tutor\n\nCited answers grounded in an approved course knowledge base.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nINDUSTRY\nLearning\nCHANNELS\nWeb, LMS\nLICENCE\nIncluded from Professional\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona objective\n\nDeliver the named ro"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/receptionist",
+      "finalUrl": "http://localhost:3100/templates/receptionist",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Receptionist · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Receptionist\n\nCUSTOMER EXPERIENCE\n\nAI Receptionist\n\nGreets visitors, answers approved FAQs and routes to the right team.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nBETA\nINDUSTRY\nCross-industry\nCHANNELS\nWeb, Kiosk\nLICENCE\nStarter add-on\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona objective\n\nDeliver the named role"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/support-adviser",
+      "finalUrl": "http://localhost:3100/templates/support-adviser",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Customer Support Adviser · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Customer Support Adviser\n\nCUSTOMER EXPERIENCE\n\nAI Customer Support Adviser\n\nHandles first-line questions and creates a structured human escalation.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nBETA\nINDUSTRY\nSupport\nCHANNELS\nWeb, Support portal\nLICENCE\nProfessional\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona object"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/sales-assistant",
+      "finalUrl": "http://localhost:3100/templates/sales-assistant",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Sales Assistant · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Sales Assistant\n\nSALES\n\nAI Sales Assistant\n\nExplains products using approved catalogue content and captures consented leads.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nBETA\nINDUSTRY\nRetail\nCHANNELS\nWeb, E-commerce\nLICENCE\nProfessional\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona objective\n\nDeliver the named role consiste"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/course-presenter",
+      "finalUrl": "http://localhost:3100/templates/course-presenter",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Course Presenter · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Course Presenter\n\nEDUCATION\n\nAI Course Presenter\n\nCreates disclosed lesson previews in three aspect ratios with approval contracts.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nREQUIRES CONFIGURATION\nINDUSTRY\nLearning\nCHANNELS\nVideo, LMS\nLICENCE\nUsage based\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona ob"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/employee-onboarding",
+      "finalUrl": "http://localhost:3100/templates/employee-onboarding",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Employee Onboarding Guide · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Employee Onboarding Guide\n\nENTERPRISE OPERATIONS\n\nAI Employee Onboarding Guide\n\nGuides new hires through approved policies, systems and first-week tasks.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nBETA\nINDUSTRY\nHR\nCHANNELS\nWeb, Intranet\nLICENCE\nBusiness\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona objective\n\nDeliver the "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/templates/product-adviser",
+      "finalUrl": "http://localhost:3100/templates/product-adviser",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Product Adviser · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Templates\n/ AI Product Adviser\n\nSALES\n\nAI Product Adviser\n\nTurns a governed product catalogue into a guided recommendation conversation.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nBETA\nINDUSTRY\nCross-industry\nCHANNELS\nWeb, App\nLICENCE\nProfessional\nVERSION\nv1 · GoalVow publisher seed\nInstall as draft\nPersona objective\n\nDeliver the named role consistent"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/plugconnect",
+      "finalUrl": "http://localhost:3100/integrations/plugconnect",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "PlugConnect integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ PlugConnect\n\nRECRUITMENT INTEGRATION\n\nPlugConnect\n\nCandidate practice sessions and candidate-owned feedback\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nAVAILABLE\nAUTHENTICATION\nScoped service key\nDATA ACCESS\nCandidate practice sessions and candidate-owned feedback\nHEALTH\nContract verified in repository\nOpen installation guide\nInstallatio"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/goalvow-academies",
+      "finalUrl": "http://localhost:3100/integrations/goalvow-academies",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "GoalVow Academies integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ GoalVow Academies\n\nLEARNING INTEGRATION\n\nGoalVow Academies\n\nCourse tutors and presenter projects\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nAUTHENTICATION\nScoped service key\nDATA ACCESS\nCourse tutors and presenter projects\nHEALTH\nContract verified in repository\nOpen installation guide\nInstallation workflow\nR"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/vowlms",
+      "finalUrl": "http://localhost:3100/integrations/vowlms",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowLMS integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ VowLMS\n\nLEARNING INTEGRATION\n\nVowLMS\n\nCourse context, lesson embeds and completion metadata\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nAUTHENTICATION\nScoped service key\nDATA ACCESS\nCourse context, lesson embeds and completion metadata\nHEALTH\nContract verified in repository\nOpen installation guide\nInstallatio"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/vowsupport",
+      "finalUrl": "http://localhost:3100/integrations/vowsupport",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowSupport integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ VowSupport\n\nCUSTOMER SUPPORT INTEGRATION\n\nVowSupport\n\nTicket triage and escalation contracts\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nAI guidance · human escalation\nConceptual visual\nBETA\nAUTHENTICATION\nWebhook + service key\nDATA ACCESS\nTicket triage and escalation contracts\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/vowtools",
+      "finalUrl": "http://localhost:3100/integrations/vowtools",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowTools integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ VowTools\n\nPRODUCTIVITY INTEGRATION\n\nVowTools\n\nGuided productivity workflows\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nBETA\nAUTHENTICATION\nService key\nDATA ACCESS\nGuided productivity workflows\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a scoped environment credential.\nComplete s"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/vowrewards",
+      "finalUrl": "http://localhost:3100/integrations/vowrewards",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowRewards integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ VowRewards\n\nLOYALTY INTEGRATION\n\nVowRewards\n\nApproved loyalty guidance only\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLANNED\nAUTHENTICATION\nOAuth architecture\nDATA ACCESS\nApproved loyalty guidance only\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a scoped environment credential."
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/moodle",
+      "finalUrl": "http://localhost:3100/integrations/moodle",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Moodle integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ Moodle\n\nLEARNING MANAGEMENT INTEGRATION\n\nMoodle\n\nCourse context and embedded tutors\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nAUTHENTICATION\nOAuth / token\nDATA ACCESS\nCourse context and embedded tutors\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a scop"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/microsoft-teams",
+      "finalUrl": "http://localhost:3100/integrations/microsoft-teams",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Microsoft Teams integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ Microsoft Teams\n\nCOMMUNICATION INTEGRATION\n\nMicrosoft Teams\n\nEnterprise meeting and support experiences\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLANNED\nAUTHENTICATION\nOAuth\nDATA ACCESS\nEnterprise meeting and support experiences\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a sco"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/slack",
+      "finalUrl": "http://localhost:3100/integrations/slack",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Slack integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ Slack\n\nCOMMUNICATION INTEGRATION\n\nSlack\n\nInternal helpdesk notifications\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLANNED\nAUTHENTICATION\nOAuth\nDATA ACCESS\nInternal helpdesk notifications\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a scoped environment credential.\nComplete serve"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/hubspot",
+      "finalUrl": "http://localhost:3100/integrations/hubspot",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "HubSpot integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ HubSpot\n\nCRM INTEGRATION\n\nHubSpot\n\nConsented lead handoff\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLANNED\nAUTHENTICATION\nOAuth\nDATA ACCESS\nConsented lead handoff\nHEALTH\nNo live health claim\nJoin waitlist\nInstallation workflow\nReview data scope and privacy.\nCreate a scoped environment credential.\nComplete server-side authentication.\nR"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/integrations/generic-rest",
+      "finalUrl": "http://localhost:3100/integrations/generic-rest",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Generic REST API integration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Integrations\n/ Generic REST API\n\nDEVELOPER INTEGRATION\n\nGeneric REST API\n\nVersioned server-to-server access\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nAVAILABLE\nAUTHENTICATION\nScoped API key\nDATA ACCESS\nVersioned server-to-server access\nHEALTH\nContract verified in repository\nOpen installation guide\nInstallation workflow\nReview data scope and privacy.\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/customers/plugconnect-interview-practice",
+      "finalUrl": "http://localhost:3100/customers/plugconnect-interview-practice",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "PlugConnect AI Interview Practice · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Customers\n/ PlugConnect AI Interview Practice\n\nINTERNAL DEMONSTRATION\n\nPlugConnect AI Interview Practice\n\nCandidates need private, repeatable preparation.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nIndustry\n\nRecruitment\n\nVowHumans solution\n\nA disclosed AI practice partner with candidate-owned feedback.\n\nCurrent outcome\n\nWorkflow validated in safe mock"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/customers/goalvow-course-tutor",
+      "finalUrl": "http://localhost:3100/customers/goalvow-course-tutor",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "GoalVow Course Tutor · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Customers\n/ GoalVow Course Tutor\n\nINTERNAL PILOT FOUNDATION\n\nGoalVow Course Tutor\n\nLearners need support grounded in approved lessons.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nIndustry\n\nEducation\n\nVowHumans solution\n\nA course-scoped tutor that cites its displayed sources.\n\nCurrent outcome\n\nGrounded answer contract validated; produ"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/customers/vowlms-course-presenter",
+      "finalUrl": "http://localhost:3100/customers/vowlms-course-presenter",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowLMS Course Presenter · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Customers\n/ VowLMS Course Presenter\n\nDEMONSTRATION\n\nVowLMS Course Presenter\n\nCourse teams need reusable lesson presentation workflows.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nIndustry\n\nEducation\n\nVowHumans solution\n\nScript, scene and static-preview approval flow.\n\nCurrent outcome\n\nUI and render contracts complete; media generatio"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/customers/vowsupport-adviser",
+      "finalUrl": "http://localhost:3100/customers/vowsupport-adviser",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowSupport Digital Adviser · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 74,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Customers\n/ VowSupport Digital Adviser\n\nPLANNED\n\nVowSupport Digital Adviser\n\nRoutine requests need consistent first-line guidance.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nIndustry\n\nCustomer service\n\nVowHumans solution\n\nA knowledge-scoped adviser with human escalation.\n\nCurrent outcome\n\nIntegration contract defined; not yet a live customer deploymen"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/introduction-to-vowhumans",
+      "finalUrl": "http://localhost:3100/academy/courses/introduction-to-vowhumans",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Introduction to VowHumans · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Introduction to VowHumans\n\nFOUNDATION COURSE\n\nIntroduction to VowHumans\n\n4 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nLEVEL\nFoundation\nLESSONS\n4\nCERTIFICATE\nVerification architecture\nEnrol in sandbox\nLearning outcom"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/creating-your-first-digital-human",
+      "finalUrl": "http://localhost:3100/academy/courses/creating-your-first-digital-human",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Creating Your First Digital Human · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Creating Your First Digital Human\n\nFOUNDATION COURSE\n\nCreating Your First Digital Human\n\n5 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nLEVEL\nFoundation\nLESSONS\n5\nCERTIFICATE\nVerification architecture\nEnrol in sandbox"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/persona-design",
+      "finalUrl": "http://localhost:3100/academy/courses/persona-design",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Persona Design · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Persona Design\n\nPRACTITIONER COURSE\n\nPersona Design\n\n6 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nLEVEL\nPractitioner\nLESSONS\n6\nCERTIFICATE\nVerification architecture\nEnrol in sandbox\nLearning outcomes\nUnderstand the "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/knowledge-base-management",
+      "finalUrl": "http://localhost:3100/academy/courses/knowledge-base-management",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Knowledge Base Management · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Knowledge Base Management\n\nPRACTITIONER COURSE\n\nKnowledge Base Management\n\n7 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nAVAILABLE\nLEVEL\nPractitioner\nLESSONS\n7\nCERTIFICATE\nVerification architecture\nEnrol in sandbox\nLearning ou"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/building-a-digital-receptionist",
+      "finalUrl": "http://localhost:3100/academy/courses/building-a-digital-receptionist",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Building a Digital Receptionist · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Building a Digital Receptionist\n\nPRACTITIONER COURSE\n\nBuilding a Digital Receptionist\n\n4 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nPractitioner\nLESSONS\n4\nCERTIFICATE\nVerification architecture\nComing later\nLearn"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/building-a-digital-tutor",
+      "finalUrl": "http://localhost:3100/academy/courses/building-a-digital-tutor",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Building a Digital Tutor · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Building a Digital Tutor\n\nPRACTITIONER COURSE\n\nBuilding a Digital Tutor\n\n5 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nPractitioner\nLESSONS\n5\nCERTIFICATE\nVerification architecture\nComing later\nLearning outcomes\nU"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/building-a-digital-sales-assistant",
+      "finalUrl": "http://localhost:3100/academy/courses/building-a-digital-sales-assistant",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Building a Digital Sales Assistant · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Building a Digital Sales Assistant\n\nPRACTITIONER COURSE\n\nBuilding a Digital Sales Assistant\n\n6 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nPractitioner\nLESSONS\n6\nCERTIFICATE\nVerification architecture\nComing later"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/vowhumans-api-fundamentals",
+      "finalUrl": "http://localhost:3100/academy/courses/vowhumans-api-fundamentals",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans API Fundamentals · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ VowHumans API Fundamentals\n\nPRACTITIONER COURSE\n\nVowHumans API Fundamentals\n\n7 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nPractitioner\nLESSONS\n7\nCERTIFICATE\nVerification architecture\nComing later\nLearning outcom"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/enterprise-administration",
+      "finalUrl": "http://localhost:3100/academy/courses/enterprise-administration",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Enterprise Administration · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Enterprise Administration\n\nADVANCED COURSE\n\nEnterprise Administration\n\n4 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nAdvanced\nLESSONS\n4\nCERTIFICATE\nVerification architecture\nComing later\nLearning outcomes\nUnderst"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/responsible-ai-identity-and-consent",
+      "finalUrl": "http://localhost:3100/academy/courses/responsible-ai-identity-and-consent",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Responsible AI, Identity and Consent · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Responsible AI, Identity and Consent\n\nADVANCED COURSE\n\nResponsible AI, Identity and Consent\n\n5 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nPLANNED\nLEVEL\nAdvanced\nLESSONS\n5\nCERTIFICATE\nVerification architecture\nComing later\nLearning outco"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/presenter-studio-production",
+      "finalUrl": "http://localhost:3100/academy/courses/presenter-studio-production",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Presenter Studio Production · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Presenter Studio Production\n\nADVANCED COURSE\n\nPresenter Studio Production\n\n6 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nAdvanced\nLESSONS\n6\nCERTIFICATE\nVerification architecture\nComing later\nLearning outcomes\nUnd"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/academy/courses/integration-partner-certification",
+      "finalUrl": "http://localhost:3100/academy/courses/integration-partner-certification",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Integration Partner Certification · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 6,
+        "linkCount": 75,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Academy\n/ Courses\n/ Integration Partner Certification\n\nADVANCED COURSE\n\nIntegration Partner Certification\n\n7 lesson learning path with text, exercises, quiz contracts and a disclosed digital tutor.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nApproved knowledge · human accountability\nConceptual visual\nPLANNED\nLEVEL\nAdvanced\nLESSONS\n7\nCERTIFICATE\nVerification architecture\nComing later\nLearning "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/terms",
+      "finalUrl": "http://localhost:3100/legal/terms",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Terms · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 79,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Terms\n\nPLATFORM TERMS\n\nTerms\n\nA draft commercial framework for responsible access to VowHumans products, Studio workspaces and digital-human services.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nAgreement and service scope\n02\nAccounts and authority\n03\nPermitt"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/privacy",
+      "finalUrl": "http://localhost:3100/legal/privacy",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Privacy · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 79,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Privacy\n\nPRIVACY & DATA GOVERNANCE\n\nPrivacy\n\nA draft framework for how VowHumans handles personal information, organisation data and disclosed digital-human activity.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nScope and application\n02\nInformation handled\n03\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/cookies",
+      "finalUrl": "http://localhost:3100/legal/cookies",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Cookies · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Cookies\n\nLEGAL & GOVERNANCE\n\nCookies\n\nA structured draft for the VowHumans cookies framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsibilities\n03\nCustomer resp"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/acceptable-use",
+      "finalUrl": "http://localhost:3100/legal/acceptable-use",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Acceptable Use · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Acceptable Use\n\nLEGAL & GOVERNANCE\n\nAcceptable Use\n\nA structured draft for the VowHumans acceptable use framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsibili"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/ai-transparency",
+      "finalUrl": "http://localhost:3100/legal/ai-transparency",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "AI Transparency · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ AI Transparency\n\nLEGAL & GOVERNANCE\n\nAI Transparency\n\nA structured draft for the VowHumans ai transparency framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsib"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/identity-voice-consent",
+      "finalUrl": "http://localhost:3100/legal/identity-voice-consent",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Identity Voice Consent · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Identity Voice Consent\n\nLEGAL & GOVERNANCE\n\nIdentity Voice Consent\n\nA structured draft for the VowHumans identity voice consent framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/marketplace-terms",
+      "finalUrl": "http://localhost:3100/legal/marketplace-terms",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Marketplace Terms · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Marketplace Terms\n\nLEGAL & GOVERNANCE\n\nMarketplace Terms\n\nA structured draft for the VowHumans marketplace terms framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform res"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/partner-terms",
+      "finalUrl": "http://localhost:3100/legal/partner-terms",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Partner Terms · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Partner Terms\n\nLEGAL & GOVERNANCE\n\nPartner Terms\n\nA structured draft for the VowHumans partner terms framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsibilitie"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/developer-terms",
+      "finalUrl": "http://localhost:3100/legal/developer-terms",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Developer Terms · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Developer Terms\n\nLEGAL & GOVERNANCE\n\nDeveloper Terms\n\nA structured draft for the VowHumans developer terms framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsib"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/data-processing-addendum",
+      "finalUrl": "http://localhost:3100/legal/data-processing-addendum",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Data Processing Addendum · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Data Processing Addendum\n\nLEGAL & GOVERNANCE\n\nData Processing Addendum\n\nA structured draft for the VowHumans data processing addendum framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/service-level-agreement",
+      "finalUrl": "http://localhost:3100/legal/service-level-agreement",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Service Level Agreement · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Service Level Agreement\n\nLEGAL & GOVERNANCE\n\nService Level Agreement\n\nA structured draft for the VowHumans service level agreement framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and sco"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/subprocessors",
+      "finalUrl": "http://localhost:3100/legal/subprocessors",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Subprocessors · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Subprocessors\n\nLEGAL & GOVERNANCE\n\nSubprocessors\n\nA structured draft for the VowHumans subprocessors framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsibilitie"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/copyright-takedown",
+      "finalUrl": "http://localhost:3100/legal/copyright-takedown",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Copyright Takedown · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Copyright Takedown\n\nLEGAL & GOVERNANCE\n\nCopyright Takedown\n\nA structured draft for the VowHumans copyright takedown framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/refunds",
+      "finalUrl": "http://localhost:3100/legal/refunds",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Refunds · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Refunds\n\nLEGAL & GOVERNANCE\n\nRefunds\n\nA structured draft for the VowHumans refunds framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPlatform responsibilities\n03\nCustomer resp"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/responsible-ai",
+      "finalUrl": "http://localhost:3100/legal/responsible-ai",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Responsible AI · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 79,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Responsible AI\n\nRESPONSIBLE AI\n\nResponsible AI\n\nA draft governance standard for transparent, consent-based and human-accountable digital-human experiences.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nGovernance principles\n02\nDisclosure and human agency\n03\nIde"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/vulnerability-disclosure",
+      "finalUrl": "http://localhost:3100/legal/vulnerability-disclosure",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Vulnerability Disclosure · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Vulnerability Disclosure\n\nLEGAL & GOVERNANCE\n\nVulnerability Disclosure\n\nA structured draft for the VowHumans vulnerability disclosure framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/community-guidelines",
+      "finalUrl": "http://localhost:3100/legal/community-guidelines",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Community Guidelines · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [
+          "http://localhost:3100/_next/image?url=%2Fbrand%2Fvowhumans-horizontal-lockup.png&w=256&q=75"
+        ],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Community Guidelines\n\nLEGAL & GOVERNANCE\n\nCommunity Guidelines\n\nA structured draft for the VowHumans community guidelines framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\nPurpose and scope\n02\nPla"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/legal/recording-transcript-consent",
+      "finalUrl": "http://localhost:3100/legal/recording-transcript-consent",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Recording Transcript Consent · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\nHome\n/ Legal\n/ Recording Transcript Consent\n\nLEGAL & GOVERNANCE\n\nRecording Transcript Consent\n\nA structured draft for the VowHumans recording transcript consent framework, pending specialist legal review and publication approval.\n\nAI-GENERATED EDITORIAL VISUAL\nConsent · provenance · control\nConceptual visual\nDOCUMENT STATUS\nDraft for counsel\n\nNot yet an approved policy or contractual commitment.\n\nON THIS PAGE\n01\n"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/sign-in",
+      "finalUrl": "http://localhost:3100/sign-in",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Sign In · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 71,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nACCOUNT\n\nSign in to VowHumans\n\nSign in with your VowHumans account.\n\nPasswords are never stored in plain text\nHashed with a unique random salt per account.\nWork email\nPassword\nSign in\nNew here? Register\n\nSecure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.\n\nAI disclosure and consent at the centre\nPLATFORM\nDigital Workforce\nRoles\nStudio\nLive\nPresent\nBUILD\nDevelopers\nAPI refer"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/sign-up",
+      "finalUrl": "http://localhost:3100/sign-up",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Create Sandbox · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 71,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nACCOUNT\n\nRegister for VowHumans\n\nCreate a real GoalVow Platform account. Email verification isn't connected yet, so use a password you don't reuse elsewhere.\n\nPasswords are never stored in plain text\nHashed with a unique random salt per account.\nWork email\nFull name\nWorkspace name\nPassword\nI agree to the Terms of Service and Privacy Policy.\nRegister\nAlready have an account? Sign in\n\nSecure, branded Digital Colle"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/studio",
+      "finalUrl": "http://localhost:3100/sign-in?next=%2Fstudio",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Sign In · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 71,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nACCOUNT\n\nSign in to VowHumans\n\nSign in with your VowHumans account.\n\nPasswords are never stored in plain text\nHashed with a unique random salt per account.\nWork email\nPassword\nSign in\nNew here? Register\n\nSecure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.\n\nAI disclosure and consent at the centre\nPLATFORM\nDigital Workforce\nRoles\nStudio\nLive\nPresent\nBUILD\nDevelopers\nAPI refer"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/studio/workforce",
+      "finalUrl": "http://localhost:3100/sign-in?next=%2Fstudio%2Fworkforce",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Sign In · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 71,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nACCOUNT\n\nSign in to VowHumans\n\nSign in with your VowHumans account.\n\nPasswords are never stored in plain text\nHashed with a unique random salt per account.\nWork email\nPassword\nSign in\nNew here? Register\n\nSecure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.\n\nAI disclosure and consent at the centre\nPLATFORM\nDigital Workforce\nRoles\nStudio\nLive\nPresent\nBUILD\nDevelopers\nAPI refer"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/documentation",
+      "finalUrl": "http://localhost:3100/documentation",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Documentation · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 73,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nDOCUMENTATION\n\nFrom first request to governed production.\n\nArchitecture, API, deployment and safety documentation for operators and developers.\n\nStart building\nBook a demo\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nPLATFORM FOUNDATION\nQuick start\n\nRun the Studio locally in safe mock mode.\n\nPLATFORM FOUNDATION\nAPI reference\n\nExplore the versioned surface and server authentication model"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/support",
+      "finalUrl": "http://localhost:3100/support",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Support · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nContact VowHumans support\n\nDescribe the product area, impact and safe reproduction steps. Never include secrets.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nValidate support request\n\nSecure, branded Digital Co"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/search",
+      "finalUrl": "http://localhost:3100/search",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Search · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 78,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nPUBLIC SEARCH\n\nSearch VowHumans\n\nPublic results include products, industries, templates and Academy content only. Private organisation data never enters this index.\n\nAI-GENERATED EDITORIAL VISUAL\nOne governed workforce\nConceptual visual\nSearch\nProduct\nVowHumans Studio\n\nDesign identities, voices, Personas, knowledge, applications and safety controls in one consent-first workspace.\n\nProduct\nVowHumans Live\n\nDeploy "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/partner-apply",
+      "finalUrl": "http://localhost:3100/partner-apply",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Partner Application · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nApply to become a VowHumans partner\n\nChoose a technology, solution, referral, training or content partnership.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nValidate application\n\nSecure, branded Digital Colleagu"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/investor-contact",
+      "finalUrl": "http://localhost:3100/investor-contact",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Investor Contact · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nContact investor relations\n\nRequest the approved company overview or begin a confidential conversation.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nRequest investor contact\n\nSecure, branded Digital Colleagues "
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/trust-request",
+      "finalUrl": "http://localhost:3100/trust-request",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Trust Document Request · VowHumans",
+        "h1Count": 1,
+        "formCount": 1,
+        "buttonCount": 6,
+        "linkCount": 70,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nSAFE COMMERCIAL WORKFLOW\n\nRequest a trust document\n\nSelect the security, privacy or responsible-AI material required for your review.\n\nNo provider claims\nThe interface reports whether delivery is persistent.\nWork email\nFull name\nOrganisation\nWhat do you need?\nI agree that GoalVow may use these details to respond. I have not included sensitive information.\nValidate request\n\nSecure, branded Digital Colleagues that"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/offline",
+      "finalUrl": "http://localhost:3100/offline",
+      "status": 200,
+      "navigationError": null,
+      "errors": [],
+      "audit": {
+        "title": "Offline · VowHumans",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 72,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\nCONNECTION PAUSED\n\nYou appear to be offline.\n\nReconnect before continuing. No draft, provider action or transcript is being submitted from this page.\n\nTry the homepage\nGet support\n\nSecure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.\n\nAI disclosure and consent at the centre\nPLATFORM\nDigital Workforce\nRoles\nStudio\nLive\nPresent\nBUILD\nDevelopers\nAPI reference\nSDKs\nTemplates\nInt"
+      }
+    },
+    {
+      "requestedUrl": "http://localhost:3100/not-a-real-route",
+      "finalUrl": "http://localhost:3100/not-a-real-route",
+      "status": 404,
+      "navigationError": null,
+      "errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "audit": {
+        "title": "VowHumans | AI Digital Workforce Platform",
+        "h1Count": 1,
+        "formCount": 0,
+        "buttonCount": 5,
+        "linkCount": 72,
+        "invalidLinks": [],
+        "brokenImages": [],
+        "missingAltImages": [],
+        "unnamedButtons": 0,
+        "fieldsWithoutNames": 0,
+        "tinyText": [],
+        "horizontalOverflow": false,
+        "bodyText": "Skip to content\nPlatform\nSolutions\nIndustries\nResources\nPricing\nSign in\nOpen Studio\n\n404 · ROUTE NOT FOUND\n\nThis digital human stepped out.\n\nThe page may have moved as the platform evolved. Your account and Studio data are unaffected.\n\nReturn home\nSearch the site\n\nSecure, branded Digital Colleagues that talk, teach, sell, interview and support—honestly.\n\nAI disclosure and consent at the centre\nPLATFORM\nDigital Workforce\nRoles\nStudio\nLive\nPresent\nBUILD\nDevelopers\nAPI reference\nSDKs\nTemplates\nInte"
+      }
+    }
+  ],
+  "linkResults": [
+    {
+      "href": "http://localhost:3100/",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/workforce",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/studio",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/live",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/present",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/solutions",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/customer-service",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/recruitment-hr",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/education",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/retail-ecommerce",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/financial-services",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/government",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/healthcare-information",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/manufacturing-mining",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/resources",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/developers",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/trust",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/pricing",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-in",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/studio",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/book-demo",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/demos/interview",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/connect",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/marketplace",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/academy",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products/enterprise",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/workforce/roles",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/insurance",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/hospitality-tourism",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/workforce/how-it-works",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/demos/tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/demos/presenter",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/workforce/governance",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/plugconnect",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/goalvow-academies",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/vowlms",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/vowsupport",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/vowtools",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/vowrewards",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/moodle",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/microsoft-teams",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/slack",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/hubspot",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/api-reference",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sdks",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/about",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/customers",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/partners",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/investors",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/contact",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/security",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/legal/privacy",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/legal/terms",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/legal/responsible-ai",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=ai-receptionist",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=customer-service",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=sales-development",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=sales-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=hr-administrator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=recruitment-coordinator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=learning-coach",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=executive-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=operations-coordinator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=project-coordinator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=marketing-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=social-media-coordinator",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=finance-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=accounting-clerk",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=compliance-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=legal-intake",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=it-helpdesk",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=data-analyst",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=business-analyst",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=procurement-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=quality-assurance",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=content-editor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=research-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?template=engineering-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/real-estate",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/automotive",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/industries/telecommunications",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans/thandi-mokoena",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans/sipho-daniels",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans/goalvow-tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans/vowsupport-adviser",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/digital-humans/vowtools-coach",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/interview-practice-coach",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/course-tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/receptionist",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/support-adviser",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/sales-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/course-presenter",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/employee-onboarding",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/templates/product-adviser",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/integrations/generic-rest",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?plan=sandbox&billing=monthly",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?plan=starter&billing=monthly",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?plan=professional&billing=monthly",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/sign-up?plan=business&billing=monthly",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/customers/plugconnect-interview-practice",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/customers/goalvow-course-tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/customers/vowlms-course-presenter",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/customers/vowsupport-adviser",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/introduction-to-vowhumans",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/creating-your-first-digital-human",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/persona-design",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/knowledge-base-management",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/building-a-digital-receptionist",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/building-a-digital-tutor",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/building-a-digital-sales-assistant",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/vowhumans-api-fundamentals",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/enterprise-administration",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/responsible-ai-identity-and-consent",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/presenter-studio-production",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses/integration-partner-certification",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/webhooks",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/trust-request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/partner-apply",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/investor-contact",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/products",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=education",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=recruitment-hr",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=customer-service",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=retail-ecommerce",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=financial-services",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=insurance",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=government",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=hospitality-tourism",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=healthcare-information",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=manufacturing-mining",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=real-estate",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=automotive",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/roi-calculator?industry=telecommunications",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/app/templates",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/academy/courses",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/support",
+      "status": 200,
+      "error": null
+    },
+    {
+      "href": "http://localhost:3100/search",
+      "status": 200,
+      "error": null
+    }
+  ]
+}

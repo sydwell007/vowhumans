@@ -47,7 +47,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applications, humans, identityAlertCount, identityRecords } from "@/data/platform";
+import { applications, DIGITAL_HUMAN_BUILDER_STEPS, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 import type { Room } from "livekit-client";
@@ -62,6 +62,12 @@ import {
   ProductionWebhooks,
 } from "./ProductionControlPlane";
 import { WorkforceStudio } from "./WorkforceStudio";
+
+async function requireSuccessfulResponse(response: Response, fallback: string) {
+  if (response.ok) return;
+  const body = await response.json().catch(() => ({}));
+  throw new Error(body.message || fallback);
+}
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
@@ -326,10 +332,17 @@ function DigitalHumans() {
 
   async function deleteHuman(id: string) {
     setBusy(true);
-    await fetch(`/api/v1/digital-humans/${id}`, { method: 'DELETE' }).catch(() => {});
-    if (selectedId === id) { setSelectedId(null); setDetail(null); }
-    await refresh();
-    setBusy(false);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/digital-humans/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this digital human.');
+      if (selectedId === id) { setSelectedId(null); setDetail(null); }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this digital human.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function toggleApplication(applicationId: string, enabled: boolean) {
@@ -507,19 +520,32 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
 function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
   const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    fetch('/api/v1/voices').then((r) => r.json()).then((res) => { if (res?.success) setVoices(res.data.items); }).catch(() => {});
+    fetch('/api/v1/voices').then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.success) throw new Error(body?.message || 'Could not load voices.');
+      setVoices(body.data.items);
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load voices.'));
   }, []);
 
   async function assignVoice(code: string, voiceId: string) {
     setBusyCode(code);
-    await fetch('/api/v1/digital-human-languages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, language_code: code, voice_id: voiceId || null }) }).catch(() => {});
-    onChanged();
-    setBusyCode(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/digital-human-languages', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, language_code: code, voice_id: voiceId || null }) });
+      await requireSuccessfulResponse(response, 'Could not assign this voice.');
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this voice.');
+    } finally {
+      setBusyCode(null);
+    }
   }
 
   return (
     <div className="language-status-list">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {languages.map((lang) => (
         <div className="language-status-row" key={lang.code}>
           <span>{lang.english_name}</span>
@@ -534,8 +560,6 @@ function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: s
   );
 }
 
-const WIZARD_STEP_LABELS = ['Identity', 'Face', 'Voice', 'Knowledge', 'Persona', 'Gesture'];
-
 function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string | null; startStep: number; onClose: (refreshNeeded: boolean) => void }) {
   const [step, setStep] = useState(startStep);
   const [activeHumanId, setActiveHumanId] = useState<string | null>(humanId);
@@ -548,6 +572,7 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   const [role, setRole] = useState('');
   const [disclosure, setDisclosure] = useState('AI-generated digital human. Not a real person.');
   const [creatingIdentity, setCreatingIdentity] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [templateFaceAssignments, setTemplateFaceAssignments] = useState<FaceAssignment[]>([]);
   const [templateVoiceAssignments, setTemplateVoiceAssignments] = useState<VoiceAssignment[]>([]);
 
@@ -555,8 +580,18 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   // Face/Voice from that demo human — identity is arbitrary and worth redoing per VowHuman,
   // but a good face or voice already in place shouldn't force a redo.
   useEffect(() => {
-    fetch('/api/v1/face-assignments').then((r) => r.json()).then((res) => { if (res?.success) setTemplateFaceAssignments(res.data.items); }).catch(() => {});
-    fetch('/api/v1/voice-assignments').then((r) => r.json()).then((res) => { if (res?.success) setTemplateVoiceAssignments(res.data.items); }).catch(() => {});
+    Promise.all([
+      fetch('/api/v1/face-assignments').then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body?.success) throw new Error(body?.message || 'Could not load template face assignments.');
+        setTemplateFaceAssignments(body.data.items);
+      }),
+      fetch('/api/v1/voice-assignments').then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body?.success) throw new Error(body?.message || 'Could not load template voice assignments.');
+        setTemplateVoiceAssignments(body.data.items);
+      }),
+    ]).catch((err) => setError(err instanceof Error ? err.message : 'Could not load template assignments.'));
   }, []);
 
   function pickTemplate(index: number | null) {
@@ -584,9 +619,19 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
       const template = templateIndex !== null ? humans[templateIndex] : null;
       const inheritedFace = template ? templateFaceAssignments.find((a) => a.human_slug === template.id) : undefined;
       const inheritedVoice = template ? templateVoiceAssignments.find((a) => a.human_slug === template.id) : undefined;
-      if (inheritedFace) await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, face_asset_id: inheritedFace.face_asset_id }) }).catch(() => {});
-      if (inheritedVoice) await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, voice_id: inheritedVoice.voice_id }) }).catch(() => {});
-      setStep(!inheritedFace ? 2 : !inheritedVoice ? 3 : 4);
+      const inheritanceWarnings: string[] = [];
+      let inheritedFaceReady = Boolean(inheritedFace);
+      let inheritedVoiceReady = Boolean(inheritedVoice);
+      if (inheritedFace) {
+        const assignment = await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, face_asset_id: inheritedFace.face_asset_id }) });
+        if (!assignment.ok) { inheritedFaceReady = false; inheritanceWarnings.push('the template face could not be reused'); }
+      }
+      if (inheritedVoice) {
+        const assignment = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: newHumanId, voice_id: inheritedVoice.voice_id }) });
+        if (!assignment.ok) { inheritedVoiceReady = false; inheritanceWarnings.push('the template voice could not be reused'); }
+      }
+      setStep(!inheritedFaceReady ? 2 : !inheritedVoiceReady ? 3 : 4);
+      if (inheritanceWarnings.length > 0) setError(`The Digital Human was created, but ${inheritanceWarnings.join(' and ')}. Configure that stage before activation.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create this digital human.');
     } finally {
@@ -595,20 +640,31 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   }
 
   async function finish() {
-    if (activeHumanId) await fetch(`/api/v1/digital-humans/${activeHumanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: 'active' }) }).catch(() => {});
-    onClose(true);
+    if (!activeHumanId) return;
+    setActivating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/digital-humans/${activeHumanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: 'active' }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not activate this digital human.');
+      setActivating(false);
+      onClose(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not activate this digital human.');
+      setActivating(false);
+    }
   }
 
-  function advance() { setChanged(true); if (step >= 6) finish(); else setStep(step + 1); }
-  function skip() { if (step >= 6) finish(); else setStep(step + 1); }
+  function advance() { setChanged(true); if (step < DIGITAL_HUMAN_BUILDER_STEPS.length) setStep(step + 1); }
+  function skip() { if (step >= DIGITAL_HUMAN_BUILDER_STEPS.length) onClose(changed); else setStep(step + 1); }
 
   return (
     <div className="drawer-scrim">
-      <aside className="wizard-panel">
+      <aside className="wizard-panel" role="dialog" aria-modal="true" aria-label="Build a Digital Human">
         <button className="icon-button drawer-close" aria-label="Close" onClick={() => onClose(changed)}><X size={19} /></button>
         <p className="eyebrow">Build a VowHuman</p>
         <div className="wizard-steps">
-          {WIZARD_STEP_LABELS.map((label, index) => {
+          {DIGITAL_HUMAN_BUILDER_STEPS.map((label, index) => {
             const n = index + 1;
             return <div key={label} className={n < step ? 'done' : n === step ? 'active' : ''}><span>{n < step ? <Check size={12} /> : n}</span><small>{label}</small></div>;
           })}
@@ -647,11 +703,13 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
           {step === 4 && activeHumanId && <WizardKnowledgeStep humanId={activeHumanId} onDone={advance} />}
           {step === 5 && activeHumanId && <WizardPersonaStep humanId={activeHumanId} role={role} onDone={advance} />}
           {step === 6 && activeHumanId && <WizardGestureStep humanId={activeHumanId} onDone={advance} />}
+          {step === 7 && activeHumanId && <WizardApplicationsStep humanId={activeHumanId} onDone={advance} />}
+          {step === 8 && activeHumanId && <WizardReviewStep humanId={activeHumanId} activating={activating} onActivate={finish} />}
         </div>
         {step > 1 && (
           <div className="wizard-footer editor-actions">
             {step > minStep && <button className="secondary-button" type="button" onClick={() => setStep(step - 1)}><ArrowLeft size={16} />Back</button>}
-            <button className="plain-button" type="button" onClick={skip}><SkipForward size={16} />{step >= 6 ? 'Skip & finish' : 'Skip for now'}</button>
+            <button className="plain-button" type="button" onClick={skip}><SkipForward size={16} />{step >= DIGITAL_HUMAN_BUILDER_STEPS.length ? 'Save as draft' : 'Skip for now'}</button>
           </div>
         )}
       </aside>
@@ -666,7 +724,13 @@ function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => vo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetch('/api/v1/faces').then((r) => r.json()).then((res) => { if (res?.success) setFaces(res.data.items); }).catch(() => {}); }, []);
+  useEffect(() => {
+    fetch('/api/v1/faces').then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'Could not load face assets.');
+      setFaces(body.data.items ?? []);
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load face assets.'));
+  }, []);
 
   async function assignExisting() {
     if (!selectedFaceId) { setError('Choose a face.'); return; }
@@ -692,7 +756,8 @@ function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => vo
       const res = await fetch('/api/v1/faces', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: prompt.trim() }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not generate this face.');
-      await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, face_asset_id: body.data.id }) });
+      const assignment = await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, face_asset_id: body.data.id }) });
+      await requireSuccessfulResponse(assignment, 'The face was created but could not be assigned.');
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate this face.');
@@ -736,13 +801,13 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    fetch('/api/v1/voices').then((r) => r.json()).then((res) => {
-      if (res?.success) {
-        setVoices(res.data.items);
-        setProviderVoices(res.data.available_provider_voices ?? []);
-        if (res.data.available_provider_voices?.[0]) setProviderVoice(res.data.available_provider_voices[0]);
-      }
-    }).catch(() => {});
+    fetch('/api/v1/voices').then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'Could not load voices.');
+      setVoices(body.data.items ?? []);
+      setProviderVoices(body.data.available_provider_voices ?? []);
+      if (body.data.available_provider_voices?.[0]) setProviderVoice(body.data.available_provider_voices[0]);
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load voices.'));
   }, []);
 
   async function playSample(voice: Voice) {
@@ -789,7 +854,8 @@ function WizardVoiceStep({ humanId, onDone }: { humanId: string; onDone: () => v
       const res = await fetch('/api/v1/voices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim(), language: 'en-ZA', provider_voice_id: providerVoice }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not create this voice.');
-      await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: body.data.id }) });
+      const assignment = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, voice_id: body.data.id }) });
+      await requireSuccessfulResponse(assignment, 'The voice was created but could not be assigned.');
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create this voice.');
@@ -847,10 +913,14 @@ function WizardKnowledgeStep({ humanId, onDone }: { humanId: string; onDone: () 
   const [generatingPreview, setGeneratingPreview] = useState(false);
 
   async function refreshBases() {
-    const res = await fetch('/api/v1/knowledge-bases').then((r) => r.json()).catch(() => null);
-    if (res?.success) {
-      setBases(res.data.items);
-      setAddTargetBase((prev) => prev || res.data.items[0]?.id || '');
+    try {
+      const response = await fetch('/api/v1/knowledge-bases');
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'Could not load knowledge libraries.');
+      setBases(body.data.items ?? []);
+      setAddTargetBase((prev) => prev || body.data.items?.[0]?.id || '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load knowledge libraries.');
     }
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time fetch when this step mounts; refreshBases() is also reused by user-triggered handlers below
@@ -1029,7 +1099,13 @@ function WizardPersonaStep({ humanId, role, onDone }: { humanId: string; role: s
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetch('/api/v1/personas').then((r) => r.json()).then((res) => { if (res?.success) setPersonas(res.data.items); }).catch(() => {}); }, []);
+  useEffect(() => {
+    fetch('/api/v1/personas').then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'Could not load Personas.');
+      setPersonas(body.data.items ?? []);
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load Personas.'));
+  }, []);
 
   async function assignExisting() {
     if (!selectedVersionId) { setError('Choose a persona.'); return; }
@@ -1056,7 +1132,8 @@ function WizardPersonaStep({ humanId, role, onDone }: { humanId: string; role: s
       const res = await fetch('/api/v1/personas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'generate', name: name.trim(), role: genRole.trim() }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not generate this persona.');
-      await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, persona_version_id: body.data.version.id }) });
+      const assignment = await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, persona_version_id: body.data.version.id }) });
+      await requireSuccessfulResponse(assignment, 'The Persona was created but could not be assigned.');
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate this persona.');
@@ -1097,7 +1174,13 @@ function WizardGestureStep({ humanId, onDone }: { humanId: string; onDone: () =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetch('/api/v1/gesture-profiles').then((r) => r.json()).then((res) => { if (res?.success) setProfiles(res.data.items); }).catch(() => {}); }, []);
+  useEffect(() => {
+    fetch('/api/v1/gesture-profiles').then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'Could not load gesture profiles.');
+      setProfiles(body.data.items ?? []);
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load gesture profiles.'));
+  }, []);
 
   async function assignExisting() {
     if (!selectedId) { setError('Choose a gesture profile.'); return; }
@@ -1123,7 +1206,8 @@ function WizardGestureStep({ humanId, onDone }: { humanId: string; onDone: () =>
       const res = await fetch('/api/v1/gesture-profiles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not create this profile.');
-      await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, gesture_profile_id: body.data.id }) });
+      const assignment = await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanId, gesture_profile_id: body.data.id }) });
+      await requireSuccessfulResponse(assignment, 'The gesture profile was created but could not be assigned.');
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create this profile.');
@@ -1152,6 +1236,144 @@ function WizardGestureStep({ humanId, onDone }: { humanId: string; onDone: () =>
         <label className="full">Or create a new profile<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Calm and attentive" /></label>
         <button className="primary-button" type="submit" disabled={busy}>{busy ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}{busy ? 'Working…' : 'Create & use'}</button>
       </form>
+    </div>
+  );
+}
+
+function WizardApplicationsStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
+  const [apps, setApps] = useState<RealApplication[]>([]);
+  const [links, setLinks] = useState<DigitalHumanApplicationLink[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [appsResponse, linksResponse] = await Promise.all([
+        fetch('/api/v1/applications'),
+        fetch('/api/v1/digital-human-applications'),
+      ]);
+      const [appsBody, linksBody] = await Promise.all([
+        appsResponse.json().catch(() => ({})),
+        linksResponse.json().catch(() => ({})),
+      ]);
+      if (!appsResponse.ok) throw new Error(appsBody.message || 'Could not load applications.');
+      if (!linksResponse.ok) throw new Error(linksBody.message || 'Could not load application assignments.');
+      setApps(appsBody.data.items ?? []);
+      setLinks(linksBody.data.items ?? []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load applications.');
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load waits for both network responses before updating state; this effect only starts the initial request.
+  useEffect(() => { void load(); }, [load]);
+
+  async function toggle(app: RealApplication) {
+    const current = links.find((link) => link.digital_human_id === humanId && link.application_id === app.id)?.enabled ?? false;
+    setBusyId(app.id);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/digital-human-applications', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ digital_human_id: humanId, application_id: app.id, enabled: !current }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || 'Could not update this application.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this application.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div>
+      <h3>Applications and channels</h3>
+      <p className="panel-note">Choose where this Digital Human may appear. Each enabled application pins the current published Persona version.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {loaded && apps.length === 0 && <p className="panel-note">No applications exist yet. Save this Digital Human, then connect an application from the Applications page.</p>}
+      <div className="application-toggle-list">
+        {apps.map((app) => {
+          const enabled = links.some((link) => link.digital_human_id === humanId && link.application_id === app.id && link.enabled);
+          return (
+            <button type="button" className={`application-toggle-row${enabled ? ' selected' : ''}`} key={app.id} onClick={() => toggle(app)} disabled={busyId === app.id} aria-pressed={enabled}>
+              <span className="app-logo cyan">{app.name.slice(0, 2).toUpperCase()}</span>
+              <span><strong>{app.name}</strong><small>{enabled ? 'Enabled with published Persona' : 'Not enabled'}</small></span>
+              {busyId === app.id ? <RefreshCw size={16} className="spin" /> : enabled ? <CircleCheck size={17} /> : <AppWindow size={17} />}
+            </button>
+          );
+        })}
+      </div>
+      <button className="primary-button" type="button" onClick={onDone}><ArrowRight size={17} />Continue to review</button>
+    </div>
+  );
+}
+
+function WizardReviewStep({ humanId, activating, onActivate }: { humanId: string; activating: boolean; onActivate: () => void }) {
+  const [profile, setProfile] = useState<DigitalHumanProfile | null>(null);
+  const [applicationCount, setApplicationCount] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch(`/api/v1/digital-humans/${humanId}`).then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || 'Could not load the Digital Human review.');
+        return body.data as DigitalHumanProfile;
+      }),
+      fetch('/api/v1/digital-human-applications').then(async (res) => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || 'Could not load application assignments.');
+        return (body.data.items ?? []) as DigitalHumanApplicationLink[];
+      }),
+    ]).then(([nextProfile, nextLinks]) => {
+      if (cancelled) return;
+      setProfile(nextProfile);
+      setApplicationCount(nextLinks.filter((link) => link.digital_human_id === humanId && link.enabled).length);
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the Digital Human review.');
+    }).finally(() => {
+      if (!cancelled) setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [humanId]);
+
+  const checks = profile ? [
+    { label: 'Disclosed identity', ready: Boolean(profile.human.name && profile.human.role && profile.human.disclosure) },
+    { label: 'Face assigned', ready: Boolean(profile.face) },
+    { label: 'Voice assigned', ready: Boolean(profile.voice) },
+    { label: 'Knowledge linked', ready: profile.knowledge_bases.length > 0 },
+    { label: 'Published Persona linked', ready: profile.persona?.state === 'published' },
+    { label: 'Gesture profile assigned', ready: Boolean(profile.gesture_profile) },
+    { label: 'Application enabled', ready: applicationCount > 0 },
+  ] : [];
+
+  return (
+    <div>
+      <h3>Review and activate</h3>
+      <p className="panel-note">Identity, Persona, Knowledge and application access remain separate. Activation changes only this Digital Human&rsquo;s lifecycle state.</p>
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {!loaded && <p className="panel-note" role="status"><RefreshCw size={15} className="spin" /> Loading the final review…</p>}
+      {profile && (
+        <div className="wizard-review-summary">
+          <div><strong>{profile.human.name}</strong><small>{profile.human.role}</small></div>
+          <div className="requirement-list">
+            {checks.map((check) => <div key={check.label} className={check.ready ? 'done' : ''}><span>{check.ready ? <Check size={14} /> : '—'}</span>{check.label}</div>)}
+          </div>
+          <p className="panel-note">Optional items may remain incomplete; the Digital Workforce builder applies stricter deployment readiness and human approval controls.</p>
+          <button className="primary-button" type="button" onClick={onActivate} disabled={activating}>
+            {activating ? <RefreshCw size={17} className="spin" /> : <BadgeCheck size={17} />}{activating ? 'Activating…' : 'Activate Digital Human'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1328,32 +1550,55 @@ function Personas() {
 
   async function deletePersona(id: string) {
     setBusy(id);
-    await fetch(`/api/v1/personas/${id}`, { method: 'DELETE' }).catch(() => {});
-    if (selectedId === id) { setSelectedId(null); setDetail(null); }
-    await refreshList();
-    setBusy(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/personas/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this persona.');
+      if (selectedId === id) { setSelectedId(null); setDetail(null); }
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this persona.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function assignPersona(humanSlug: string, personaVersionId: string) {
     setBusy(`assign:${humanSlug}`);
-    await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, persona_version_id: personaVersionId || null }) }).catch(() => {});
-    await refreshList();
-    setBusy(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/persona-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, persona_version_id: personaVersionId || null }) });
+      await requireSuccessfulResponse(response, 'Could not assign this persona.');
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this persona.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function toggleGuardrail(guardrailId: string, currentlyOn: boolean) {
     setBusy(`guardrail:${guardrailId}`);
-    await fetch(`/api/v1/guardrails/${guardrailId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enforcement: currentlyOn ? 'off' : 'prompt' }) }).catch(() => {});
-    if (detail) await loadDetail(detail.persona.id);
-    setBusy(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/guardrails/${guardrailId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enforcement: currentlyOn ? 'off' : 'prompt' }) });
+      await requireSuccessfulResponse(response, 'Could not update this guardrail.');
+      if (detail) await loadDetail(detail.persona.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this guardrail.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function submitGuardrail(event: React.FormEvent) {
     event.preventDefault();
     if (!detail || !newGuardrailCode.trim() || !newGuardrailInstruction.trim()) return;
     setAddingGuardrail(true);
+    setError(null);
     try {
-      await fetch('/api/v1/guardrails', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ persona_id: detail.persona.id, code: newGuardrailCode.trim(), instruction: newGuardrailInstruction.trim() }) });
+      const response = await fetch('/api/v1/guardrails', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ persona_id: detail.persona.id, code: newGuardrailCode.trim(), instruction: newGuardrailInstruction.trim() }) });
+      await requireSuccessfulResponse(response, 'Could not add this guardrail.');
       setNewGuardrailCode(''); setNewGuardrailInstruction('');
       await loadDetail(detail.persona.id);
     } catch {
@@ -1595,6 +1840,7 @@ function Personas() {
 function PersonaLanguageMessages({ personaVersionId, languageCodes, messages, onSaved }: { personaVersionId: string; languageCodes: string[]; messages: PersonaLanguageMessage[]; onSaved: () => void }) {
   const [drafts, setDrafts] = useState<Record<string, { opening: string; fallback: string }>>({});
   const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function draftFor(code: string) {
     if (drafts[code]) return drafts[code];
@@ -1604,17 +1850,25 @@ function PersonaLanguageMessages({ personaVersionId, languageCodes, messages, on
 
   async function save(code: string, autoTranslate: boolean) {
     setBusyCode(code);
+    setError(null);
     const draft = draftFor(code);
-    await fetch('/api/v1/persona-versions/' + personaVersionId + '/language-messages', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ language_code: code, opening_message: draft.opening, fallback_message: draft.fallback, auto_translate: autoTranslate }),
-    }).catch(() => {});
-    onSaved();
-    setBusyCode(null);
+    try {
+      const response = await fetch('/api/v1/persona-versions/' + personaVersionId + '/language-messages', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ language_code: code, opening_message: draft.opening, fallback_message: draft.fallback, auto_translate: autoTranslate }),
+      });
+      await requireSuccessfulResponse(response, 'Could not save this language message.');
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save this language message.');
+    } finally {
+      setBusyCode(null);
+    }
   }
 
   return (
     <div className="language-message-list">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {languageCodes.map((code) => {
         const existing = messages.find((m) => m.persona_version_id === personaVersionId && m.language_code === code);
         const draft = draftFor(code);
@@ -1707,25 +1961,46 @@ function Knowledge() {
 
   async function toggleAssignment(humanSlug: string, baseId: string, assigned: boolean) {
     setBusyId(`${humanSlug}:${baseId}`);
-    await fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, knowledge_base_id: baseId, assigned }) }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/knowledge-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, knowledge_base_id: baseId, assigned }) });
+      await requireSuccessfulResponse(response, 'Could not update this knowledge assignment.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this knowledge assignment.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteBase(id: string) {
     setBusyId(id);
-    await fetch(`/api/v1/knowledge-bases/${id}`, { method: 'DELETE' }).catch(() => {});
-    if (expandedId === id) { setExpandedId(null); setDocuments([]); }
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/knowledge-bases/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this knowledge library.');
+      if (expandedId === id) { setExpandedId(null); setDocuments([]); }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this knowledge library.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteDocument(id: string) {
     setBusyId(id);
-    await fetch(`/api/v1/knowledge-documents/${id}`, { method: 'DELETE' }).catch(() => {});
-    if (expandedId) await loadDocuments(expandedId);
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/knowledge-documents/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this knowledge source.');
+      if (expandedId) await loadDocuments(expandedId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this knowledge source.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function submitCreateBase(event: React.FormEvent) {
@@ -2142,7 +2417,14 @@ function LiveSessions() {
     setLiveRoom(null);
     setCallStage("ended");
     setCallSummary({ duration, reconnected: reconnectedThisCall });
-    if (sessionId) await fetch(`/api/v1/live-sessions/${sessionId}/end`, { method: "POST" }).catch(() => {});
+    if (sessionId) {
+      try {
+        const response = await fetch(`/api/v1/live-sessions/${sessionId}/end`, { method: "POST" });
+        await requireSuccessfulResponse(response, 'The call ended locally, but its server session could not be closed.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'The call ended locally, but its server session could not be closed.');
+      }
+    }
     refresh();
   }
 
@@ -2451,9 +2733,15 @@ function PresenterStudio() {
   }
 
   async function deleteProject(id: string) {
-    await fetch(`/api/v1/presenter-projects/${id}`, { method: "DELETE" }).catch(() => {});
-    await selectProject(null);
-    await refresh();
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/presenter-projects/${id}`, { method: "DELETE" });
+      await requireSuccessfulResponse(response, 'Could not delete this presenter project.');
+      await selectProject(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this presenter project.');
+    }
   }
 
   async function generate() {
@@ -2933,16 +3221,30 @@ function FaceLibrary() {
 
   async function assignFace(humanSlug: string, faceAssetId: string) {
     setBusyId(faceAssetId);
-    await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, face_asset_id: faceAssetId || null }) }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/face-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, face_asset_id: faceAssetId || null }) });
+      await requireSuccessfulResponse(response, 'Could not assign this face.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this face.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteFace(id: string) {
     setBusyId(id);
-    await fetch(`/api/v1/faces/${id}`, { method: 'DELETE' }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/faces/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this face.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this face.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function submitAdd(event: React.FormEvent) {
@@ -3060,16 +3362,30 @@ function GestureLibrary() {
 
   async function assignProfile(humanSlug: string, gestureProfileId: string) {
     setBusyId(gestureProfileId);
-    await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, gesture_profile_id: gestureProfileId || null }) }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/gesture-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, gesture_profile_id: gestureProfileId || null }) });
+      await requireSuccessfulResponse(response, 'Could not assign this gesture profile.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this gesture profile.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteProfile(id: string) {
     setBusyId(id);
-    await fetch(`/api/v1/gesture-profiles/${id}`, { method: 'DELETE' }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/gesture-profiles/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this gesture profile.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this gesture profile.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function submitCreate(event: React.FormEvent) {
@@ -3213,16 +3529,30 @@ function VoiceLibrary() {
 
   async function assignVoice(humanSlug: string, voiceId: string) {
     setBusyId(voiceId);
-    await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, voice_id: voiceId || null }) }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch('/api/v1/voice-assignments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ human_slug: humanSlug, voice_id: voiceId || null }) });
+      await requireSuccessfulResponse(response, 'Could not assign this voice.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign this voice.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteVoice(id: string) {
     setBusyId(id);
-    await fetch(`/api/v1/voices/${id}`, { method: 'DELETE' }).catch(() => {});
-    await refresh();
-    setBusyId(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/voices/${id}`, { method: 'DELETE' });
+      await requireSuccessfulResponse(response, 'Could not delete this voice.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this voice.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function submitAdd(event: React.FormEvent) {
@@ -3464,6 +3794,7 @@ function LanguagesSettingsTab() {
 
 function LanguageTestPanel({ languageCode, personas }: { languageCode: string; personas: { id: string; name: string }[] }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [benchmarkResults, setBenchmarkResults] = useState<Record<string, unknown>[] | null>(null);
   const [benchmarkCapability, setBenchmarkCapability] = useState<string>("");
   const [testPhrase, setTestPhrase] = useState("");
@@ -3479,20 +3810,24 @@ function LanguageTestPanel({ languageCode, personas }: { languageCode: string; p
 
   async function compareProviders(capability: string) {
     setBusy(`benchmark-${capability}`);
+    setError(null);
     setBenchmarkResults(null);
     setBenchmarkCapability(capability);
     const res = await fetch("/api/v1/languages/benchmark", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language_code: languageCode, capability }) }).then((r) => r.json()).catch(() => null);
     setBusy(null);
     if (res?.success) { setTestPhrase(res.data.test_phrase); setBenchmarkResults(res.data.results); }
+    else setError(res?.message || 'Could not compare providers.');
   }
 
   async function testPersonaResponse() {
     if (!selectedPersona) return;
     setBusy("persona");
+    setError(null);
     setPersonaReply(null);
     const res = await fetch(`/api/v1/personas/${selectedPersona}/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: testMessage, language: languageCode }) }).then((r) => r.json()).catch(() => null);
     setBusy(null);
     if (res?.success) setPersonaReply(res.data);
+    else setError(res?.message || 'Could not test this Digital Human response.');
   }
 
   async function toggleMicTest() {
@@ -3526,16 +3861,23 @@ function LanguageTestPanel({ languageCode, personas }: { languageCode: string; p
   }
 
   async function saveReview(provider: string, capability: string) {
-    await fetch("/api/v1/language-reviews", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ language_code: languageCode, capability, provider, review_type: "admin_benchmark", score: reviewScore, notes: reviewNotes }),
-    }).catch(() => {});
-    setReviewSaved(true);
-    window.setTimeout(() => setReviewSaved(false), 2500);
+    setError(null);
+    try {
+      const response = await fetch("/api/v1/language-reviews", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ language_code: languageCode, capability, provider, review_type: "admin_benchmark", score: reviewScore, notes: reviewNotes }),
+      });
+      await requireSuccessfulResponse(response, 'Could not save this provider review.');
+      setReviewSaved(true);
+      window.setTimeout(() => setReviewSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save this provider review.');
+    }
   }
 
   return (
     <div className="panel language-test-panel">
+      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       <PanelTitle title={`Test & compare — ${languageCode}`} eyebrow="Real provider calls, nothing is auto-published" />
 
       <div className="editor-actions">

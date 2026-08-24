@@ -1,0 +1,92 @@
+{
+  "results": [
+    {
+      "route": "/",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "VowHumans | AI Digital Workforce Platform",
+        "bodyLength": 7522,
+        "h1": "Human presence.AI intelligence.",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    },
+    {
+      "route": "/workforce",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "AI Digital Workforce · VowHumans",
+        "bodyLength": 4542,
+        "h1": "Digital colleagues.Human authority.",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    },
+    {
+      "route": "/workforce/how-it-works",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "How the Digital Workforce Works · VowHumans",
+        "bodyLength": 3053,
+        "h1": "Eight steps outside.Twelve controls inside.",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    },
+    {
+      "route": "/legal/privacy",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "Privacy · VowHumans",
+        "bodyLength": 3306,
+        "h1": "Privacy",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    },
+    {
+      "route": "/developers",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "Developers · VowHumans",
+        "bodyLength": 1800,
+        "h1": "APIs that preserve the boundary.",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    },
+    {
+      "route": "/sign-in",
+      "status": 200,
+      "errors": [],
+      "audit": {
+        "title": "Sign In · VowHumans",
+        "bodyLength": 733,
+        "h1": "Sign in to VowHumans",
+        "loadingOverlay": false,
+        "errorOverlay": false,
+        "horizontalOverflow": false,
+        "tiny": []
+      }
+    }
+  ],
+  "mobile": {
+    "overflow": false,
+    "bodyLength": 4474
+  }
+}

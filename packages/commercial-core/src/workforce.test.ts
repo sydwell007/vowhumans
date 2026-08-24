@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autonomyAllowedForRisk, decideWorkforceAction, evaluateWorkforceReadiness, workforceTemplateBySlug, workforceTemplates } from "./workforce.js";
+import { WORKFORCE_BUILDER_STEPS, autonomyAllowedForRisk, decideWorkforceAction, evaluateWorkforceReadiness, workforceTemplateBySlug, workforceTemplates } from "./workforce.js";
 
 const readyInput = {
   name: "Naledi",
@@ -26,6 +26,12 @@ const readyInput = {
 };
 
 describe("digital workforce contracts", () => {
+  it("keeps the governed builder at exactly 12 ordered controls", () => {
+    expect(WORKFORCE_BUILDER_STEPS).toEqual([
+      "role", "functions", "skills", "knowledge", "tools", "workflows",
+      "objectives", "guardrails", "collaboration", "testing", "approval", "deployment",
+    ]);
+  });
   it("keeps a useful role catalogue", () => expect(workforceTemplates.length).toBeGreaterThanOrEqual(20));
   it("provides the AI receptionist template", () => expect(workforceTemplateBySlug("ai-receptionist")?.functions.length).toBeGreaterThan(1));
   it("blocks deployment until every readiness check and an approval pass", () => {

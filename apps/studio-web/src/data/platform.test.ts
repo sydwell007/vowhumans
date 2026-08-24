@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { humans, navigation } from "./platform";
+import { DIGITAL_HUMAN_BUILDER_STEPS, humans, navigation } from "./platform";
 
 describe("Studio seed contracts", () => {
   it("labels every digital human as AI generated", () => {
@@ -10,6 +10,11 @@ describe("Studio seed contracts", () => {
     expect(humans.filter((human) => human.name === "Thandi Mokoena" || human.name === "Sipho Daniels")).toHaveLength(2);
   });
   it("exposes governance navigation", () => expect(navigation.flatMap((group) => group.items).some((item) => item.label === "Identity & Consent")).toBe(true));
+  it("keeps the Digital Human builder at eight explicit stages", () => {
+    expect(DIGITAL_HUMAN_BUILDER_STEPS).toEqual([
+      "Identity", "Face", "Voice", "Knowledge", "Persona", "Gesture", "Applications", "Review",
+    ]);
+  });
 
   // Regression guard for a real past bug: an assignment dropdown once listed
   // this static catalogue alongside real per-organisation digital_humans under
