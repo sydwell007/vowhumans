@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         (SELECT count(*)::int FROM human_knowledge_assignments hka WHERE hka.organisation_id=dh.organisation_id AND hka.human_slug=dh.id::text) AS knowledge_sources,
         (SELECT count(*)::int FROM digital_human_applications dha WHERE dha.organisation_id=dh.organisation_id AND dha.digital_human_id=dh.id AND dha.enabled=true) AS applications
       FROM digital_humans dh
-      JOIN identities i ON i.id=dh.identity_id AND i.provenance->>'source'='vowhumans-showcase'
+      JOIN identities i ON i.id=dh.identity_id
       LEFT JOIN human_face_assignments hfa ON hfa.organisation_id=dh.organisation_id AND hfa.human_slug=dh.id::text
       LEFT JOIN face_assets fa ON fa.id=hfa.face_asset_id
       LEFT JOIN media_blobs mb ON mb.organisation_id=dh.organisation_id AND mb.object_key=fa.object_key
@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN human_gesture_assignments hga ON hga.organisation_id=dh.organisation_id AND hga.human_slug=dh.id::text
       LEFT JOIN gesture_profiles gp ON gp.id=hga.gesture_profile_id
       WHERE dh.organisation_id=${organisation.id} AND dh.state <> 'archived'
+        AND dh.name=ANY(${SHOWCASES.map((item) => item.name)}::text[])
       ORDER BY dh.name
     `,
     sql`
@@ -79,7 +80,8 @@ export async function GET(request: NextRequest) {
         (SELECT count(*)::int FROM colleague_approvals x WHERE x.digital_colleague_id=dc.id AND x.decision='approved') AS approvals,
         (SELECT count(*)::int FROM colleague_deployments x WHERE x.digital_colleague_id=dc.id AND x.status='deployed') AS deployments
       FROM digital_colleagues dc
-      WHERE dc.organisation_id=${organisation.id} AND dc.configuration->>'source'='vowhumans-showcase'
+      WHERE dc.organisation_id=${organisation.id}
+        AND dc.name=ANY(${SHOWCASES.map((item) => item.colleague)}::text[])
       ORDER BY dc.name
     `,
   ]);
