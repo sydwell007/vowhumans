@@ -54,6 +54,11 @@ covers the default (health API) mode for that directory.
   mode alongside the two above, used only by studio-web's own public embed routes,
   never by the browser or the PHP adapter directly.
 
+If this value is missing on either side, `/api/public/v1/embed-livekit` returns
+`PROVIDER_CONFIGURATION_ERROR` before making an upstream request. If the two
+values differ, the Render gateway returns 401 and Studio reports
+`GATEWAY_AUTH_ERROR`. Always redeploy both services after changing the value.
+
 **`realtime-agent-health`:** no required env vars for the service itself to run,
 but Studio's Live Sessions page (`GET /api/v1/live-sessions`) polls this
 service's `/health` to show whether the realtime voice provider is actually

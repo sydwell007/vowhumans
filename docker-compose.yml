@@ -10,7 +10,9 @@ services:
       POSTGRES_DB: vowhumans
       POSTGRES_USER: vowhumans
       POSTGRES_PASSWORD: vowhumans
-    ports: ["5432:5432"]
+    # VowRewards already uses host port 5432 on the shared development machine.
+    # Containers still reach this database on postgres:5432.
+    ports: ["5433:5432"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./packages/database/migrations:/docker-entrypoint-initdb.d:ro
@@ -49,6 +51,7 @@ services:
       DATABASE_URL: postgresql://vowhumans:vowhumans@postgres:5432/vowhumans
       REDIS_URL: redis://redis:6379/0
       VOWHUMANS_SERVICE_API_KEY: dev-only-change-me
+      VOWHUMANS_EMBED_TOKEN_SECRET: ${VOWHUMANS_EMBED_TOKEN_SECRET:-dev-only-embed-token-secret-change-me}
       LIVEKIT_URL: ws://livekit:7880
       LIVEKIT_API_KEY: devkey
       LIVEKIT_API_SECRET: secret
@@ -133,6 +136,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
       API_GATEWAY_URL: http://api-gateway:8000
       VOWHUMANS_INTERNAL_KEY: dev-only-change-me
+      VOWHUMANS_EMBED_TOKEN_SECRET: ${VOWHUMANS_EMBED_TOKEN_SECRET:-dev-only-embed-token-secret-change-me}
     ports: ["3000:3000"]
     depends_on: [api-gateway]
 
@@ -140,4 +144,3 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
-

@@ -26,6 +26,10 @@ services:
       # Must be the exact same value already set as VOWHUMANS_SERVICE_API_KEY in Vercel.
       - key: VOWHUMANS_SERVICE_API_KEY
         sync: false
+      # Must match studio-web's server-only Vercel value exactly. It signs
+      # short-lived public embed credentials and is never sent to the browser.
+      - key: VOWHUMANS_EMBED_TOKEN_SECRET
+        sync: false
       # Gates whether tokens attach a RoomAgentDispatch for vowhumans-avatar-participant
       # at all — leave unset/false until that worker (below) is deployed and healthy,
       # so a half-configured avatar pipeline can't affect the working voice-only call.

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Mic, MicOff, Sparkles } from "lucide-react";
+import { CircleAlert, Mic, MicOff, RefreshCw, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 
@@ -35,7 +35,7 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
       });
       const tokenBody = await tokenRes.json().catch(() => null);
       if (!tokenRes.ok || !tokenBody?.data?.url || !tokenBody?.data?.token) {
-        setErrorMessage("Could not start the live call.");
+        setErrorMessage(tokenBody?.message || "The AI presenter could not start. Please try again shortly.");
         setStage("error");
         return;
       }
@@ -58,7 +58,10 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
       )}
       {stage === "connecting" && <div className="embed-status">Connecting…</div>}
       {stage === "error" && (
-        <div className="embed-status embed-error"><CircleAlert size={18} />{errorMessage}</div>
+        <div className="embed-status embed-error" role="alert">
+          <span><CircleAlert size={18} />{errorMessage}</span>
+          <button type="button" onClick={start}><RefreshCw size={14} />Try again</button>
+        </div>
       )}
       {stage === "live" && liveRoom && (
         <div className="embed-live">

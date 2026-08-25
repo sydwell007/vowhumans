@@ -7,6 +7,7 @@ import { mintEmbedToken } from "@/lib/embedToken";
 // and the pairing that created it was already validated as enabled, so re-reading
 // it here for its organisation is enough; no separate re-validation is needed.
 export async function POST(request: NextRequest) {
+  const requestId = randomUUID();
   const body = await request.json().catch(() => ({}));
   const sessionId = typeof body.session_id === "string" ? body.session_id : "";
   if (!sessionId) {
@@ -21,12 +22,37 @@ export async function POST(request: NextRequest) {
   }
 
   const baseUrl = process.env.API_GATEWAY_URL;
-  if (!baseUrl) {
-    return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "LiveKit tokens are issued only by the configured server-side API gateway." }, { status: 503 });
+  const embedTokenSecret = process.env.VOWHUMANS_EMBED_TOKEN_SECRET;
+  let gatewayUrl: URL | null = null;
+  try {
+    gatewayUrl = baseUrl ? new URL(baseUrl) : null;
+  } catch {
+    gatewayUrl = null;
+  }
+  const gatewayUrlAllowed = Boolean(
+    gatewayUrl &&
+      (gatewayUrl.protocol === "https:" ||
+        (process.env.NODE_ENV !== "production" && gatewayUrl.protocol === "http:")),
+  );
+  if (!gatewayUrlAllowed || !embedTokenSecret) {
+    console.error("[embed-livekit] provider configuration missing", {
+      requestId,
+      hasGatewayUrl: gatewayUrlAllowed,
+      hasEmbedTokenSecret: Boolean(embedTokenSecret),
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: "PROVIDER_CONFIGURATION_ERROR",
+        message: "The AI presenter service is temporarily unavailable.",
+        meta: { request_id: requestId },
+      },
+      { status: 503, headers: { "x-request-id": requestId } },
+    );
   }
 
   try {
-    const upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/livekit/token`, {
+    const upstream = await fetch(`${gatewayUrl!.toString().replace(/\/$/, "")}/api/v1/livekit/token`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${mintEmbedToken(session.organisation_id)}` },
       body: JSON.stringify({
@@ -35,14 +61,47 @@ export async function POST(request: NextRequest) {
         human_slug: session.digital_human_id,
         persona_version_id: session.persona_version_id,
       }),
+      cache: "no-store",
       signal: AbortSignal.timeout(40000),
     });
     const data = await upstream.json().catch(() => null);
     if (!upstream.ok || data === null) {
-      return NextResponse.json({ success: false, code: "GATEWAY_ERROR", message: "Could not start the live call." }, { status: 502 });
+      console.error("[embed-livekit] gateway rejected token request", {
+        requestId,
+        gatewayHost: gatewayUrl!.host,
+        upstreamStatus: upstream.status,
+        upstreamCode:
+          data && typeof data === "object" && "code" in data ? String(data.code) : null,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          code: upstream.status === 401 ? "GATEWAY_AUTH_ERROR" : "GATEWAY_ERROR",
+          message: "The AI presenter could not start. Please try again shortly.",
+          meta: { request_id: requestId },
+        },
+        { status: 502, headers: { "x-request-id": requestId } },
+      );
     }
-    return NextResponse.json({ success: true, data, meta: { mode: "live", request_id: randomUUID() } });
-  } catch {
-    return NextResponse.json({ success: false, code: "GATEWAY_ERROR", message: "Could not start the live call." }, { status: 502 });
+    return NextResponse.json(
+      { success: true, data, meta: { mode: "live", request_id: requestId } },
+      { headers: { "x-request-id": requestId } },
+    );
+  } catch (error) {
+    console.error("[embed-livekit] gateway request failed", {
+      requestId,
+      gatewayHost: gatewayUrl!.host,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown gateway failure",
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: "GATEWAY_UNREACHABLE",
+        message: "The AI presenter could not connect. Please try again shortly.",
+        meta: { request_id: requestId },
+      },
+      { status: 502, headers: { "x-request-id": requestId } },
+    );
   }
 }
