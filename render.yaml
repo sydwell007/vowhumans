@@ -67,6 +67,10 @@ services:
         sync: false
       - key: VOWHUMANS_INTERNAL_KEY
         sync: false
+      # The opening reply waits briefly for synchronized avatar tracks. If face
+      # preparation fails, the existing voice-only path continues after this bound.
+      - key: AVATAR_READY_WAIT_SECONDS
+        value: "15"
 
   # Joins the same room as vowhumans-realtime-agent (via explicit LiveKit agent
   # dispatch — see services/api-gateway's RoomAgentDispatch), renders lip-synced
@@ -106,4 +110,6 @@ services:
       - key: AVATAR_RENDER_TIMEOUT_SECONDS
         value: "45"
       - key: AVATAR_SILENCE_HOLD_SECONDS
-        value: "0.5"
+        value: "1.5"
+      - key: AVATAR_TURN_DRAIN_SECONDS
+        value: "0.25"

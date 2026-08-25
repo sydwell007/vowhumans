@@ -26,9 +26,9 @@ a PositionalEncoding module, is unrelated to the whisper encoder).
 """
 from __future__ import annotations
 
-import copy
 import os
 import pickle
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -42,7 +42,7 @@ import torch
 MODELS_DIR = Path(os.getenv("MUSETALK_MODELS_DIR", "./models"))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 FPS = 25
-BATCH_SIZE = int(os.getenv("MUSETALK_BATCH_SIZE", "4"))
+BATCH_SIZE = int(os.getenv("MUSETALK_BATCH_SIZE", "16"))
 
 
 @dataclass
@@ -140,9 +140,8 @@ class MuseTalkEngine:
         from musetalk.utils.blending import get_image_blending
         from musetalk.utils.utils import datagen
 
+        owns_out_dir = out_dir is None
         out_dir = out_dir or tempfile.mkdtemp(prefix="musetalk-render-")
-        frames_dir = Path(out_dir) / "frames"
-        frames_dir.mkdir(parents=True, exist_ok=True)
 
         # get_audio_feature() returns (features, sample_count) — both required by
         # get_whisper_chunk() below (librosa_length has no default and was previously
@@ -161,45 +160,62 @@ class MuseTalkEngine:
         latents = [avatar.latent] * frame_count
         gen = datagen(whisper_chunks, latents, BATCH_SIZE)
 
-        frame_index = 0
-        for whisper_batch, latent_batch in gen:
-            with torch.no_grad():
-                audio_feature_batch = self.pe(whisper_batch.to(DEVICE))
-                pred_latents = self.unet.model(
-                    latent_batch.to(DEVICE, dtype=self.weight_dtype),
-                    self._timesteps,
-                    encoder_hidden_states=audio_feature_batch,
-                ).sample
-                pred_latents = pred_latents.to(device=DEVICE, dtype=self.vae.vae.dtype)
-                recon_frames = self.vae.decode_latents(pred_latents)
-
-            x1, y1, x2, y2 = avatar.bbox
-            for generated in recon_frames:
-                # The VAE always decodes at a fixed 256x256 working resolution — the
-                # generated crop must be resized back to the original detected face
-                # bbox size before blending, or PIL's paste raises "images do not
-                # match" (confirmed live). Matches MuseTalk's own process_frames().
-                resized = cv2.resize(generated.astype(np.uint8), (x2 - x1, y2 - y1))
-                blended = get_image_blending(
-                    copy.deepcopy(avatar.original_frame), resized, avatar.bbox, avatar.mask, avatar.mask_crop_box,
-                )
-                cv2.imwrite(str(frames_dir / f"{frame_index:06d}.png"), blended)
-                frame_index += 1
-
         silent_video_path = str(Path(out_dir) / "silent.mp4")
-        subprocess.run(
-            ["ffmpeg", "-y", "-r", str(FPS), "-i", str(frames_dir / "%06d.png"),
-             "-vcodec", "libx264", "-pix_fmt", "yuv420p", silent_video_path],
-            check=True, capture_output=True,
+        height, width = avatar.original_frame.shape[:2]
+        encoder = subprocess.Popen(
+            [
+                "ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo",
+                "-pix_fmt", "bgr24", "-s", f"{width}x{height}", "-r", str(FPS),
+                "-i", "pipe:0", "-an", "-vcodec", "libx264", "-preset", "ultrafast",
+                "-tune", "zerolatency", "-pix_fmt", "yuv420p", silent_video_path,
+            ],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
 
-        final_video_path = str(Path(out_dir) / f"reply-{uuid.uuid4().hex[:8]}.mp4")
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", silent_video_path, "-i", audio_path,
-             "-c:v", "copy", "-c:a", "aac", "-shortest", final_video_path],
-            check=True, capture_output=True,
-        )
-        return final_video_path
+        try:
+            x1, y1, x2, y2 = avatar.bbox
+            assert encoder.stdin is not None
+            for whisper_batch, latent_batch in gen:
+                with torch.no_grad():
+                    audio_feature_batch = self.pe(whisper_batch.to(DEVICE))
+                    pred_latents = self.unet.model(
+                        latent_batch.to(DEVICE, dtype=self.weight_dtype),
+                        self._timesteps,
+                        encoder_hidden_states=audio_feature_batch,
+                    ).sample
+                    pred_latents = pred_latents.to(device=DEVICE, dtype=self.vae.vae.dtype)
+                    recon_frames = self.vae.decode_latents(pred_latents)
+
+                for generated in recon_frames:
+                    # Stream frames into ffmpeg. The previous PNG-per-frame path
+                    # wrote and reread hundreds of large files for every reply.
+                    resized = cv2.resize(generated.astype(np.uint8), (x2 - x1, y2 - y1))
+                    blended = get_image_blending(
+                        avatar.original_frame.copy(), resized, avatar.bbox, avatar.mask, avatar.mask_crop_box,
+                    )
+                    encoder.stdin.write(np.ascontiguousarray(blended).tobytes())
+
+            encoder.stdin.close()
+            stderr = encoder.stderr.read() if encoder.stderr is not None else b""
+            return_code = encoder.wait()
+            if return_code != 0:
+                raise subprocess.CalledProcessError(return_code, encoder.args, stderr=stderr)
+
+            final_video_path = str(Path(out_dir) / f"reply-{uuid.uuid4().hex[:8]}.mp4")
+            subprocess.run(
+                ["ffmpeg", "-loglevel", "error", "-y", "-i", silent_video_path, "-i", audio_path,
+                 "-c:v", "copy", "-c:a", "aac", "-shortest", "-movflags", "+faststart", final_video_path],
+                check=True, capture_output=True,
+            )
+            return final_video_path
+        except Exception:
+            if encoder.poll() is None:
+                encoder.kill()
+                encoder.wait()
+            if owns_out_dir:
+                shutil.rmtree(out_dir, ignore_errors=True)
+            raise
 
 
 def save_avatar_cache(avatar: PreparedAvatar, path: str) -> None:

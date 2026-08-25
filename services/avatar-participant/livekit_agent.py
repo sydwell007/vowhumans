@@ -29,7 +29,6 @@ import asyncio
 import io
 import json
 import os
-import subprocess
 import tempfile
 import wave
 from pathlib import Path
@@ -81,6 +80,7 @@ RENDER_TIMEOUT_SECONDS = float(os.getenv("AVATAR_RENDER_TIMEOUT_SECONDS", "45"))
 # OpenAI Realtime speech pacing — too short cuts a reply on a natural pause, too
 # long adds latency waiting for the next turn to start.
 SILENCE_HOLD_SECONDS = float(os.getenv("AVATAR_SILENCE_HOLD_SECONDS", "0.7"))
+TURN_DRAIN_SECONDS = float(os.getenv("AVATAR_TURN_DRAIN_SECONDS", "0.25"))
 SPEAKING_POLL_INTERVAL_SECONDS = 0.1
 
 
@@ -168,9 +168,10 @@ class AvatarSession:
         self._buffer: list[rtc.AudioFrame] = []
         self._speaking = False
         self._silence_elapsed = 0.0
+        self._has_explicit_turn_events = False
+        self._pending_finalize: asyncio.Task[None] | None = None
         self._render_lock = asyncio.Lock()
         self._stop = asyncio.Event()
-        self._avatar_ready = False
 
     async def run(self) -> None:
         video_track = rtc.LocalVideoTrack.create_video_track(AVATAR_VIDEO_TRACK, self._video_source)
@@ -182,7 +183,16 @@ class AvatarSession:
 
         self._ctx.room.on("track_subscribed", self._on_track_subscribed)
         self._ctx.room.on("active_speakers_changed", self._on_active_speakers_changed)
+        self._ctx.room.on("data_received", self._on_data_received)
         self._ctx.room.on("disconnected", lambda *_: self._stop.set())
+
+        # The voice worker waits for this before generating its opening reply. The
+        # browser can therefore select the avatar audio track before any speech is
+        # emitted, avoiding a mid-sentence audio-source switch.
+        await self._ctx.room.local_participant.publish_data(
+            json.dumps({"type": "vhm_avatar_ready"}),
+            reliable=True,
+        )
 
         # In case the agent's track was already subscribed before these listeners
         # were attached (a real possibility — publish_track above has no ordering
@@ -199,6 +209,8 @@ class AvatarSession:
             await self._stop.wait()
         finally:
             watcher.cancel()
+            if self._pending_finalize is not None:
+                self._pending_finalize.cancel()
 
     def _on_track_subscribed(self, track: rtc.Track, publication: rtc.TrackPublication, participant: rtc.RemoteParticipant) -> None:
         _log(f"track_subscribed: participant identity={participant.identity} kind={participant.kind} track.kind={track.kind} track.name={publication.name!r}")
@@ -213,10 +225,34 @@ class AvatarSession:
     def _on_active_speakers_changed(self, speakers: list[rtc.Participant]) -> None:
         if self._agent_participant is None:
             return
+        if self._has_explicit_turn_events:
+            return
         was_speaking = self._speaking
         self._speaking = any(p.sid == self._agent_participant.sid for p in speakers)
         if self._speaking != was_speaking:
             _log(f"active_speakers_changed: agent speaking={self._speaking} (speakers={[p.identity for p in speakers]})")
+
+    def _on_data_received(self, data_packet) -> None:
+        try:
+            message = json.loads(data_packet.data.decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, ValueError):
+            return
+        if message.get("type") != "vhm_voice_state":
+            return
+
+        state = message.get("state")
+        if state not in {"initializing", "idle", "listening", "thinking", "speaking"}:
+            return
+        self._has_explicit_turn_events = True
+        was_speaking = self._speaking
+        self._speaking = state == "speaking"
+        if self._speaking:
+            if self._pending_finalize is not None:
+                self._pending_finalize.cancel()
+                self._pending_finalize = None
+        elif was_speaking:
+            self._pending_finalize = asyncio.create_task(self._finalize_after_drain())
+        _log(f"voice state event: {state} (was_speaking={was_speaking})")
 
     async def _consume_agent_audio(self, track: rtc.Track) -> None:
         _log("_consume_agent_audio: starting to consume audio frames")
@@ -232,9 +268,29 @@ class AvatarSession:
             _log(f"_consume_agent_audio: stream ended after {frame_count} frames")
             await stream.aclose()
 
+    async def _finalize_after_drain(self) -> None:
+        try:
+            # Reliable data and RTP audio use different transports. Give the final
+            # audio packets a short window to arrive after the state transition.
+            await asyncio.sleep(TURN_DRAIN_SECONDS)
+            if not self._speaking:
+                self._dispatch_buffer("voice state")
+        finally:
+            self._pending_finalize = None
+
+    def _dispatch_buffer(self, source: str) -> None:
+        if not self._buffer:
+            return
+        self._silence_elapsed = 0.0
+        frames, self._buffer = self._buffer, []
+        _log(f"turn finalized from {source}, {len(frames)} frames, dispatching render")
+        asyncio.create_task(self._handle_turn(frames))
+
     async def _watch_for_silence(self) -> None:
         while True:
             await asyncio.sleep(SPEAKING_POLL_INTERVAL_SECONDS)
+            if self._has_explicit_turn_events:
+                continue
             if self._speaking:
                 self._silence_elapsed = 0.0
                 continue
@@ -242,10 +298,7 @@ class AvatarSession:
                 continue
             self._silence_elapsed += SPEAKING_POLL_INTERVAL_SECONDS
             if self._silence_elapsed >= SILENCE_HOLD_SECONDS:
-                self._silence_elapsed = 0.0
-                frames, self._buffer = self._buffer, []
-                _log(f"_watch_for_silence: utterance finalized, {len(frames)} frames, dispatching render")
-                asyncio.create_task(self._handle_turn(frames))
+                self._dispatch_buffer("active-speaker fallback")
 
     async def _handle_turn(self, frames: list[rtc.AudioFrame]) -> None:
         # One render at a time — a turn that's still rendering when the next one
@@ -253,26 +306,15 @@ class AvatarSession:
         async with self._render_lock:
             try:
                 video_bytes = await asyncio.wait_for(self._render(frames), timeout=RENDER_TIMEOUT_SECONDS)
-            except (TimeoutError, asyncio.TimeoutError, httpx.HTTPError, subprocess.CalledProcessError) as exc:
+            except (TimeoutError, asyncio.TimeoutError, httpx.HTTPError) as exc:
                 _log(f"Render failed or timed out ({exc}) — falling back to raw audio for this turn.")
                 await self._play_frames(frames)
                 return
             if video_bytes is None:
                 await self._play_frames(frames)
                 return
-            if not self._avatar_ready:
-                # The browser keeps the raw voice track for the first turn. Use
-                # that turn to warm the GPU, then switch only after a real render
-                # succeeds so working audio is never muted behind a blank video.
-                self._avatar_ready = True
-                await self._ctx.room.local_participant.publish_data(
-                    json.dumps({"type": "vhm_avatar_ready"}),
-                    reliable=True,
-                )
-                _log("_handle_turn: first render succeeded; published vhm_avatar_ready")
-                return
             _log(f"_handle_turn: render succeeded, {len(video_bytes)} bytes, playing rendered clip")
-            await self._play_rendered_clip(video_bytes)
+            await self._play_rendered_clip(video_bytes, frames)
 
     async def _render(self, frames: list[rtc.AudioFrame]) -> bytes | None:
         wav_bytes = _frames_to_wav(frames)
@@ -293,32 +335,34 @@ class AvatarSession:
         for frame in frames:
             await self._audio_source.capture_frame(frame)
 
-    async def _play_rendered_clip(self, mp4_bytes: bytes) -> None:
+    async def _play_rendered_clip(self, mp4_bytes: bytes, audio_frames: list[rtc.AudioFrame]) -> None:
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
             f.write(mp4_bytes)
             video_path = f.name
-        pcm_path = f"{video_path}.pcm"
         try:
             frames, fps = _read_video_frames(video_path)
-            # ffmpeg subprocess extraction reuses musetalk_engine.py's existing
-            # pattern rather than adding a PyAV dependency just for this.
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", video_path, "-f", "s16le", "-ar", str(AUDIO_SAMPLE_RATE), "-ac", str(AUDIO_CHANNELS), pcm_path],
-                check=True, capture_output=True,
-            )
-            pcm_bytes = Path(pcm_path).read_bytes()
+            if not frames:
+                _log("Rendered clip contained no readable video frames; replaying clean audio only.")
+                await self._play_frames(audio_frames)
+                return
+            # Reuse the original LiveKit PCM instead of decoding the AAC copy from
+            # the MP4. This avoids a lossy encode/decode cycle and its priming
+            # padding, which was audible as broken words and visible as lip drift.
             await asyncio.gather(
                 self._play_video_frames(frames, 1.0 / fps),
-                self._play_pcm(pcm_bytes),
+                self._play_frames(audio_frames),
             )
         finally:
             Path(video_path).unlink(missing_ok=True)
-            Path(pcm_path).unlink(missing_ok=True)
 
     async def _play_video_frames(self, frames: list[np.ndarray], interval: float) -> None:
-        for bgr in frames:
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        for index, bgr in enumerate(frames):
             self._capture_video_frame(bgr)
-            await asyncio.sleep(interval)
+            delay = started_at + ((index + 1) * interval) - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
 
     def _capture_video_frame(self, bgr: np.ndarray) -> None:
         # Assigned faces and rendered clips can have different dimensions; every
@@ -333,17 +377,6 @@ class AvatarSession:
                 rgb.tobytes(),
             )
         )
-
-    async def _play_pcm(self, pcm_bytes: bytes) -> None:
-        bytes_per_sample = 2  # s16le
-        frame_samples = int(AUDIO_SAMPLE_RATE * 0.02)  # 20ms frames
-        frame_bytes = frame_samples * bytes_per_sample * AUDIO_CHANNELS
-        for offset in range(0, len(pcm_bytes), frame_bytes):
-            chunk = pcm_bytes[offset : offset + frame_bytes]
-            if len(chunk) < frame_bytes:
-                chunk = chunk + b"\x00" * (frame_bytes - len(chunk))
-            await self._audio_source.capture_frame(rtc.AudioFrame(chunk, AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, frame_samples))
-
 
 def _frames_to_wav(frames: list[rtc.AudioFrame]) -> bytes:
     buffer = io.BytesIO()

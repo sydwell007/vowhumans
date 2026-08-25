@@ -1,7 +1,9 @@
 from __future__ import annotations
+import asyncio
 import hmac
 import logging
 import os
+import shutil
 import tempfile
 import time
 import urllib.request
@@ -9,15 +11,18 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 log = logging.getLogger("avatar-worker")
-app = FastAPI(title="VowHumans Avatar Worker", version="1.0.0")
+app = FastAPI(title="VowHumans Avatar Worker", version="1.1.0")
 
 ENABLE_MUSETALK = os.getenv("ENABLE_MUSETALK", "false").lower() == "true"
 _engine = None
 _engine_error: str | None = None
 _avatars: dict[str, object] = {}  # avatar_id -> PreparedAvatar, in-memory only
+_render_lock = asyncio.Lock()
 
 if ENABLE_MUSETALK:
     try:
@@ -57,6 +62,7 @@ def health():
         "model_loaded": _engine is not None,
         "model_error": _engine_error,
         "cached_avatars": len(_avatars),
+        "render_batch_size": int(os.getenv("MUSETALK_BATCH_SIZE", "16")),
         "fallback": "audio-only",
     }
 
@@ -131,10 +137,24 @@ async def render(request: Request, x_internal_key: str | None = Header(default=N
     if avatar is None:
         Path(audio_path).unlink(missing_ok=True)
         raise HTTPException(404, "Unknown avatar_id — call /internal/v1/avatars first (or it may have been released).")
+    started_at = time.perf_counter()
     try:
-        video_path = _engine.render(avatar, audio_path)
+        # MuseTalk uses one shared model on one GPU. Serialize inference explicitly
+        # and run it off the FastAPI event loop so /health remains responsive.
+        async with _render_lock:
+            video_path = await run_in_threadpool(_engine.render, avatar, audio_path)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"Rendering failed: {exc}") from exc
     finally:
         Path(audio_path).unlink(missing_ok=True)
-    return FileResponse(video_path, media_type="video/mp4", filename="reply.mp4")
+
+    render_ms = round((time.perf_counter() - started_at) * 1000)
+    log.info("Rendered avatar reply in %d ms", render_ms)
+    render_dir = Path(video_path).parent
+    return FileResponse(
+        video_path,
+        media_type="video/mp4",
+        filename="reply.mp4",
+        headers={"X-VowHumans-Render-Ms": str(render_ms)},
+        background=BackgroundTask(shutil.rmtree, render_dir, ignore_errors=True),
+    )

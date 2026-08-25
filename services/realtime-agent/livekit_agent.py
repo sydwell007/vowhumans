@@ -30,12 +30,32 @@ INTERNAL_KEY = os.getenv("VOWHUMANS_INTERNAL_KEY", "")
 FALLBACK_INSTRUCTIONS = "Stay within the configured Persona scope, keep answers concise, and preserve user privacy."
 FALLBACK_OPENING_INSTRUCTION = "Disclose that you are AI, then deliver the approved opening message."
 FALLBACK_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
+AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
+AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 
 
 class VowHumansAgent(Agent):
     def __init__(self, instructions: str, tools: list | None = None):
         disclosure = "You are an AI-generated digital human. Never imply that you are a real person. "
         super().__init__(instructions=disclosure + instructions, tools=tools or [])
+
+
+def _avatar_track_is_present(ctx: JobContext) -> bool:
+    return any(
+        publication.name == AVATAR_VIDEO_TRACK
+        for participant in ctx.room.remote_participants.values()
+        for publication in participant.track_publications.values()
+    )
+
+
+async def _publish_voice_state(ctx: JobContext, state: str) -> None:
+    try:
+        await ctx.room.local_participant.publish_data(
+            json.dumps({"type": "vhm_voice_state", "state": state}),
+            reliable=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - room teardown can race the final state event
+        print(f"[realtime-agent] voice state publish skipped: {exc}", flush=True)
 
 
 async def _fetch_persona(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, language: str | None = None) -> dict | None:
@@ -194,8 +214,34 @@ async def entrypoint(ctx: JobContext):
             flush=True,
         )
 
+    avatar_ready = asyncio.Event()
+
+    def _on_avatar_data(data_packet) -> None:
+        try:
+            message = json.loads(data_packet.data.decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, ValueError):
+            return
+        if message.get("type") == "vhm_avatar_ready":
+            avatar_ready.set()
+
+    ctx.room.on("data_received", _on_avatar_data)
+
     session = AgentSession(llm=openai.realtime.RealtimeModel(model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"), voice=voice))
+
+    def _on_agent_state_changed(event) -> None:
+        asyncio.create_task(_publish_voice_state(ctx, event.new_state))
+
+    session.on("agent_state_changed", _on_agent_state_changed)
     await session.start(room=ctx.room, agent=VowHumansAgent(persona_instructions, tools))
+
+    # Prepare the synchronized audio/video path before the first reply. If the
+    # avatar service is unavailable, continue in voice-only mode after a bounded
+    # wait instead of making the lesson fail.
+    if not _avatar_track_is_present(ctx):
+        try:
+            await asyncio.wait_for(avatar_ready.wait(), timeout=AVATAR_READY_WAIT_SECONDS)
+        except asyncio.TimeoutError:
+            print("[realtime-agent] avatar readiness timed out; continuing voice-only", flush=True)
     await session.generate_reply(instructions=opening_instruction)
 
     # Mid-call language switching. Both calls below were verified against the
