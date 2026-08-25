@@ -75,13 +75,7 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
         }
         const element = track.attach() as HTMLMediaElement;
         element.autoplay = true;
-        if (isAvatarTrack) {
-          // Avatar tracks are published before the voice worker starts speaking.
-          // Select the synchronized path immediately so a reply can never switch
-          // audio sources halfway through a sentence.
-          avatarModeRef.current = true;
-          if (rawAudioElRef.current) rawAudioElRef.current.muted = true;
-        } else {
+        if (!isAvatarTrack) {
           // The raw voice-agent track: play unless we've already switched into
           // avatar mode (e.g. it re-subscribes after a reconnect mid-call).
           element.muted = avatarModeRef.current;
