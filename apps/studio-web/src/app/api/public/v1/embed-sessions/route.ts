@@ -158,7 +158,11 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: { session_id: session.id, disclosure: "You are speaking with an AI-generated digital human, not a real person." },
+    data: {
+      session_id: session.id,
+      portrait_url: `/api/public/v1/embed-face?session_id=${encodeURIComponent(session.id)}`,
+      disclosure: "You are speaking with an AI-generated digital human, not a real person.",
+    },
     meta: { mode: "live", request_id: randomUUID() },
   }, { status: 201 });
 }

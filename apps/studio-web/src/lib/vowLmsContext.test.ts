@@ -33,7 +33,8 @@ describe("VowLMS lesson context", () => {
           lesson_slug: "module-reading-material",
           lesson_title: "Module Reading Material",
           module_title: "Module 1: Foundation",
-          lesson_text: "Integrity means aligning workplace conduct with ethical principles.",
+          lesson_text:
+            "Integrity means aligning workplace conduct\u0000 with ethical principles.",
           resource: null,
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -45,6 +46,7 @@ describe("VowLMS lesson context", () => {
 
     expect(context.lesson_title).toBe("Module Reading Material");
     expect(context.content).toContain("Integrity means");
+    expect(context.content).not.toContain("\u0000");
     expect(fetchMock).toHaveBeenCalledWith(
       new URL(
         "https://vowlms.vercel.app/api/vowhumans/lesson-context/module-reading-material",

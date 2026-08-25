@@ -16,6 +16,16 @@ const nextConfig: NextConfig = {
   // pdf-parse in particular has a known bundler-import gotcha (a debug harness in its
   // own index.js that misfires under tree-shaking) — keep these as plain Node externals.
   serverExternalPackages: ["@napi-rs/canvas", "pdf-parse", "mammoth", "exceljs"],
+  // pdf-parse loads the PDF.js worker dynamically at runtime, which prevents Next's
+  // output tracer from discovering it. Keep the worker and canvas runtime beside the
+  // embed-session function so lesson PDFs can be extracted on Vercel.
+  outputFileTracingIncludes: {
+    "/api/public/v1/embed-sessions": [
+      "../../node_modules/pdfjs-dist/legacy/build/**/*",
+      "../../node_modules/@napi-rs/canvas/**/*",
+      "../../node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
+    ],
+  },
   poweredByHeader: false,
   async redirects() {
     return ["dashboard","personas","knowledge","voices","faces","gesture-profiles","live-sessions","presenter-studio","applications","usage","identity-consent","api-keys","safety","audit-logs","settings"].map((section) => ({ source: `/${section}`, destination: `/studio/${section}`, permanent: false }));

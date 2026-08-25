@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 
 export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "disconnected";
@@ -12,9 +12,10 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady }: { url: string; token: string; muted: boolean; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void }) {
+export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
+  const [hasAvatarVideo, setHasAvatarVideo] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const onStatusChangeRef = useRef(onStatusChange);
   const onSpeakingChangeRef = useRef(onSpeakingChange);
@@ -86,6 +87,7 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
         element.autoplay = true;
         element.playsInline = true;
         videoContainerRef.current?.appendChild(element);
+        setHasAvatarVideo(true);
       }
     });
 
@@ -97,6 +99,9 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
         // back to the raw agent track so the conversation stays audible.
         avatarModeRef.current = false;
         if (rawAudioElRef.current) rawAudioElRef.current.muted = false;
+      }
+      if (isAvatarTrack && track.kind === Track.Kind.Video) {
+        setHasAvatarVideo(false);
       }
     });
 
@@ -129,10 +134,13 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
     notify("connecting");
     room
       .connect(url, token)
-      .then(() => room.localParticipant.setMicrophoneEnabled(!muted))
       .then(() => {
         notify("connected");
         if (!cancelled) onRoomReadyRef.current?.(room);
+        // Microphone access is optional for a presenter session. A blocked or
+        // unavailable input must not turn an otherwise connected, listen-only
+        // lesson into a failed call.
+        return room.localParticipant.setMicrophoneEnabled(!muted).catch(() => {});
       })
       .catch(() => notify("error"));
 
@@ -152,7 +160,13 @@ export function LiveVoiceRoom({ url, token, muted, onStatusChange, onSpeakingCha
   return (
     <>
       <div ref={audioContainerRef} className="live-voice-audio" aria-hidden="true" />
-      <div ref={videoContainerRef} className="live-voice-video" aria-hidden="true" />
+      <div ref={videoContainerRef} className="live-voice-video" aria-hidden="true">
+        {portraitUrl && !hasAvatarVideo && (
+          // The portrait is the approved face for this short-lived embed session.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={portraitUrl} alt="" />
+        )}
+      </div>
     </>
   );
 }

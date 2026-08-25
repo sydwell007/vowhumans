@@ -131,12 +131,20 @@ async function extractPdf(resource: NonNullable<VowLmsContextResponse["resource"
     signal: AbortSignal.timeout(25_000),
   });
   const contentLength = Number(response.headers.get("content-length") ?? 0);
+  const contentType = response.headers.get("content-type") ?? "";
   if (!response.ok || contentLength > MAX_RESOURCE_BYTES) {
     throw new VowLmsContextError("Lesson resource could not be retrieved", 502);
   }
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > MAX_RESOURCE_BYTES) {
     throw new VowLmsContextError("Lesson resource is too large", 413);
+  }
+  if (bytes.length < 5 || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    console.error("[vowlms-context] Lesson resource is not a PDF", {
+      bytes: bytes.length,
+      contentType,
+    });
+    throw new VowLmsContextError("Lesson resource could not be read", 502);
   }
 
   try {
@@ -151,6 +159,10 @@ async function extractPdf(resource: NonNullable<VowLmsContextResponse["resource"
   } catch (error) {
     console.error("[vowlms-context] PDF extraction failed", {
       errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage:
+        error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+      bytes: bytes.length,
+      contentType,
     });
     throw new VowLmsContextError("Lesson resource could not be read", 502);
   }
@@ -193,6 +205,10 @@ export async function loadVowLmsLessonContext(
     sourceType = "pdf";
     sourceTitle = body.resource.filename || sourceTitle;
   }
+  // PostgreSQL text/jsonb cannot store U+0000. Some generated PDFs include NUL
+  // glyph placeholders even though the visible text is valid, so remove only
+  // those database-invalid characters before persisting the approved context.
+  content = content.replaceAll("\u0000", "").trim();
   if (!content) {
     throw new VowLmsContextError("Lesson content is empty", 422);
   }

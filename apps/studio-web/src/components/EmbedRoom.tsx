@@ -9,7 +9,11 @@ type Stage = "consent" | "connecting" | "live" | "error";
 export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId: string; applicationSlug: string }) {
   const [stage, setStage] = useState<Stage>("consent");
   const [muted, setMuted] = useState(false);
-  const [liveRoom, setLiveRoom] = useState<{ url: string; token: string } | null>(null);
+  const [liveRoom, setLiveRoom] = useState<{
+    url: string;
+    token: string;
+    portraitUrl?: string;
+  } | null>(null);
   const [liveStatus, setLiveStatus] = useState<LiveVoiceRoomStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -46,7 +50,14 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
         setStage("error");
         return;
       }
-      setLiveRoom({ url: tokenBody.data.url, token: tokenBody.data.token });
+      setLiveRoom({
+        url: tokenBody.data.url,
+        token: tokenBody.data.token,
+        portraitUrl:
+          typeof sessionBody.data.portrait_url === "string"
+            ? sessionBody.data.portrait_url
+            : undefined,
+      });
       setStage("live");
     } catch {
       setErrorMessage("Could not start the live call.");
@@ -76,7 +87,13 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
           {liveStatus !== "connected" && (
             <div className="embed-status embed-status-overlay">{liveStatus === "error" ? "Live call failed to connect." : "Connecting…"}</div>
           )}
-          <LiveVoiceRoom url={liveRoom.url} token={liveRoom.token} muted={muted} onStatusChange={setLiveStatus} />
+          <LiveVoiceRoom
+            url={liveRoom.url}
+            token={liveRoom.token}
+            muted={muted}
+            portraitUrl={liveRoom.portraitUrl}
+            onStatusChange={setLiveStatus}
+          />
           <div className="embed-controls">
             <button type="button" aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((value) => !value)}>
               {muted ? <MicOff size={18} /> : <Mic size={18} />}
