@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import "@napi-rs/canvas";
 
 const TOKEN_AUDIENCE = "vowhumans-lesson-context";
 const MAX_CONTEXT_TOKEN_LENGTH = 2_048;
