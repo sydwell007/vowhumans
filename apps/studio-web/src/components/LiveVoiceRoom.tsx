@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Room, RoomEvent, Track } from "livekit-client";
+import { RemoteTrackPublication, Room, RoomEvent, Track } from "livekit-client";
 
 export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "disconnected";
 
@@ -23,13 +23,12 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   const onReconnectedRef = useRef(onReconnected);
   const onRoomReadyRef = useRef(onRoomReady);
   const firstAudioFiredRef = useRef(false);
-  // Raw agent audio plays instantly for turn 1 (unchanged behavior). Once the
-  // avatar participant signals readiness, every subsequent turn's audio comes
-  // from its own re-muxed vhm-avatar-audio track instead — attaching both would
-  // mean hearing every reply twice. This ref tracks which mode we're in and mutes
-  // the raw track accordingly; it reverts if the avatar's tracks ever drop.
+  // The voice and avatar agents publish the same speech on separate tracks. Keep
+  // every raw publication so avatar mode can be exclusive even across reconnects
+  // or when the readiness data packet arrived before the browser joined.
   const avatarModeRef = useRef(false);
-  const rawAudioElRef = useRef<HTMLMediaElement | null>(null);
+  const rawAudioElsRef = useRef(new Set<HTMLMediaElement>());
+  const rawAudioPublicationsRef = useRef(new Set<RemoteTrackPublication>());
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -54,18 +53,43 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   useEffect(() => {
     let cancelled = false;
     const room = new Room();
+    const rawAudioEls = rawAudioElsRef.current;
+    const rawAudioPublications = rawAudioPublicationsRef.current;
     roomRef.current = room;
     avatarModeRef.current = false;
-    rawAudioElRef.current = null;
+    rawAudioEls.clear();
+    rawAudioPublications.clear();
     firstAudioFiredRef.current = false;
     const notify = (status: LiveVoiceRoomStatus) => {
       if (!cancelled) onStatusChangeRef.current?.(status);
+    };
+
+    const setAvatarMode = (enabled: boolean) => {
+      avatarModeRef.current = enabled;
+      rawAudioEls.forEach((element) => {
+        element.muted = enabled;
+      });
+      rawAudioPublications.forEach((publication) => {
+        publication.setSubscribed(!enabled);
+      });
     };
 
     room.on(RoomEvent.TrackSubscribed, (track, publication) => {
       const isAvatarTrack = publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
 
       if (track.kind === Track.Kind.Audio) {
+        if (isAvatarTrack) {
+          // The track itself is a durable readiness signal. Switch before
+          // attaching it so raw and synchronized audio cannot overlap even if
+          // the readiness data packet was sent before this page connected.
+          setAvatarMode(true);
+        } else {
+          rawAudioPublications.add(publication);
+          if (avatarModeRef.current) {
+            publication.setSubscribed(false);
+            return;
+          }
+        }
         // First remote audio actually attached — a more accurate "time to first
         // audio" than the room's own "connected" status, which only means the
         // WebRTC handshake finished, not that the agent's voice has arrived yet.
@@ -76,10 +100,8 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
         const element = track.attach() as HTMLMediaElement;
         element.autoplay = true;
         if (!isAvatarTrack) {
-          // The raw voice-agent track: play unless we've already switched into
-          // avatar mode (e.g. it re-subscribes after a reconnect mid-call).
-          element.muted = avatarModeRef.current;
-          rawAudioElRef.current = element;
+          element.muted = false;
+          rawAudioEls.add(element);
         }
         audioContainerRef.current?.appendChild(element);
       } else if (track.kind === Track.Kind.Video && isAvatarTrack) {
@@ -92,25 +114,30 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
-      track.detach().forEach((element) => element.remove());
+      track.detach().forEach((element) => {
+        rawAudioEls.delete(element as HTMLMediaElement);
+        element.remove();
+      });
       const isAvatarTrack = publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
       if (isAvatarTrack && track.kind === Track.Kind.Audio) {
         // Avatar-participant dropped mid-call (crash, GPU pod down, etc.) — fall
         // back to the raw agent track so the conversation stays audible.
-        avatarModeRef.current = false;
-        if (rawAudioElRef.current) rawAudioElRef.current.muted = false;
+        setAvatarMode(false);
       }
       if (isAvatarTrack && track.kind === Track.Kind.Video) {
         setHasAvatarVideo(false);
       }
     });
 
+    room.on(RoomEvent.TrackUnpublished, (publication) => {
+      rawAudioPublications.delete(publication);
+    });
+
     room.on(RoomEvent.DataReceived, (payload) => {
       try {
         const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string };
         if (message?.type === "vhm_avatar_ready") {
-          avatarModeRef.current = true;
-          if (rawAudioElRef.current) rawAudioElRef.current.muted = true;
+          setAvatarMode(true);
         }
       } catch {
         // Not a message this component cares about.
@@ -148,6 +175,8 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
       cancelled = true;
       room.disconnect();
       roomRef.current = null;
+      rawAudioEls.clear();
+      rawAudioPublications.clear();
     };
     // Reconnect only when the room identity (url/token) changes; mute is handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
