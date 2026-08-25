@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import sql from "@/lib/db";
+import {
+  loadVowLmsLessonContext,
+  VowLmsContextError,
+} from "@/lib/vowLmsContext";
 
 // A pairing is only ever hit by anonymous traffic once it's already enabled — a
 // low, generous ceiling that stops one hot pairing (or a script hammering it)
@@ -63,6 +67,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const digitalHumanId = typeof body.digital_human_id === "string" ? body.digital_human_id : "";
   const applicationSlug = typeof body.application_slug === "string" ? body.application_slug : "";
+  const lessonContextToken =
+    typeof body.lesson_context_token === "string" ? body.lesson_context_token : "";
   if (!digitalHumanId || !applicationSlug) {
     return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id and application_slug are required." }, { status: 422 });
   }
@@ -123,9 +129,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, code: "RATE_LIMITED", message: "Too many session requests. Try again shortly." }, { status: 429 });
   }
 
+  let lessonContext = null;
+  if (lessonContextToken) {
+    try {
+      lessonContext = await loadVowLmsLessonContext(lessonContextToken);
+    } catch (error) {
+      const status = error instanceof VowLmsContextError ? error.status : 502;
+      console.error("[embed-sessions] lesson context rejected", {
+        status,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          code: status === 401 ? "LESSON_CONTEXT_UNAUTHENTICATED" : "LESSON_CONTEXT_UNAVAILABLE",
+          message: "The approved lesson material could not be prepared. Please try again.",
+        },
+        { status },
+      );
+    }
+  }
+
   const [session] = await sql<{ id: string }[]>`
     INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_external_ref_hash, transport_provider, avatar_mode, context)
-    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug })})
+    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, ...(lessonContext ? { lesson: lessonContext } : {}) })})
     RETURNING id
   `;
 

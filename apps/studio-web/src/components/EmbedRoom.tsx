@@ -17,10 +17,17 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
     setStage("connecting");
     setErrorMessage(null);
     try {
+      const lessonContextToken = new URLSearchParams(
+        window.location.hash.replace(/^#/, ""),
+      ).get("lesson_context_token");
       const sessionRes = await fetch("/api/public/v1/embed-sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ digital_human_id: digitalHumanId, application_slug: applicationSlug }),
+        body: JSON.stringify({
+          digital_human_id: digitalHumanId,
+          application_slug: applicationSlug,
+          ...(lessonContextToken ? { lesson_context_token: lessonContextToken } : {}),
+        }),
       });
       const sessionBody = await sessionRes.json().catch(() => null);
       if (!sessionRes.ok || !sessionBody?.data?.session_id) {

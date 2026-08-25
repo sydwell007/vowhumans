@@ -75,7 +75,7 @@ AUDIO_CHANNELS = 1
 PUBLISH_VIDEO_WIDTH = 512
 PUBLISH_VIDEO_HEIGHT = 512
 
-RENDER_TIMEOUT_SECONDS = float(os.getenv("AVATAR_RENDER_TIMEOUT_SECONDS", "8"))
+RENDER_TIMEOUT_SECONDS = float(os.getenv("AVATAR_RENDER_TIMEOUT_SECONDS", "45"))
 # How long the agent must be continuously silent before a buffered utterance is
 # considered finished and sent for rendering. Needs live tuning against real
 # OpenAI Realtime speech pacing — too short cuts a reply on a natural pause, too
@@ -97,20 +97,14 @@ async def entrypoint(ctx: JobContext) -> None:
     _log(f"entrypoint: connected to room {ctx.room.name} as {ctx.room.local_participant.identity}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        avatar_id = await _prepare_avatar(client, organisation_id, human_slug)
-        if avatar_id is None:
+        prepared_avatar = await _prepare_avatar(client, organisation_id, human_slug)
+        if prepared_avatar is None:
             _log(f"No usable face for {organisation_id}/{human_slug} — this call stays audio-only.")
             return
+        avatar_id, preview_frame = prepared_avatar
         _log(f"entrypoint: avatar prepared, avatar_id={avatar_id}")
 
-        # Sent as soon as an avatar is ready to render, not on the first successful
-        # render — every turn from here on (lip-synced or, on a render failure, the
-        # raw-audio fallback) publishes through vhm-avatar-audio, so it's safe for
-        # the frontend to commit to that track the moment this arrives.
-        await ctx.room.local_participant.publish_data(json.dumps({"type": "vhm_avatar_ready"}), reliable=True)
-        _log("entrypoint: published vhm_avatar_ready")
-
-        session = AvatarSession(ctx, client, avatar_id)
+        session = AvatarSession(ctx, client, avatar_id, preview_frame)
         try:
             await session.run()
         finally:
@@ -118,7 +112,7 @@ async def entrypoint(ctx: JobContext) -> None:
             await _release_avatar(client, avatar_id)
 
 
-async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> str | None:
+async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray] | None:
     if not (AVATAR_WORKER_URL and STUDIO_WEB_URL and INTERNAL_KEY):
         _log("AVATAR_WORKER_URL / STUDIO_WEB_URL / VOWHUMANS_INTERNAL_KEY not fully configured.")
         return None
@@ -131,6 +125,10 @@ async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human
         if face_resp.status_code != 200:
             _log(f"No face assigned for {organisation_id}/{human_slug} (studio-web returned {face_resp.status_code}).")
             return None
+        preview_frame = cv2.imdecode(np.frombuffer(face_resp.content, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if preview_frame is None:
+            _log(f"Assigned face for {organisation_id}/{human_slug} could not be decoded.")
+            return None
 
         prepare_resp = await client.post(
             f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/avatars",
@@ -140,7 +138,7 @@ async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human
         if prepare_resp.status_code != 201:
             _log(f"avatar-worker prepare failed: {prepare_resp.status_code} {prepare_resp.text}")
             return None
-        return prepare_resp.json()["avatar_id"]
+        return prepare_resp.json()["avatar_id"], preview_frame
     except httpx.HTTPError as exc:
         _log(f"Could not reach studio-web/avatar-worker to prepare an avatar: {exc}")
         return None
@@ -159,10 +157,11 @@ class AvatarSession:
     """One room's worth of state: the published tracks, which participant is the
     voice agent, and the buffered-audio-to-rendered-video pipeline for each turn."""
 
-    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str) -> None:
+    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray) -> None:
         self._ctx = ctx
         self._client = client
         self._avatar_id = avatar_id
+        self._preview_frame = preview_frame
         self._video_source = rtc.VideoSource(width=PUBLISH_VIDEO_WIDTH, height=PUBLISH_VIDEO_HEIGHT)
         self._audio_source = rtc.AudioSource(sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         self._agent_participant: rtc.RemoteParticipant | None = None
@@ -171,12 +170,14 @@ class AvatarSession:
         self._silence_elapsed = 0.0
         self._render_lock = asyncio.Lock()
         self._stop = asyncio.Event()
+        self._avatar_ready = False
 
     async def run(self) -> None:
         video_track = rtc.LocalVideoTrack.create_video_track(AVATAR_VIDEO_TRACK, self._video_source)
         audio_track = rtc.LocalAudioTrack.create_audio_track(AVATAR_AUDIO_TRACK, self._audio_source)
         await self._ctx.room.local_participant.publish_track(video_track)
         await self._ctx.room.local_participant.publish_track(audio_track)
+        self._capture_video_frame(self._preview_frame)
         _log(f"AvatarSession.run: published {AVATAR_VIDEO_TRACK} and {AVATAR_AUDIO_TRACK}")
 
         self._ctx.room.on("track_subscribed", self._on_track_subscribed)
@@ -259,6 +260,17 @@ class AvatarSession:
             if video_bytes is None:
                 await self._play_frames(frames)
                 return
+            if not self._avatar_ready:
+                # The browser keeps the raw voice track for the first turn. Use
+                # that turn to warm the GPU, then switch only after a real render
+                # succeeds so working audio is never muted behind a blank video.
+                self._avatar_ready = True
+                await self._ctx.room.local_participant.publish_data(
+                    json.dumps({"type": "vhm_avatar_ready"}),
+                    reliable=True,
+                )
+                _log("_handle_turn: first render succeeded; published vhm_avatar_ready")
+                return
             _log(f"_handle_turn: render succeeded, {len(video_bytes)} bytes, playing rendered clip")
             await self._play_rendered_clip(video_bytes)
 
@@ -305,13 +317,22 @@ class AvatarSession:
 
     async def _play_video_frames(self, frames: list[np.ndarray], interval: float) -> None:
         for bgr in frames:
-            # avatar-worker's output size varies with the source photo's detected
-            # face bbox — always resize to the fixed size the VideoSource was
-            # constructed with, since captured frames must match it.
-            resized = cv2.resize(bgr, (PUBLISH_VIDEO_WIDTH, PUBLISH_VIDEO_HEIGHT))
-            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-            self._video_source.capture_frame(rtc.VideoFrame(PUBLISH_VIDEO_WIDTH, PUBLISH_VIDEO_HEIGHT, rtc.VideoBufferType.RGB24, rgb.tobytes()))
+            self._capture_video_frame(bgr)
             await asyncio.sleep(interval)
+
+    def _capture_video_frame(self, bgr: np.ndarray) -> None:
+        # Assigned faces and rendered clips can have different dimensions; every
+        # frame must match the fixed dimensions declared by VideoSource.
+        resized = cv2.resize(bgr, (PUBLISH_VIDEO_WIDTH, PUBLISH_VIDEO_HEIGHT))
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        self._video_source.capture_frame(
+            rtc.VideoFrame(
+                PUBLISH_VIDEO_WIDTH,
+                PUBLISH_VIDEO_HEIGHT,
+                rtc.VideoBufferType.RGB24,
+                rgb.tobytes(),
+            )
+        )
 
     async def _play_pcm(self, pcm_bytes: bytes) -> None:
         bytes_per_sample = 2  # s16le

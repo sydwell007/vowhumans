@@ -34,7 +34,7 @@ services:
       # at all — leave unset/false until that worker (below) is deployed and healthy,
       # so a half-configured avatar pipeline can't affect the working voice-only call.
       - key: ENABLE_AVATAR_PARTICIPANT
-        value: "false"
+        value: "true"
 
   # The actual voice AI: stays connected to LiveKit and joins a room whenever a
   # session is created. Must run continuously — needs a paid worker plan, not free.
@@ -63,6 +63,10 @@ services:
         sync: false
       - key: OPENAI_REALTIME_MODEL
         value: gpt-realtime-2.1
+      - key: STUDIO_WEB_URL
+        sync: false
+      - key: VOWHUMANS_INTERNAL_KEY
+        sync: false
 
   # Joins the same room as vowhumans-realtime-agent (via explicit LiveKit agent
   # dispatch — see services/api-gateway's RoomAgentDispatch), renders lip-synced
@@ -97,3 +101,9 @@ services:
       # avatar-worker (RunPod) and in Vercel (studio-web).
       - key: VOWHUMANS_INTERNAL_KEY
         sync: false
+      # Live RunPod measurements are roughly 5-6 seconds for a warm two-second
+      # clip, so normal sentence-length renders need more than the old 8 seconds.
+      - key: AVATAR_RENDER_TIMEOUT_SECONDS
+        value: "45"
+      - key: AVATAR_SILENCE_HOLD_SECONDS
+        value: "0.5"
