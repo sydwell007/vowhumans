@@ -12,6 +12,9 @@ import type { LucideIcon } from "lucide-react";
 import { humans } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { StatusPill } from "./StatusPill";
+import { StudioHomeChooser } from "./StudioHomeChooser";
+import { MySetupProgress } from "./MySetupProgress";
+import { NextBestAction } from "./NextBestAction";
 
 type ApiEnvelope<T> = { success: boolean; data?: T; message?: string; code?: string };
 
@@ -39,10 +42,10 @@ function downloadCsv(filename: string, rows: (string | number | null | undefined
   URL.revokeObjectURL(url);
 }
 
-function ViewState({ loading, error, empty }: { loading: boolean; error?: string | null; empty?: string }) {
+function ViewState({ loading, error, empty, action }: { loading: boolean; error?: string | null; empty?: string; action?: React.ReactNode }) {
   if (loading) return <div className="empty-action"><RefreshCw className="spin" size={20} /><div><strong>Loading live workspace data</strong><p>Reading your organisation records.</p></div></div>;
   if (error) return <div className="panel-note"><CircleAlert size={16} /> {error}</div>;
-  if (empty) return <div className="empty-action"><CircleCheck size={20} /><div><strong>Nothing here yet</strong><p>{empty}</p></div></div>;
+  if (empty) return <div className="empty-action"><CircleCheck size={20} /><div><strong>Nothing here yet</strong><p>{empty}</p>{action}</div></div>;
   return null;
 }
 
@@ -82,10 +85,13 @@ export function ProductionDashboard() {
       <div className="hero-copy"><div className="hero-kicker"><span className="pulse-dot" /> Persistent customer workspace</div><h2>Human presence.<br/><em>Honest by design.</em></h2><p>Build reliable AI interviewers, tutors and presenters with consent, provenance and visible disclosure at the centre.</p><div className="hero-actions"><Link className="button-light" href="/demos/interview"><Play size={17} fill="currentColor"/>Try interview demo</Link><Link className="button-ghost" href="/studio/safety">View safety controls <ArrowRight size={16}/></Link></div><div className="hero-footnote"><ShieldCheck size={16}/> No cloning. No hidden AI. No appearance scoring.</div></div>
       <div className="hero-human"><div className="portrait-orbit orbit-one"/><div className="portrait-orbit orbit-two"/><div className="hero-portrait-frame"><Image src={humans[0].image} alt="AI-generated VowHumans product illustration" fill priority sizes="(max-width: 900px) 70vw, 360px"/><span className="image-disclosure"><Sparkles size={13}/> AI-generated product illustration</span></div></div>
     </section>
+    <StudioHomeChooser />
+    <MySetupProgress />
+    <NextBestAction />
     <ViewState loading={!data && !error} error={error}/>
     {data && <>
       <section className="metric-grid">{metrics.map(([label,value,note,Icon]) => <article className="metric-card" key={label}><span className="metric-icon cyan"><Icon size={20}/></span><p>{label}</p><strong>{String(value)}</strong><small>{note}</small></article>)}</section>
-      <section className="split-grid wide-left"><div className="panel"><PanelTitle title="Digital humans" eyebrow={`${data.humans.length} most recent`} action={<Link className="text-link" href="/studio/digital-humans">Manage <ArrowRight size={15}/></Link>}/>{data.humans.length ? <div className="human-list">{data.humans.map((human) => <Link className="human-row" href="/studio/digital-humans" key={human.id}><HumanThumb human={human}/><span className="human-row-copy"><strong>{human.name}</strong><small>{human.role} · {human.disclosure}</small></span><StatusPill tone={human.state === "active" ? "good" : "warn"}>{human.state}</StatusPill><ArrowRight size={16}/></Link>)}</div> : <ViewState loading={false} empty="Create your first governed digital human to populate this workspace."/>}</div>
+      <section className="split-grid wide-left"><div className="panel"><PanelTitle title="Digital humans" eyebrow={`${data.humans.length} most recent`} action={<Link className="text-link" href="/studio/digital-humans">Manage <ArrowRight size={15}/></Link>}/>{data.humans.length ? <div className="human-list">{data.humans.map((human) => <Link className="human-row" href="/studio/digital-humans" key={human.id}><HumanThumb human={human}/><span className="human-row-copy"><strong>{human.name}</strong><small>{human.role} · {human.disclosure}</small></span><StatusPill tone={human.state === "active" ? "good" : "warn"}>{human.state}</StatusPill><ArrowRight size={16}/></Link>)}</div> : <ViewState loading={false} empty="Create your first governed digital human to populate this workspace." action={<Link className="secondary-button" href="/studio/digital-humans">Start guided setup</Link>}/>}</div>
       <div className="panel readiness-panel"><PanelTitle title="Provider truth" eyebrow="Measured now"/><div className="readiness-list"><div><span>API gateway</span><StatusPill tone={data.gateway.gateway_reachable ? "good" : "warn"}>{data.gateway.gateway_reachable ? "Reachable" : "Not reachable"}</StatusPill></div><div><span>Realtime voice</span><StatusPill tone={data.gateway.realtime_configured ? "good" : "muted"}>{data.gateway.realtime_check_available ? (data.gateway.realtime_configured ? "Configured" : "Unavailable") : "Not checked"}</StatusPill></div><div><span>Avatar worker</span><StatusPill tone={data.gateway.avatar_configured ? "good" : "muted"}>{data.gateway.avatar_configured ? "Configured" : "Audio fallback"}</StatusPill></div></div></div></section>
       <section className="panel"><PanelTitle title="Recent workspace activity" eyebrow="Append-only audit events"/>{data.activity.length ? <div className="activity-list">{data.activity.map((event,index) => <div className="activity-row" key={`${event.action}-${event.occurred_at}-${index}`}><i className="cyan"/><span><strong>{event.action.replaceAll("_", " ")}</strong><small>{event.resource_type}</small></span><time>{formatDate(event.occurred_at)}</time></div>)}</div> : <ViewState loading={false} empty="Saved workspace changes will appear here automatically."/>}</section>
     </>}

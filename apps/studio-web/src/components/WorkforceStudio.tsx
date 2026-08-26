@@ -367,7 +367,7 @@ function WorkforceDashboard() {
             escalation route.
           </p>
           <div className="workforce-hero-actions">
-            <Link href="/studio/workforce/create" className="primary-button">
+            <Link href="/studio/workforce/create" className="primary-button" data-guide="wf-create">
               <Plus size={18} />
               Create Digital Colleague
             </Link>
@@ -695,6 +695,7 @@ function CreateColleague() {
         <button
           className="primary-button"
           type="button"
+          data-guide="wf-create-confirm"
           onClick={create}
           disabled={busy || (!selected && !name.trim())}
         >
@@ -1032,6 +1033,7 @@ function ConfigurationStep({
         await workforceApi<RecordItem>(`/colleagues/${colleagueId}/runtime`),
       );
       setNotice("Governed work-queue deployment created.");
+      window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "wf-builder-step-deployment" } }));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -1471,10 +1473,10 @@ function ConfigurationStep({
                 </p>
               </div>
               <div className="post-deployment-actions">
-                <Link className="primary-button" href={`/studio/test-centre?colleague=${colleagueId}`}>
+                <Link className="primary-button" href={`/studio/test-centre?colleague=${colleagueId}`} data-guide="wf-post-deploy-test">
                   <Play size={17} /> Run post-deployment tests
                 </Link>
-                <Link className="secondary-button" href={`/studio/tasks?colleague=${colleagueId}`}>
+                <Link className="secondary-button" href={`/studio/tasks?colleague=${colleagueId}`} data-guide="wf-post-deploy-tasks">
                   <ClipboardCheck size={17} /> Assign sandbox work
                 </Link>
                 <Link className="secondary-button" href="/studio/operations">
@@ -2201,13 +2203,15 @@ function ColleagueBuilder({
             />
           </div>
         </div>
-        <ConfigurationStep
-          key={currentStep}
-          step={currentStep}
-          colleague={colleague}
-          references={references}
-          onUpdated={setColleague}
-        />
+        <div data-guide={`wf-builder-step-${currentStep}`}>
+          <ConfigurationStep
+            key={currentStep}
+            step={currentStep}
+            colleague={colleague}
+            references={references}
+            onUpdated={setColleague}
+          />
+        </div>
         <div className="builder-pagination">
           <button
             type="button"
@@ -2291,6 +2295,7 @@ function TasksWorkspace() {
         risk_level: value(selectedColleague, "risk_level") || "medium",
       });
       await load();
+      window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "wf-task-compose" } }));
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not create the task.",
@@ -2319,6 +2324,7 @@ function TasksWorkspace() {
       );
       setSelectedTask(result.task);
       await load();
+      if (action === "review-brief") window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "wf-task-brief" } }));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -2363,6 +2369,7 @@ function TasksWorkspace() {
         }),
       );
       await load();
+      if (decision === "approved") window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "wf-product-approve" } }));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -2490,6 +2497,7 @@ function TasksWorkspace() {
             <button
               type="button"
               className="primary-button"
+              data-guide="wf-task-compose"
               onClick={createTask}
               disabled={
                 busy === "create" ||
@@ -2565,6 +2573,7 @@ function TasksWorkspace() {
                 <button
                   className="primary-button"
                   type="button"
+                  data-guide="wf-task-brief"
                   onClick={() => void taskAction("review-brief")}
                   disabled={Boolean(busy)}
                 >
@@ -2617,6 +2626,7 @@ function TasksWorkspace() {
                         <button
                           type="button"
                           className="primary-button"
+                          data-guide="wf-product-approve"
                           onClick={() =>
                             void review(
                               stringValue(value(product, "id")),
@@ -2843,6 +2853,7 @@ function TestCentreWorkspace() {
       const result = await workforceApi<RecordItem>("/testing/runs", { method: "POST", body: JSON.stringify(form) });
       setSelectedRun(result);
       await load();
+      window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "wf-test-run" } }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not run the selected test.");
     }
@@ -2881,7 +2892,7 @@ function TestCentreWorkspace() {
             <label>Test subject<select value={entityType} onChange={(event) => setForm({ entity_type: event.target.value, entity_id: "", test_suite: event.target.value === "digital_human" ? "presence" : "role" })}><option value="digital_human">Digital Human · presence</option><option value="digital_colleague">Digital Colleague · role and work</option></select></label>
             <label>{entityType === "digital_human" ? "Digital Human" : "Digital Colleague"}<select value={stringValue(form.entity_id)} onChange={(event) => setForm({ ...form, entity_id: event.target.value })}><option value="">Choose a configured subject…</option>{entities.map((item) => <option key={stringValue(value(item, "id"))} value={stringValue(value(item, "id"))}>{stringValue(value(item, "name"))} · {humanStatus(value(item, entityType === "digital_human" ? "state" : "deployment_status"))}</option>)}</select></label>
             <label>Test suite<select value={stringValue(form.test_suite)} onChange={(event) => setForm({ ...form, test_suite: event.target.value })}>{suites.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-            <button className="primary-button" type="button" onClick={run} disabled={busy || !form.entity_id}><Play size={17} />{busy ? "Running checks…" : "Run test in Sandbox"}</button>
+            <button className="primary-button" type="button" data-guide="wf-test-run" onClick={run} disabled={busy || !form.entity_id}><Play size={17} />{busy ? "Running checks…" : "Run test in Sandbox"}</button>
           </div>
           <p className="panel-note">Tests never publish, contact customers or commit an external action. Provider-dependent checks are marked blocked or degraded instead of being reported as passed.</p>
         </section>
@@ -2892,7 +2903,7 @@ function TestCentreWorkspace() {
       </div>
       <section className="workforce-panel">
         <div className="workforce-panel-heading"><div><p className="eyebrow">Version-aware evidence</p><h2>Test History</h2></div></div>
-        {runs.length === 0 ? <EmptyState title="No retained test runs" copy="The first post-deployment test will create an immutable, tenant-scoped evidence record." /> : <div className="task-list">{runs.map((item) => <button type="button" key={stringValue(value(item, "id"))} onClick={() => setSelectedRun(item)}><span><strong>{stringValue(value(item, "colleague_name") || value(item, "human_name"))} · {humanStatus(value(item, "test_suite"))}</strong><small>{dateLabel(value(item, "created_at"))} · configuration {stringValue(value(item, "configuration_revision") || "—")} · deployment {stringValue(value(item, "deployment_version") || "—")}</small></span><StatusBadge status={value(item, "status")} /></button>)}</div>}
+        {runs.length === 0 ? <EmptyState title="No retained test runs" copy="The first post-deployment test will create an immutable, tenant-scoped evidence record." action={<Link href="/studio/learn" className="secondary-button">Guide: run a test</Link>} /> : <div className="task-list">{runs.map((item) => <button type="button" key={stringValue(value(item, "id"))} onClick={() => setSelectedRun(item)}><span><strong>{stringValue(value(item, "colleague_name") || value(item, "human_name"))} · {humanStatus(value(item, "test_suite"))}</strong><small>{dateLabel(value(item, "created_at"))} · configuration {stringValue(value(item, "configuration_revision") || "—")} · deployment {stringValue(value(item, "deployment_version") || "—")}</small></span><StatusBadge status={value(item, "status")} /></button>)}</div>}
       </section>
     </div>
   );
@@ -2928,7 +2939,7 @@ function OperationsWorkspace() {
       <section className="workforce-panel post-deployment-hero" id="studio-primary-action"><div><p className="eyebrow">Post-deployment command</p><h2>Operations</h2><p>Observe runtime truth, supervise deployed colleagues and keep provider faults separate from configuration validity.</p></div><button className="primary-button" type="button" onClick={testConnections} disabled={Boolean(busy)}><RefreshCw className={busy === "providers" ? "spin" : ""} size={17} />Test provider connections</button></section>
       {unhealthy.length > 0 && <div className="workforce-alert warn"><CircleAlert size={20} /><div><strong>{unhealthy.length} provider capabilities need attention</strong><p>Configured roles remain intact. Open the health cards below for safe fallback guidance.</p></div></div>}
       <section className="runtime-provider-grid">{providers.map((item) => <article className="workforce-panel" key={`${stringValue(value(item, "provider"))}-${stringValue(value(item, "capability"))}`}><div><span className="runtime-provider-icon"><Gauge size={19} /></span><StatusBadge status={value(item, "status")} /></div><h3>{stringValue(value(item, "provider"))}</h3><p>{humanStatus(value(item, "capability"))}</p><small>{stringValue((value(item, "safe_detail") as RecordItem | undefined)?.detail || value(item, "detail"))}</small><footer><span>{value(item, "latency_ms") === null || value(item, "latency_ms") === undefined ? "Not live-tested" : `${stringValue(value(item, "latency_ms"))} ms`}</span><span>{dateLabel(value(item, "checked_at"))}</span></footer></article>)}</section>
-      <section className="workforce-panel"><div className="workforce-panel-heading"><div><p className="eyebrow">Deployed operating policies</p><h2>Digital Colleague runtime</h2></div><Link href="/studio/tasks" className="secondary-button">Open Work Queue <ArrowRight size={16} /></Link></div>{colleagues.length === 0 ? <EmptyState title="No Digital Colleagues" copy="Configure, approve and deploy a role before it appears in Operations." /> : <div className="operations-list">{colleagues.map((item) => { const paused = value(item, "status") === "paused"; return <article key={stringValue(value(item, "id"))}><div><strong>{stringValue(value(item, "name"))}</strong><small>{stringValue(value(item, "role_title"))} · {numberValue(value(item, "open_work_count"))} open work item(s)</small></div><StatusBadge status={value(item, "deployment_status")} /><div><Link className="secondary-button" href={`/studio/test-centre?colleague=${stringValue(value(item, "id"))}`}>Test</Link>{["deployed", "paused"].includes(stringValue(value(item, "status"))) && <button className="secondary-button" type="button" disabled={busy === stringValue(value(item, "id"))} onClick={() => void runtimeAction(stringValue(value(item, "id")), paused ? "resume" : "pause")}>{paused ? <Play size={15} /> : <CircleAlert size={15} />}{paused ? "Resume" : "Pause"}</button>}</div></article>; })}</div>}</section>
+      <section className="workforce-panel"><div className="workforce-panel-heading"><div><p className="eyebrow">Deployed operating policies</p><h2>Digital Colleague runtime</h2></div><Link href="/studio/tasks" className="secondary-button">Open Work Queue <ArrowRight size={16} /></Link></div>{colleagues.length === 0 ? <EmptyState title="No Digital Colleagues" copy="Configure, approve and deploy a role before it appears in Operations." action={<Link href="/studio/workforce/create" className="secondary-button">Start guided setup</Link>} /> : <div className="operations-list">{colleagues.map((item) => { const paused = value(item, "status") === "paused"; return <article key={stringValue(value(item, "id"))}><div><strong>{stringValue(value(item, "name"))}</strong><small>{stringValue(value(item, "role_title"))} · {numberValue(value(item, "open_work_count"))} open work item(s)</small></div><StatusBadge status={value(item, "deployment_status")} /><div><Link className="secondary-button" href={`/studio/test-centre?colleague=${stringValue(value(item, "id"))}`}>Test</Link>{["deployed", "paused"].includes(stringValue(value(item, "status"))) && <button className="secondary-button" type="button" disabled={busy === stringValue(value(item, "id"))} onClick={() => void runtimeAction(stringValue(value(item, "id")), paused ? "resume" : "pause")}>{paused ? <Play size={15} /> : <CircleAlert size={15} />}{paused ? "Resume" : "Pause"}</button>}</div></article>; })}</div>}</section>
     </div>
   );
 }
@@ -2963,7 +2974,7 @@ function AnalyticsWorkspace() {
     },
   ];
   return (
-    <div className="content-stack workforce-analytics">
+    <div className="content-stack workforce-analytics" data-guide="wf-analytics">
       <div className="workforce-alert info">
         <Gauge size={20} />
         <div>

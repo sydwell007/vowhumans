@@ -11,7 +11,7 @@ import { mintEmbedToken } from "@/lib/embedToken";
 import { getCapabilityMatrix, recordLanguageUsage, resolveForCapability } from "@/lib/languageRouter";
 import type { CapabilityKind } from "@vowhumans/persona-schema";
 
-const allowedResources = new Set(["auth","dashboard","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","safety","audit-logs","languages","digital-human-languages","terminology","language-reviews"]);
+const allowedResources = new Set(["auth","dashboard","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","safety","audit-logs","languages","digital-human-languages","terminology","language-reviews","guide-progress","guide-preferences"]);
 
 const OPENAI_TTS_VOICES = new Set(["alloy","ash","ballad","coral","echo","fable","onyx","nova","sage","shimmer","verse","marin","cedar"]);
 const VOICE_SAMPLE_TEXT = "Hello, I'm demonstrating this voice for VowHumans. This sample plays through your organisation's own OpenAI account.";
@@ -394,6 +394,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       fetchGatewayHealth(),
     ]);
     return NextResponse.json({ success: true, data: { counts: counts[0], humans: recentHumans, activity: recentAudit, gateway }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (resource === "guide-progress") {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql`
+      SELECT guide_id, status, current_step_id, completed_step_ids, started_at, updated_at, completed_at
+      FROM guide_progress WHERE organisation_id = ${user.organisationId} AND user_id = ${user.id}
+    `;
+    return response({ items: rows });
+  }
+
+  if (resource === "guide-preferences") {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const [row] = await sql`SELECT guided_mode FROM studio_user_preferences WHERE user_id = ${user.id}`;
+    return response({ guided_mode: row ? row.guided_mode : true });
   }
 
   if (resource === "identities" && !route[1]) {
@@ -2512,6 +2529,41 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await sql`
       INSERT INTO audit_logs (organisation_id, actor_user_id, action, resource_type, resource_id, after_state)
       VALUES (${organisationId}, ${user.id}, 'organisation.settings.updated', 'organisations', ${organisationId}, ${JSON.stringify({ name: row.name, settings: Object.keys(settings) })}::jsonb)
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "guide-progress" && route[1]) {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const status = typeof body.status === "string" && ["in_progress", "completed", "skipped", "dismissed"].includes(body.status) ? body.status : "in_progress";
+    const currentStepId = typeof body.current_step_id === "string" ? body.current_step_id.slice(0, 120) : "";
+    const completedStepIds = Array.isArray(body.completed_step_ids) ? body.completed_step_ids.filter((item): item is string => typeof item === "string").slice(0, 60) : [];
+    const [row] = await sql`
+      INSERT INTO guide_progress (organisation_id, user_id, guide_id, status, current_step_id, completed_step_ids, completed_at)
+      VALUES (${user.organisationId}, ${user.id}, ${route[1]}, ${status}, ${currentStepId}, ${JSON.stringify(completedStepIds)}::jsonb, ${status === "completed" ? sql`now()` : null})
+      ON CONFLICT (user_id, guide_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        current_step_id = EXCLUDED.current_step_id,
+        completed_step_ids = EXCLUDED.completed_step_ids,
+        updated_at = now(),
+        completed_at = CASE WHEN EXCLUDED.status = 'completed' THEN COALESCE(guide_progress.completed_at, now()) ELSE guide_progress.completed_at END
+      RETURNING guide_id, status, current_step_id, completed_step_ids, started_at, updated_at, completed_at
+    `;
+    return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  if (route[0] === "guide-preferences") {
+    const user = await requireUser(request);
+    if (!user) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    if (typeof body.guided_mode !== "boolean") return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "guided_mode must be a boolean." }, { status: 422 });
+    const [row] = await sql`
+      INSERT INTO studio_user_preferences (user_id, organisation_id, guided_mode)
+      VALUES (${user.id}, ${user.organisationId}, ${body.guided_mode})
+      ON CONFLICT (user_id) DO UPDATE SET guided_mode = EXCLUDED.guided_mode, updated_at = now()
+      RETURNING guided_mode
     `;
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
   }

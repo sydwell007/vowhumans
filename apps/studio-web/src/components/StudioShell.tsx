@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { navigation, pageMeta } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { BrandLogo } from "./BrandLogo";
+import { useGuide } from "./GuideProvider";
 
 const navItems = navigation.flatMap((group) => group.items);
 
@@ -17,6 +18,7 @@ function greetingForHour(hour: number) {
 export function StudioShell({ section, children }: { section: string; children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuth();
+  const { guidedMode, setGuidedMode } = useGuide();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export function StudioShell({ section, children }: { section: string; children: 
     if (section === "usage") { window.dispatchEvent(new CustomEvent("studio:export-usage")); return; }
     if (section === "audit-logs") { window.dispatchEvent(new CustomEvent("studio:export-audit")); return; }
     if (section === "settings") { window.dispatchEvent(new CustomEvent("studio:save-settings")); return; }
+    if (section === "learn") { document.querySelector<HTMLElement>(".guide-library-card button")?.click(); return; }
     const target = document.querySelector<HTMLElement>("#studio-primary-action") ?? document.querySelector<HTMLElement>(".content-stack form");
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -181,6 +184,16 @@ export function StudioShell({ section, children }: { section: string; children: 
             )}
           </div>
           <div className="topbar-actions">
+            <button
+              className="guided-mode-toggle"
+              type="button"
+              aria-pressed={guidedMode}
+              onClick={() => setGuidedMode(!guidedMode)}
+              title={guidedMode ? "Guided Mode: suggestions and guides are surfaced automatically" : "Expert Mode: Studio stays quiet — Guide Library remains available"}
+            >
+              <i className={guidedMode ? "on" : ""} />
+              {guidedMode ? "Guided Mode" : "Expert Mode"}
+            </button>
             <span className="ai-disclosure-chip"><i /> AI systems disclosed</span>
             <button className="icon-button notification-button" aria-label="Notifications" onClick={openNotifications}><Bell size={19} />{!notificationsRead && pendingIdentities > 0 && <b>{pendingIdentities}</b>}</button>
           </div>

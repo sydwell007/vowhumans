@@ -294,6 +294,7 @@ function DigitalHumans() {
     setWizardHumanId(resumeId);
     setWizardStartStep(startStep);
     setWizardOpen(true);
+    window.dispatchEvent(new CustomEvent("studio:modal-open"));
   }
 
   // Wires StudioShell's top-bar "+ New digital human" button, which lives outside this
@@ -307,6 +308,7 @@ function DigitalHumans() {
   function closeWizard(refreshNeeded: boolean) {
     const resumedId = wizardHumanId;
     setWizardOpen(false);
+    window.dispatchEvent(new CustomEvent("studio:modal-close"));
     if (refreshNeeded) {
       refresh();
       if (resumedId) loadDetail(resumedId);
@@ -378,7 +380,7 @@ function DigitalHumans() {
       )}
       <section className="split-grid persona-layout">
         <div className="panel persona-list-panel">
-          <PanelTitle title="Your digital humans" eyebrow={`${items.length} VowHuman${items.length === 1 ? '' : 's'}`} action={<button className="secondary-button" onClick={() => openWizard(null, 1)}><Bot size={15} />New</button>} />
+          <PanelTitle title="Your digital humans" eyebrow={`${items.length} VowHuman${items.length === 1 ? '' : 's'}`} action={<button className="secondary-button" data-guide="dh-new" onClick={() => openWizard(null, 1)}><Bot size={15} />New</button>} />
           <div className="persona-list">
             {items.map((human) => (
               <button key={human.id} className={selectedId === human.id ? 'selected' : ''} onClick={() => { setSelectedId(human.id); setError(null); }}>
@@ -620,6 +622,7 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
       const newHumanId = body.data.id as string;
       setActiveHumanId(newHumanId);
       setChanged(true);
+      window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "dh-wizard-step-identity" } }));
 
       const template = templateIndex !== null ? humans[templateIndex] : null;
       const inheritedFace = template ? templateFaceAssignments.find((a) => a.human_slug === template.id) : undefined;
@@ -655,13 +658,23 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
       setChanged(true);
       setActivated(true);
       setActivating(false);
+      window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: "dh-wizard-activate" } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not activate this digital human.');
       setActivating(false);
     }
   }
 
-  function advance() { setChanged(true); if (step < DIGITAL_HUMAN_BUILDER_STEPS.length) setStep(step + 1); }
+  // Mirrors DIGITAL_HUMAN_BUILDER_STEPS' order so the guide engine's
+  // dh-wizard-step-* ids (apps/studio-web/src/lib/guides.ts) always line up
+  // with the step that just completed.
+  const wizardStepGuideIds = ['dh-wizard-step-identity', 'dh-wizard-step-face', 'dh-wizard-step-voice', 'dh-wizard-step-knowledge', 'dh-wizard-step-persona', 'dh-wizard-step-gesture', 'dh-wizard-step-applications', 'dh-wizard-activate'];
+
+  function advance() {
+    setChanged(true);
+    window.dispatchEvent(new CustomEvent("studio:guide-step-complete", { detail: { step: wizardStepGuideIds[step - 1] } }));
+    if (step < DIGITAL_HUMAN_BUILDER_STEPS.length) setStep(step + 1);
+  }
   function skip() { if (step >= DIGITAL_HUMAN_BUILDER_STEPS.length) onClose(changed); else setStep(step + 1); }
 
   return (
@@ -678,7 +691,7 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
         {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
         <div className="wizard-body">
           {step === 1 && (
-            <form onSubmit={submitIdentity}>
+            <form onSubmit={submitIdentity} data-guide="dh-wizard-step-identity">
               <p className="panel-note">Start from a demo template, or build from scratch.</p>
               <div className="interviewer-picker">
                 <button type="button" className={templateIndex === null ? 'selected' : ''} onClick={() => pickTemplate(null)}>
@@ -704,15 +717,15 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
               <button className="primary-button" type="submit" disabled={creatingIdentity}>{creatingIdentity ? <RefreshCw size={17} className="spin" /> : <ArrowRight size={17} />}{creatingIdentity ? 'Creating…' : 'Continue'}</button>
             </form>
           )}
-          {step === 2 && activeHumanId && <WizardFaceStep humanId={activeHumanId} onDone={advance} />}
-          {step === 3 && activeHumanId && <WizardVoiceStep humanId={activeHumanId} onDone={advance} />}
-          {step === 4 && activeHumanId && <WizardKnowledgeStep humanId={activeHumanId} onDone={advance} />}
-          {step === 5 && activeHumanId && <WizardPersonaStep humanId={activeHumanId} role={role} onDone={advance} />}
-          {step === 6 && activeHumanId && <WizardGestureStep humanId={activeHumanId} onDone={advance} />}
-          {step === 7 && activeHumanId && <WizardApplicationsStep humanId={activeHumanId} onDone={advance} />}
+          {step === 2 && activeHumanId && <div data-guide="dh-wizard-step-face"><WizardFaceStep humanId={activeHumanId} onDone={advance} /></div>}
+          {step === 3 && activeHumanId && <div data-guide="dh-wizard-step-voice"><WizardVoiceStep humanId={activeHumanId} onDone={advance} /></div>}
+          {step === 4 && activeHumanId && <div data-guide="dh-wizard-step-knowledge"><WizardKnowledgeStep humanId={activeHumanId} onDone={advance} /></div>}
+          {step === 5 && activeHumanId && <div data-guide="dh-wizard-step-persona"><WizardPersonaStep humanId={activeHumanId} role={role} onDone={advance} /></div>}
+          {step === 6 && activeHumanId && <div data-guide="dh-wizard-step-gesture"><WizardGestureStep humanId={activeHumanId} onDone={advance} /></div>}
+          {step === 7 && activeHumanId && <div data-guide="dh-wizard-step-applications"><WizardApplicationsStep humanId={activeHumanId} onDone={advance} /></div>}
           {step === 8 && activeHumanId && (activated
             ? <DigitalHumanDeploymentSuccess humanId={activeHumanId} onDone={() => onClose(true)} />
-            : <WizardReviewStep humanId={activeHumanId} activating={activating} onActivate={finish} />)}
+            : <div data-guide="dh-wizard-activate"><WizardReviewStep humanId={activeHumanId} activating={activating} onActivate={finish} /></div>)}
         </div>
         {step > 1 && !activated && (
           <div className="wizard-footer editor-actions">
@@ -1405,13 +1418,13 @@ function DigitalHumanDeploymentSuccess({ humanId, onDone }: { humanId: string; o
       <h3 id="digital-human-success-title">{profile?.human.name || 'Your Digital Human'} is ready to prove its presence.</h3>
       <p>Activation preserves the separation between identity, approved Persona and knowledge. Test the visible experience before assigning this identity to a Digital Colleague role.</p>
       <div className="post-deployment-action-cards">
-        <Link href={`/studio/test-centre?human=${humanId}`} className="post-deployment-action-card">
+        <Link href={`/studio/test-centre?human=${humanId}`} className="post-deployment-action-card" data-guide="dh-post-deploy-test">
           <Play size={20} /><span><strong>Test Presence</strong><small>Verify identity, disclosure, voice, avatar fallback and application channel.</small></span><ArrowRight size={16} />
         </Link>
         <Link href="/studio/live-sessions" className="post-deployment-action-card">
           <Radio size={20} /><span><strong>Start a test conversation</strong><small>Run a disclosed, consent-gated session with honest media fallback.</small></span><ArrowRight size={16} />
         </Link>
-        <Link href="/studio/workforce/create" className="post-deployment-action-card">
+        <Link href="/studio/workforce/create" className="post-deployment-action-card" data-guide="dh-post-deploy-colleague">
           <BrainCircuit size={20} /><span><strong>Create a Digital Colleague</strong><small>Attach this identity to a bounded role, governance policy and 12-step deployment.</small></span><ArrowRight size={16} />
         </Link>
       </div>
@@ -3115,6 +3128,7 @@ function Applications() {
       if (!res.ok) throw new Error(body.message || 'Could not connect this application.');
       setNewName('');
       await refresh();
+      window.dispatchEvent(new CustomEvent('studio:guide-step-complete', { detail: { step: 'app-connect' } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect this application.');
     } finally {
@@ -3196,7 +3210,7 @@ function Applications() {
       </section>
       <section className="panel">
         <PanelTitle title="Connect an application" eyebrow="External sites your VowHumans can serve" />
-        <form className="form-grid two" onSubmit={submitCreate}>
+        <form className="form-grid two" onSubmit={submitCreate} data-guide="app-connect">
           <label className="full">Application name<input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. PlugConnect" /></label>
           <div className="full chip-toggle-row">
             {applications.map((app) => <button type="button" key={app.name} className="chip-toggle" onClick={() => setNewName(app.name)}>{app.name}</button>)}

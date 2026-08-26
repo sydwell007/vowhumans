@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { readSession } from "@/lib/auth";
 import { SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 import { AuthProvider } from "@/components/AuthContext";
+import { GuideProvider } from "@/components/GuideProvider";
+import { FollowAlongPanel } from "@/components/FollowAlongPanel";
 
 export default async function StudioLayout({ children }: { children: React.ReactNode }) {
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
@@ -11,7 +13,10 @@ export default async function StudioLayout({ children }: { children: React.React
 
   return (
     <AuthProvider user={{ id: user.id, email: user.email, displayName: user.displayName, role: user.role, organisationId: user.organisationId, organisationName: user.organisationName, organisationSlug: user.organisationSlug }}>
-      {children}
+      <GuideProvider>
+        {children}
+        <FollowAlongPanel />
+      </GuideProvider>
     </AuthProvider>
   );
 }

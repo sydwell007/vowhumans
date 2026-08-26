@@ -129,7 +129,7 @@ describe("multilingual endpoints require a session", () => {
 });
 
 describe("production control-plane endpoints require a session", () => {
-  for (const resource of ["dashboard", "identities", "api-keys", "webhooks", "usage", "safety", "audit-logs", "organisations/current"]) {
+  for (const resource of ["dashboard", "identities", "api-keys", "webhooks", "usage", "safety", "audit-logs", "organisations/current", "guide-progress", "guide-preferences"]) {
     it(`GET ${resource}`, async () => expect((await get(resource)).status).toBe(401));
   }
 
@@ -146,4 +146,6 @@ describe("production control-plane endpoints require a session", () => {
   it("PATCH organisations/current", async () => expect((await patch("organisations/current", { name: "Renamed" })).status).toBe(401));
   it("PATCH api-keys/:id", async () => expect((await patch("api-keys/11111111-1111-4111-8111-111111111111", { status: "revoked" })).status).toBe(401));
   it("DELETE webhooks/:id", async () => expect((await remove("webhooks/11111111-1111-4111-8111-111111111111")).status).toBe(401));
+  it("PATCH guide-progress/:guideId", async () => expect((await patch("guide-progress/digital-human-flagship", { status: "in_progress", current_step_id: "dh-new" })).status).toBe(401));
+  it("PATCH guide-preferences", async () => expect((await patch("guide-preferences", { guided_mode: false })).status).toBe(401));
 });

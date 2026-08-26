@@ -13,6 +13,7 @@ import {
   ClipboardList,
   FileKey2,
   Fingerprint,
+  GraduationCap,
   KeyRound,
   Languages,
   LibraryBig,
@@ -139,6 +140,7 @@ export const navigation = [
     items: [
       { slug: "", label: "Dashboard", icon: CircleGauge },
       { slug: "workforce", label: "Digital Workforce", icon: BriefcaseBusiness },
+      { slug: "learn", label: "Guide Library", icon: GraduationCap },
     ],
   },
   {
@@ -189,6 +191,7 @@ export const navigation = [
 export const pageMeta: Record<string, { eyebrow: string; title: string; description: string; action: string }> = {
   dashboard: { eyebrow: "", title: "", description: "Here’s what your governed Digital Humans and Digital Colleagues are doing today.", action: "Create Digital Colleague" },
   workforce: { eyebrow: "Operating model", title: "Digital Workforce", description: "Design, test, approve, deploy and supervise accountable Digital Colleagues without blurring identity, behaviour and work.", action: "Create Digital Colleague" },
+  learn: { eyebrow: "Learn by doing", title: "Guide Library", description: "Real, click-validated guides that run directly on your own Studio — never a simulation.", action: "Resume a guide" },
   "test-centre": { eyebrow: "Safe proof before scale", title: "Test Centre", description: "Test Digital Human presence, Digital Colleague behaviour and deployed work as separate, version-aware evidence.", action: "Run test" },
   operations: { eyebrow: "Post-deployment command", title: "Operations", description: "Observe runtime health, supervise deployments and pause work without losing configuration or evidence.", action: "Test connections" },
   tasks: { eyebrow: "Governed operations", title: "Work Queue", description: "Assign bounded work, inspect event trails and review every Digital Colleague output before release.", action: "New work item" },
