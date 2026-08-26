@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getGuide, guides, guidesForRole, type Guide } from "@/lib/guides";
-import { resolveGuideTarget } from "@/lib/guideEngine";
+import { resolveGuideTarget, resolveResumableStepIndex } from "@/lib/guideEngine";
 import { useAuth } from "./AuthContext";
 
 export type GuideProgressStatus = "in_progress" | "completed" | "skipped" | "dismissed";
@@ -102,10 +102,11 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     (guideId: string, stepIndex = 0) => {
       const guide = getGuide(guideId);
       if (!guide) return;
+      const resolvedIndex = resolveResumableStepIndex(guide.steps, stepIndex);
       setActiveGuideId(guideId);
-      setActiveStepIndex(Math.min(stepIndex, guide.steps.length - 1));
+      setActiveStepIndex(resolvedIndex);
       setEventSatisfied(false);
-      const step = guide.steps[Math.min(stepIndex, guide.steps.length - 1)];
+      const step = guide.steps[resolvedIndex];
       persist(guideId, { status: "in_progress", currentStepId: step.id, completedStepIds: progress[guideId]?.completedStepIds ?? [] });
     },
     [persist, progress],
@@ -155,6 +156,27 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     // Only re-check when the guide's own step or the URL changes — advanceOrFinish is stable per step via activeStepIndex.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, activeStepIndex, activeStep]);
+
+  // Every step's target.page is where the clickable element lives, never the
+  // page a navigation-kind step's own validation is satisfied by (checked
+  // across the whole catalogue) — so navigating there on activation can never
+  // silently auto-complete a step, it only gets the user to where the real
+  // action is. Without this, starting or resuming a guide from a different
+  // page (the Guide Library, "Continue where I left off" on Studio Home) left
+  // the coach mark stuck on "Finding this on the page…" forever, since
+  // nothing ever took the user to the page the target is actually on.
+  useEffect(() => {
+    function navigateToStepTarget() {
+      const target = activeStep?.target;
+      if (!target?.page) return;
+      const resolution = resolveGuideTarget(target, pathname);
+      if (resolution.needsNavigation && resolution.page) router.push(resolution.page);
+    }
+    navigateToStepTarget();
+    // Only re-run when the active step itself changes — not on every pathname
+    // change, so a user who manually navigates elsewhere isn't yanked back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep]);
 
   useEffect(() => {
     function onStepComplete(event: Event) {

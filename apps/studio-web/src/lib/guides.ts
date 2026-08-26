@@ -281,11 +281,11 @@ const connectApplication: Guide = {
       validation: { kind: "event", step: "app-connect" },
     },
     {
-      id: "dh-wizard-step-applications",
+      id: "dh-applications-toggle",
       title: "Enable a Digital Human for it",
-      body: "Open an existing Digital Human's Applications section (or the wizard's Applications step for a new one) and enable it for the application you just connected.",
-      target: { selector: "dh-wizard-step-applications", page: "/studio/digital-humans" },
-      validation: { kind: "event", step: "dh-wizard-step-applications" },
+      body: "Select a Digital Human from the list on the left, then enable it for the application you just connected — this needs a published Persona first.",
+      target: { selector: "dh-applications-toggle", page: "/studio/digital-humans" },
+      validation: { kind: "event", step: "dh-applications-toggle" },
     },
   ],
 };

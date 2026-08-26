@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeDigitalColleagueSetupProgress, computeDigitalHumanSetupProgress, nextBestAction, resolveGuideTarget } from "./guideEngine";
+import { computeDigitalColleagueSetupProgress, computeDigitalHumanSetupProgress, nextBestAction, resolveGuideTarget, resolveResumableStepIndex } from "./guideEngine";
+import { getGuide, type GuideStep } from "./guides";
 
 const fullHuman = {
   identity: { name: "Naledi", role: "Support", disclosure: "AI-generated." },
@@ -74,5 +75,50 @@ describe("resolveGuideTarget", () => {
   });
   it("returns no navigation for a null target", () => {
     expect(resolveGuideTarget(null, "/studio")).toEqual({ needsNavigation: false, page: null });
+  });
+});
+
+function step(id: string, target: GuideStep["target"]): GuideStep {
+  return { id, title: id, body: "", target, validation: { kind: "manual" } };
+}
+
+describe("resolveResumableStepIndex", () => {
+  it("keeps a requested index whose target has a fixed page", () => {
+    const steps = [step("a", { selector: "a", page: "/one" }), step("b", { selector: "b", page: "/two" })];
+    expect(resolveResumableStepIndex(steps, 1)).toBe(1);
+  });
+
+  it("walks back over contextual (page-less) targets to the nearest reachable step", () => {
+    const steps = [
+      step("a", { selector: "a", page: "/one" }),
+      step("b", { selector: "b" }),
+      step("c", { selector: "c" }),
+    ];
+    expect(resolveResumableStepIndex(steps, 2)).toBe(0);
+  });
+
+  it("stops at a manual (null-target) step even without a page", () => {
+    const steps = [step("a", null), step("b", { selector: "b" })];
+    expect(resolveResumableStepIndex(steps, 1)).toBe(0);
+  });
+
+  it("clamps an out-of-range index instead of throwing", () => {
+    const steps = [step("a", { selector: "a", page: "/one" })];
+    expect(resolveResumableStepIndex(steps, 5)).toBe(0);
+    expect(resolveResumableStepIndex(steps, -1)).toBe(0);
+  });
+
+  // Regression guard for a real bug: resuming the Digital Colleague flagship
+  // guide mid-builder (any of its contextual, page-less builder steps) used
+  // to leave the coach mark permanently stuck on "Finding this on the
+  // page…" because nothing could reconstruct which colleague's dynamic URL
+  // it needed. It must always fall back to a step with a real fixed page.
+  it("resolves every step of the real Digital Colleague flagship guide to something independently reachable", () => {
+    const guide = getGuide("digital-colleague-flagship")!;
+    for (let i = 0; i < guide.steps.length; i += 1) {
+      const resolved = guide.steps[resolveResumableStepIndex(guide.steps, i)];
+      const target = resolved.target;
+      expect(target === null || Boolean(target.page)).toBe(true);
+    }
   });
 });

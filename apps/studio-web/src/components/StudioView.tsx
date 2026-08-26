@@ -354,6 +354,7 @@ function DigitalHumans() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || 'Could not update this application.');
       await refresh();
+      if (enabled) window.dispatchEvent(new CustomEvent('studio:guide-step-complete', { detail: { step: 'dh-applications-toggle' } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update this application.');
     } finally {
@@ -431,7 +432,7 @@ function DigitalHumans() {
                 <PanelTitle title="Applications" eyebrow="Where this VowHuman can be embedded" />
                 {apps.length === 0 && <p className="panel-note">No applications connected yet — connect one from the Applications page.</p>}
                 {apps.length > 0 && (
-                  <div className="application-toggle-list">
+                  <div className="application-toggle-list" data-guide="dh-applications-toggle">
                     {apps.map((app) => {
                       const link = appLinks.find((l) => l.digital_human_id === detail.human.id && l.application_id === app.id);
                       const enabled = Boolean(link?.enabled);

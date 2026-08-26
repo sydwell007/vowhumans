@@ -299,36 +299,35 @@ a { color: inherit; text-decoration: none; }
 .guided-mode-toggle i{width:8px;height:8px;border-radius:50%;background:color-mix(in srgb,var(--ink) 25%,transparent)}
 .guided-mode-toggle i.on{background:var(--violet)}
 
-/* Guided Studio onboarding — coach marks + the docked Follow Along panel.
+/* Guided Studio onboarding — a single floating coach-mark window per active
+   guide (spotlight ring + tooltip, owned entirely by CoachMark.tsx) plus its
+   minimized tab. These used to be two separate boxes — a docked panel and a
+   coach-mark tooltip — shown at the same time with duplicate step counters
+   and duplicate skip controls; CoachMark now owns all of that itself.
    z-index slots between the existing 80 (drawer-scrim/wizard-panel/test-drawer)
-   and 100 (toast): follow-along-panel 82, coachmark-ring and coachmark-tooltip
+   and 100 (toast): follow-along-tab 82, coachmark-ring and coachmark-tooltip
    90 — high enough to sit above an open wizard, since several steps point at
    controls inside one, and the coach mark must stay visible and clickable
    there rather than being hidden while that wizard is open.
-   There is deliberately no separate full-page scrim div any more — the ring's
-   own box-shadow already dims everything outside the highlighted element
-   (see .coachmark-ring below), and a second overlay on top of that both
+   There is deliberately no separate full-page scrim div — the ring's own
+   box-shadow already dims everything outside the highlighted element (see
+   .coachmark-ring below); a second overlay on top of that both
    double-darkened the real page and — because it was a plain positioned div —
    silently intercepted every click on the real UI a guide step needed the
    user to make. */
 .follow-along-tab{position:fixed;right:22px;bottom:22px;z-index:82;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--line);border-radius:999px;background:var(--white);color:var(--ink);font-size:10px;font-weight:800;box-shadow:var(--shadow);cursor:pointer}
 .follow-along-tab svg{color:var(--violet)}
-.follow-along-panel{position:fixed;right:22px;bottom:22px;z-index:82;width:min(300px,calc(100vw - 32px));padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--white);box-shadow:var(--shadow)}
-.follow-along-head{display:flex;align-items:flex-start;gap:10px}
-.follow-along-icon{display:grid;width:30px;height:30px;flex:none;place-items:center;border-radius:9px;background:color-mix(in srgb,var(--violet) 18%,transparent);color:var(--violet)}
-.follow-along-head>div{display:grid;gap:3px;min-width:0}
-.follow-along-head small{color:var(--muted);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
-.follow-along-head strong{font-size:10px;line-height:1.4}
-.follow-along-head .icon-button{width:26px;height:26px;flex:none}
-.follow-along-progress{display:block;height:5px;margin:12px 0;overflow:hidden;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
-.follow-along-progress b{display:block;height:100%;border-radius:inherit;background:var(--violet);transition:width .25s ease}
-.follow-along-locate{width:100%;margin-bottom:8px}
-.follow-along-actions{display:flex;justify-content:flex-end}
 .coachmark-ring{position:fixed;z-index:90;border-radius:12px;box-shadow:0 0 0 4px var(--violet),0 0 0 9999px rgba(2,6,16,.28);pointer-events:none;transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease}
 .coachmark-tooltip{position:fixed;z-index:90;width:min(340px,calc(100vw - 32px));padding:16px;border-radius:15px;background:var(--white);color:var(--ink);box-shadow:var(--shadow)}
 .coachmark-tooltip-floating{right:22px;bottom:106px;left:auto!important;top:auto!important}
-.coachmark-close{position:absolute;top:10px;right:10px;width:26px;height:26px}
-.coachmark-tooltip h3{margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:500;padding-right:24px;color:var(--ink)}
+.coachmark-tooltip-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.coachmark-tooltip-head .eyebrow{margin:0;color:var(--violet)}
+.coachmark-tooltip-head small{color:var(--muted);font-size:9px;font-weight:700}
+.coachmark-tooltip-headbtns{display:flex;gap:4px;flex:none}
+.coachmark-tooltip-headbtns .icon-button{width:26px;height:26px}
+.coachmark-progress{display:block;height:4px;margin:10px 0;overflow:hidden;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.coachmark-progress b{display:block;height:100%;border-radius:inherit;background:var(--violet);transition:width .25s ease}
+.coachmark-tooltip h3{margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:500;color:var(--ink)}
 .coachmark-tooltip>p:not(.eyebrow):not(.coachmark-waiting){margin:0;color:var(--muted);font-size:10px;line-height:1.6}
 .coachmark-waiting{margin:8px 0 0;color:var(--muted);font-size:9px;font-style:italic}
 .coachmark-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:14px}
@@ -382,7 +381,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width:560px){
-  .follow-along-panel,.follow-along-tab{left:14px;right:14px;width:auto}
+  .follow-along-tab{left:14px;right:14px;width:auto}
   .coachmark-tooltip{left:14px!important;right:14px;bottom:14px;top:auto!important;width:auto;border-radius:15px 15px 0 0}
   .coachmark-tooltip-floating{bottom:14px}
 }

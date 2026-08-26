@@ -1,4 +1,4 @@
-import type { GuideTarget } from "./guides";
+import type { GuideStep, GuideTarget } from "./guides";
 
 // Pure logic for the guided-onboarding engine — no DOM, no fetch, no React,
 // mirroring packages/commercial-core/src/workforce.ts's style so it stays
@@ -114,4 +114,22 @@ export type GuideTargetResolution = { needsNavigation: boolean; page: string | n
 export function resolveGuideTarget(target: GuideTarget | null, pathname: string): GuideTargetResolution {
   if (!target?.page) return { needsNavigation: false, page: null };
   return { needsNavigation: target.page !== pathname, page: target.page };
+}
+
+// A step with a real target but no fixed page (e.g. a Digital Colleague
+// builder step, whose URL depends on which colleague was being configured)
+// assumes the user is already mid-session on that record — resuming cold
+// from a different page (Guide Library, "Continue where I left off") can't
+// reconstruct that URL, and would otherwise strand the coach mark on
+// "Finding this on the page…" forever. Walk back to the nearest earlier step
+// that's independently reachable: a fixed page, or no element target at all
+// (a purely informational step).
+export function resolveResumableStepIndex(steps: GuideStep[], requestedIndex: number): number {
+  let index = Math.min(Math.max(requestedIndex, 0), steps.length - 1);
+  while (index > 0) {
+    const target = steps[index].target;
+    if (target === null || target.page) break;
+    index -= 1;
+  }
+  return index;
 }
