@@ -18,7 +18,6 @@ type GuideContextValue = {
   canAdvance: boolean;
   progress: ProgressMap;
   guidedMode: boolean;
-  modalOpen: boolean;
   setGuidedMode: (value: boolean) => void;
   startGuide: (guideId: string, stepIndex?: number) => void;
   nextStep: () => void;
@@ -59,7 +58,6 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [eventSatisfied, setEventSatisfied] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
@@ -80,17 +78,6 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       if (prefsBody?.success && typeof prefsBody.data?.guided_mode === "boolean") setGuidedModeState(prefsBody.data.guided_mode);
     });
   }, [user.id]);
-
-  useEffect(() => {
-    function onModalOpen() { setModalOpen(true); }
-    function onModalClose() { setModalOpen(false); }
-    window.addEventListener("studio:modal-open", onModalOpen);
-    window.addEventListener("studio:modal-close", onModalClose);
-    return () => {
-      window.removeEventListener("studio:modal-open", onModalOpen);
-      window.removeEventListener("studio:modal-close", onModalClose);
-    };
-  }, []);
 
   const activeGuide = activeGuideId ? getGuide(activeGuideId) ?? null : null;
   const activeStep = activeGuide?.steps[activeStepIndex] ?? null;
@@ -196,7 +183,13 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     if (resolution.needsNavigation && resolution.page) router.push(resolution.page);
   }, [activeStep, pathname, router]);
 
-  const canAdvance = activeStep ? (activeStep.validation.kind === "manual" || activeStep.validation.kind === "navigation" ? true : eventSatisfied) : false;
+  const canAdvance = activeStep
+    ? activeStep.validation.kind === "manual"
+      ? true
+      : activeStep.validation.kind === "navigation"
+        ? activeStep.validation.test(pathname)
+        : eventSatisfied
+    : false;
 
   const guidesForCurrentUser = useMemo(() => guidesForRole(user.role), [user.role]);
 
@@ -208,7 +201,6 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     canAdvance,
     progress,
     guidedMode,
-    modalOpen,
     setGuidedMode,
     startGuide,
     nextStep,

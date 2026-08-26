@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bot, BriefcaseBusiness, Compass, GraduationCap } from "lucide-react";
+import { ArrowRight, Bot, BriefcaseBusiness, Compass, GraduationCap, PlayCircle } from "lucide-react";
 import { getGuide } from "@/lib/guides";
 import { useGuide } from "./GuideProvider";
+import { WalkthroughPlayer } from "./WalkthroughPlayer";
 
 async function json<T>(path: string): Promise<T | null> {
   try {
@@ -19,6 +20,7 @@ async function json<T>(path: string): Promise<T | null> {
 export function StudioHomeChooser() {
   const { progress, startGuide, guidedMode } = useGuide();
   const [counts, setCounts] = useState<{ humans: number; colleagues: number } | null>(null);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -54,7 +56,12 @@ export function StudioHomeChooser() {
 
   return (
     <section className="studio-home-chooser">
-      <p className="eyebrow">What would you like to create?</p>
+      <div className="studio-home-chooser-heading">
+        <p className="eyebrow">What would you like to create?</p>
+        <button type="button" className="studio-home-watch" onClick={() => setShowWalkthrough(true)}>
+          <PlayCircle size={14} />Watch how it works
+        </button>
+      </div>
       <div className="studio-home-chooser-grid">
         <Link href="/studio/digital-humans" className="studio-home-chooser-card">
           <span><Bot size={22} /></span>
@@ -74,6 +81,7 @@ export function StudioHomeChooser() {
           <Compass size={15} />Continue where I left off — {inProgressGuide.title}
         </button>
       )}
+      {showWalkthrough && <WalkthroughPlayer onClose={() => setShowWalkthrough(false)} />}
     </section>
   );
 }

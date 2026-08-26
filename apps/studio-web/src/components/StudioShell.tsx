@@ -114,7 +114,7 @@ export function StudioShell({ section, children }: { section: string; children: 
         <nav className="main-nav" aria-label="Studio navigation">
           {navigation.map((group) => (
             <div className="nav-group" key={group.label}>
-              <p>{group.label}</p>
+              <p>{group.label}{"description" in group && group.description && <small className="nav-group-hint">{group.description}</small>}</p>
               {group.items.map((item) => {
                 const active = (section === "dashboard" && item.slug === "") || section === item.slug;
                 const Icon = item.icon;

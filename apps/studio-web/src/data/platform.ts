@@ -17,6 +17,7 @@ import {
   KeyRound,
   Languages,
   LibraryBig,
+  ListChecks,
   Radio,
   ScrollText,
   Settings,
@@ -134,17 +135,25 @@ export const DIGITAL_HUMAN_BUILDER_STEPS = [
   "Review",
 ] as const;
 
+// Two clearly parallel build tracks, not one flat list — this is the direct
+// answer to "why are there two configurations": a Digital Human is a
+// disclosed identity (face/voice/knowledge/persona), a Digital Colleague is a
+// governed role built on top of one (bounded work/tools/objectives). Every
+// stage of each entity's own lifecycle — build, connect/test, operate — lives
+// together under its own group, rather than being split across Build/Operate/
+// Govern the way a flat IA previously scattered a colleague's Work Queue,
+// Approvals and Operations away from where it's actually created.
 export const navigation = [
   {
     label: "Overview",
     items: [
       { slug: "", label: "Dashboard", icon: CircleGauge },
-      { slug: "workforce", label: "Digital Workforce", icon: BriefcaseBusiness },
       { slug: "learn", label: "Guide Library", icon: GraduationCap },
     ],
   },
   {
-    label: "Build",
+    label: "Digital Humans",
+    description: "Identity, face, voice & knowledge — a disclosed presence",
     items: [
       { slug: "digital-humans", label: "Digital Humans", icon: Bot },
       { slug: "personas", label: "Personas", icon: BrainCircuit },
@@ -152,29 +161,31 @@ export const navigation = [
       { slug: "voices", label: "Voices", icon: AudioLines },
       { slug: "faces", label: "Faces", icon: Fingerprint },
       { slug: "gesture-profiles", label: "Gesture Profiles", icon: Sparkles },
+      { slug: "languages", label: "Languages", icon: Languages },
+      { slug: "applications", label: "Applications", icon: AppWindow },
+      { slug: "live-sessions", label: "Live Sessions", icon: Radio },
+      { slug: "presenter-studio", label: "Presenter Studio", icon: Video },
     ],
   },
   {
-    label: "Operate",
+    label: "Digital Colleagues",
+    description: "Bounded roles, tools & work — built on a Digital Human's identity",
     items: [
+      { slug: "workforce", label: "Digital Colleagues", icon: BriefcaseBusiness },
       { slug: "test-centre", label: "Test Centre", icon: ClipboardList },
-      { slug: "operations", label: "Operations", icon: Activity },
-      { slug: "tasks", label: "Work Queue", icon: ClipboardList },
+      { slug: "tasks", label: "Work Queue", icon: ListChecks },
       { slug: "work-products", label: "Work Products", icon: Boxes },
-      { slug: "live-sessions", label: "Live Sessions", icon: Radio },
-      { slug: "presenter-studio", label: "Presenter Studio", icon: Video },
-      { slug: "languages", label: "Languages", icon: Languages },
-      { slug: "applications", label: "Applications", icon: AppWindow },
+      { slug: "approvals", label: "Approvals", icon: BadgeCheck },
+      { slug: "operations", label: "Operations", icon: Activity },
     ],
   },
   {
     label: "Govern",
     items: [
-      { slug: "approvals", label: "Approvals", icon: BadgeCheck },
       { slug: "identity-consent", label: "Identity & Consent", icon: UsersRound },
+      { slug: "safety", label: "Safety", icon: ShieldCheck },
       { slug: "api-keys", label: "API Keys", icon: KeyRound },
       { slug: "webhooks", label: "Webhooks", icon: Webhook },
-      { slug: "safety", label: "Safety", icon: ShieldCheck },
       { slug: "settings", label: "Settings", icon: Settings },
     ],
   },
@@ -190,7 +201,7 @@ export const navigation = [
 
 export const pageMeta: Record<string, { eyebrow: string; title: string; description: string; action: string }> = {
   dashboard: { eyebrow: "", title: "", description: "Here’s what your governed Digital Humans and Digital Colleagues are doing today.", action: "Create Digital Colleague" },
-  workforce: { eyebrow: "Operating model", title: "Digital Workforce", description: "Design, test, approve, deploy and supervise accountable Digital Colleagues without blurring identity, behaviour and work.", action: "Create Digital Colleague" },
+  workforce: { eyebrow: "Governed roles, built on a Digital Human's identity", title: "Digital Colleagues", description: "Design, test, approve, deploy and supervise accountable Digital Colleagues without blurring identity, behaviour and work.", action: "Create Digital Colleague" },
   learn: { eyebrow: "Learn by doing", title: "Guide Library", description: "Real, click-validated guides that run directly on your own Studio — never a simulation.", action: "Resume a guide" },
   "test-centre": { eyebrow: "Safe proof before scale", title: "Test Centre", description: "Test Digital Human presence, Digital Colleague behaviour and deployed work as separate, version-aware evidence.", action: "Run test" },
   operations: { eyebrow: "Post-deployment command", title: "Operations", description: "Observe runtime health, supervise deployments and pause work without losing configuration or evidence.", action: "Test connections" },

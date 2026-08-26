@@ -1,13 +1,29 @@
 "use client";
 
-import { CheckCircle2, Circle, PlayCircle } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Circle, Compass, PlayCircle } from "lucide-react";
 import { useGuide } from "./GuideProvider";
+import { WalkthroughPlayer } from "./WalkthroughPlayer";
 
 export function GuideLibrary() {
   const { guidesForCurrentUser, progress, startGuide } = useGuide();
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
 
   return (
     <div className="content-stack guide-library">
+      <article className="panel guide-library-card guide-library-featured">
+        <div className="guide-library-head">
+          <span><Compass size={20} /></span>
+          <div>
+            <h2>Watch the full setup</h2>
+            <p>An automated, pausable preview of the whole journey — a Digital Human, a Digital Colleague, deployed and put to work — using an illustrative example, not your real data.</p>
+          </div>
+          <small>~90 sec · 16 steps</small>
+        </div>
+        <button className="primary-button" type="button" onClick={() => setShowWalkthrough(true)}>
+          Watch the walkthrough
+        </button>
+      </article>
       {guidesForCurrentUser.map((guide) => {
         const entry = progress[guide.id];
         const status = entry?.status ?? "not_started";
@@ -34,6 +50,7 @@ export function GuideLibrary() {
           </article>
         );
       })}
+      {showWalkthrough && <WalkthroughPlayer onClose={() => setShowWalkthrough(false)} />}
     </div>
   );
 }

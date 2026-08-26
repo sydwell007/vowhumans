@@ -294,7 +294,6 @@ function DigitalHumans() {
     setWizardHumanId(resumeId);
     setWizardStartStep(startStep);
     setWizardOpen(true);
-    window.dispatchEvent(new CustomEvent("studio:modal-open"));
   }
 
   // Wires StudioShell's top-bar "+ New digital human" button, which lives outside this
@@ -308,7 +307,6 @@ function DigitalHumans() {
   function closeWizard(refreshNeeded: boolean) {
     const resumedId = wizardHumanId;
     setWizardOpen(false);
-    window.dispatchEvent(new CustomEvent("studio:modal-close"));
     if (refreshNeeded) {
       refresh();
       if (resumedId) loadDetail(resumedId);

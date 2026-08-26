@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Compass } from "lucide-react";
 import { nextBestAction, type NextBestAction as NextBestActionResult } from "@/lib/guideEngine";
-import { useGuide } from "./GuideProvider";
+import { WalkthroughPlayer } from "./WalkthroughPlayer";
 
 async function json<T>(path: string): Promise<T | null> {
   try {
@@ -16,10 +16,17 @@ async function json<T>(path: string): Promise<T | null> {
   }
 }
 
+// Both flagship guide ids open the automated walkthrough first — the earlier
+// version sent people straight into an interactive coach-mark guide, which
+// is a hands-on "do it now" tool, not an answer to "what does this even look
+// like." Any other recommendation (review a Work Product, resolve a blocked
+// identity, assign work) has no walkthrough script and just navigates.
+const FLAGSHIP_GUIDE_IDS = new Set(["digital-human-flagship", "digital-colleague-flagship"]);
+
 export function NextBestAction() {
   const router = useRouter();
-  const { startGuide } = useGuide();
   const [action, setAction] = useState<NextBestActionResult | null>(null);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -57,12 +64,13 @@ export function NextBestAction() {
         className="primary-button"
         type="button"
         onClick={() => {
-          router.push(action.href);
-          if (action.guideId) startGuide(action.guideId);
+          if (action.guideId && FLAGSHIP_GUIDE_IDS.has(action.guideId)) setShowWalkthrough(true);
+          else router.push(action.href);
         }}
       >
         Go<ArrowRight size={15} />
       </button>
+      {showWalkthrough && <WalkthroughPlayer onClose={() => setShowWalkthrough(false)} />}
     </section>
   );
 }

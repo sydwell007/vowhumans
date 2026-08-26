@@ -12,10 +12,6 @@ export type CoachMarkProps = {
   canAdvance: boolean;
   hasPrevious: boolean;
   isLastStep: boolean;
-  // True while another dialog (the Digital Human wizard, a right-docked test
-  // drawer) already owns a full-page scrim — CoachMark then skips its own so
-  // the two dims never stack.
-  ownsScrim: boolean;
   onNext: () => void;
   onPrevious: () => void;
   onSkip: () => void;
@@ -23,7 +19,7 @@ export type CoachMarkProps = {
 
 type TargetRect = { top: number; left: number; width: number; height: number };
 
-export function CoachMark({ selector, title, body, stepLabel, canAdvance, hasPrevious, isLastStep, ownsScrim, onNext, onPrevious, onSkip }: CoachMarkProps) {
+export function CoachMark({ selector, title, body, stepLabel, canAdvance, hasPrevious, isLastStep, onNext, onPrevious, onSkip }: CoachMarkProps) {
   const [rect, setRect] = useState<TargetRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const wasFoundRef = useRef(false);
@@ -77,7 +73,6 @@ export function CoachMark({ selector, title, body, stepLabel, canAdvance, hasPre
 
   return createPortal(
     <>
-      {!ownsScrim && <div className="coachmark-scrim" onClick={onSkip} aria-hidden="true" />}
       {rect && (
         <div className="coachmark-ring" style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }} aria-hidden="true" />
       )}

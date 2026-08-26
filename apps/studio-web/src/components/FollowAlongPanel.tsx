@@ -11,14 +11,13 @@ import { CoachMark } from "./CoachMark";
 // is teaching (or float with a "Finding this on the page…" note when that
 // element isn't mounted yet, e.g. the user hasn't navigated there).
 export function FollowAlongPanel() {
-  const { activeGuide, activeStepIndex, canAdvance, modalOpen, nextStep, previousStep, skipGuide, showMeWhere } = useGuide();
+  const { activeGuide, activeStepIndex, canAdvance, nextStep, previousStep, skipGuide, showMeWhere } = useGuide();
   const [manuallyCollapsed, setManuallyCollapsed] = useState(false);
 
   if (!activeGuide) return null;
   const step = activeGuide.steps[activeStepIndex];
-  const collapsed = modalOpen || manuallyCollapsed;
 
-  if (collapsed) {
+  if (manuallyCollapsed) {
     return (
       <button className="follow-along-tab" type="button" onClick={() => setManuallyCollapsed(false)} aria-label={`Resume guide: ${activeGuide.title}`}>
         <Compass size={17} />
@@ -56,7 +55,6 @@ export function FollowAlongPanel() {
         canAdvance={canAdvance}
         hasPrevious={activeStepIndex > 0}
         isLastStep={activeStepIndex + 1 >= activeGuide.steps.length}
-        ownsScrim={modalOpen}
         onNext={nextStep}
         onPrevious={previousStep}
         onSkip={skipGuide}

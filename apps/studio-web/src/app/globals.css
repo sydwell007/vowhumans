@@ -45,6 +45,7 @@ a { color: inherit; text-decoration: none; }
 .main-nav { padding: 0 12px; }
 .nav-group { margin-bottom: 16px; }
 .nav-group > p { margin: 0 10px 7px; color: #617c83; font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.nav-group-hint { display: block; margin-top: 3px; color: #7f95a1; font-size: 9px; font-weight: 600; letter-spacing: 0; text-transform: none; line-height: 1.4; }
 .nav-group a { position: relative; display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 11px; border-radius: 10px; color: #aac0c4; font-size: 12px; font-weight: 600; transition: .18s ease; }
 .nav-group a:hover { color: #fff; background: rgba(255,255,255,.045); }
 .nav-group a.active { color: #fff; background: rgba(255,117,75,.13); }
@@ -240,80 +241,145 @@ a { color: inherit; text-decoration: none; }
 @media (max-width:620px){.topbar{gap:9px}.search-wrap{width:auto;flex:1}.search-wrap kbd{display:none}.page-heading{align-items:flex-start;flex-direction:column}.page-heading .primary-button{width:100%}.page-heading h1{font-size:38px}.page-wrap{padding-inline:14px}.hero-copy{padding:27px}.hero-copy h2{font-size:40px}.hero-actions{width:100%}.hero-actions>a{width:100%}.hero-human{min-height:310px}.metric-grid,.human-card-grid,.application-grid,.asset-card-grid,.safety-control-grid,.profile-slot-grid{grid-template-columns:1fr}.metric-card{min-height:110px}.split-grid,.split-grid.wide-left{gap:14px}.panel{padding:17px}.identity-primer{grid-template-columns:1fr}.filter-row{align-items:flex-start;flex-direction:column}.human-row{grid-template-columns:auto 1fr auto}.human-row .status-pill{display:none}.form-grid.two,.requirement-list{grid-template-columns:1fr}.console-grid{grid-template-columns:1fr}.consent-banner{grid-template-columns:1fr}.consent-score{padding:12px 0 0;border:0;border-top:1px solid rgba(255,255,255,.12)}.session-overview{grid-template-columns:1fr}.session-overview>div{border-left:0!important;border-top:1px solid #e5e9e6}.presenter-workspace{display:block}.scene-editor{margin-bottom:15px}.application-grid{grid-template-columns:1fr}.integration-principle{grid-template-columns:1fr}.preview-meta{grid-template-columns:1fr}.safety-control-grid{grid-template-columns:1fr}.prohibited-grid{grid-template-columns:1fr}.audit-toolbar{align-items:flex-start;flex-direction:column}.audit-event{grid-template-columns:auto 1fr}.audit-event>span:last-child{grid-column:2;text-align:left}.audit-event>div{grid-template-columns:1fr}.audit-event code{grid-column:auto;grid-row:auto}.settings-form .form-grid{grid-template-columns:1fr}.demo-header{padding:12px 16px}.demo-header>.ai-disclosure-chip{display:none}.demo-header nav{width:100%}.demo-header nav a{flex:1;text-align:center}.demo-container{width:calc(100% - 28px);padding-top:38px}.demo-heading h1{font-size:46px}.demo-card{padding:18px}.interviewer-picker{grid-template-columns:1fr}.mode-picker{grid-template-columns:repeat(2,1fr)}.live-room{border-radius:15px}.room-visual{min-height:430px}.room-caption{font-size:10px}.complete-card{padding:25px 17px}.feedback-grid{grid-template-columns:1fr}.tutor-room{grid-template-columns:1fr}.course-sidebar{padding:19px}.lesson-list{margin-bottom:10px}.course-source{display:none}.tutor-chat{min-height:580px;padding:16px}.tutor-messages{padding-inline:0}.tutor-bubble,.learner-bubble{max-width:90%}.present-demo-grid{display:flex;flex-direction:column}.present-result{order:-1}.stage-placeholder strong{font-size:16px}.export-options{grid-template-columns:1fr}.toast{left:14px;right:14px;bottom:14px}.topbar-actions{display:none}}
 .studio-data-notice{display:flex;align-items:center;gap:9px;margin:-12px 0 16px;padding:10px 12px;border:1px solid #d8c99e;border-radius:10px;background:#fff8df;color:#66582f;font-size:9px;line-height:1.45}.studio-data-notice strong{flex:0 0 auto;font-size:8px;text-transform:uppercase;letter-spacing:.08em}@media(max-width:620px){.studio-data-notice{align-items:flex-start;flex-direction:column}}
 
-.studio-home-chooser{padding:24px;border:1px solid var(--line);border-radius:18px;background:#fff}
+/* Every color below uses the shared --ink/--paper/--white/--line/--violet
+   tokens (never a literal hex) because apps/studio-web/src/app/brand.css
+   loads after this file and redefines those same tokens for a dark "midnight"
+   theme in production — a literal #fff here previously collided with
+   var(--ink) resolving to near-white text, rendering as an invisible blank
+   block. color-mix() gives tinted icon badges / tracks that stay correct in
+   either theme without hardcoding a theme-specific rgba(). */
+.studio-home-chooser{padding:24px;border:1px solid var(--line);border-radius:18px;background:var(--white)}
 .studio-home-chooser>.eyebrow{margin-bottom:14px}
+.studio-home-chooser-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}
+.studio-home-chooser-heading .eyebrow{margin:0}
+.studio-home-watch{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid color-mix(in srgb,var(--violet) 40%,transparent);border-radius:999px;background:color-mix(in srgb,var(--violet) 10%,transparent);color:var(--violet);font-size:9px;font-weight:800;cursor:pointer}
 .studio-home-chooser-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.studio-home-chooser-card{display:grid;gap:8px;padding:20px;border:1px solid var(--line);border-radius:15px;background:#f8f9f6;text-align:left;transition:.18s}
-.studio-home-chooser-card:hover{border-color:var(--violet);background:#f4f2fd}
-.studio-home-chooser-card>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:#ece8fb;color:var(--violet)}
+.studio-home-chooser-card{display:grid;gap:8px;padding:20px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--ink) 4%,var(--white));text-align:left;transition:.18s}
+.studio-home-chooser-card:hover{border-color:var(--violet);background:color-mix(in srgb,var(--violet) 12%,var(--white))}
+.studio-home-chooser-card>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:color-mix(in srgb,var(--violet) 18%,transparent);color:var(--violet)}
 .studio-home-chooser-card strong{font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:500}
-.studio-home-chooser-card p{margin:0;color:#6d7f84;font-size:10px;line-height:1.55}
-.studio-home-chooser-card b{display:inline-flex;align-items:center;gap:5px;margin-top:2px;color:#5c4fc4;font-size:9px;font-weight:800}
-.studio-home-continue{display:inline-flex;align-items:center;gap:7px;margin-top:16px;padding:9px 13px;border:1px dashed #cdc4f2;border-radius:10px;background:#f8f7fd;color:#5c4fc4;font-size:9px;font-weight:800;cursor:pointer}
-.studio-home-chooser-collapsed{display:flex;align-items:center;gap:9px;padding:14px 18px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);font-size:10px;font-weight:800}
-.studio-home-chooser-collapsed svg:first-child{color:var(--violet)}
+.studio-home-chooser-card p{margin:0;color:var(--muted);font-size:10px;line-height:1.55}
+.studio-home-chooser-card b{display:inline-flex;align-items:center;gap:5px;margin-top:2px;color:var(--violet);font-size:9px;font-weight:800}
+.studio-home-continue{display:inline-flex;align-items:center;gap:7px;margin-top:16px;padding:9px 13px;border:1px dashed color-mix(in srgb,var(--violet) 45%,transparent);border-radius:10px;background:color-mix(in srgb,var(--violet) 10%,transparent);color:var(--violet);font-size:9px;font-weight:800;cursor:pointer}
+.studio-home-chooser-collapsed{display:flex;align-items:center;gap:9px;padding:14px 18px;border:1px solid var(--line);border-radius:14px;background:var(--white);color:var(--ink);font-size:10px;font-weight:800}
+.studio-home-chooser-collapsed svg:first-child{color:var(--violet);flex:none}
 .studio-home-chooser-collapsed span{flex:1}
 .setup-progress-panel .eyebrow{margin-bottom:14px}
 .setup-progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
 .setup-progress-column{min-width:0}
 .setup-progress-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
-.setup-progress-head>span{display:grid;width:28px;height:28px;flex:none;place-items:center;border-radius:8px;background:#f1f4f1;color:#5c8f96}
+.setup-progress-head>span{display:grid;width:28px;height:28px;flex:none;place-items:center;border-radius:8px;background:color-mix(in srgb,var(--violet) 18%,transparent);color:var(--violet)}
 .setup-progress-head div{display:grid;gap:2px;flex:1;min-width:0}
-.setup-progress-head small{color:#8a959a;font-size:8px;font-weight:800;text-transform:uppercase}
+.setup-progress-head small{color:var(--muted);font-size:8px;font-weight:800;text-transform:uppercase}
 .setup-progress-head strong{font-size:11px}
 .setup-progress-head b{font-family:Georgia,serif;font-size:16px;font-weight:500}
-.setup-progress-bar{display:block;height:6px;margin-bottom:10px;overflow:hidden;border-radius:999px;background:#edf0ed}
+.setup-progress-bar{display:block;height:6px;margin-bottom:10px;overflow:hidden;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .setup-progress-bar b{display:block;height:100%;border-radius:inherit;background:var(--lime);transition:width .25s ease}
 .setup-progress-column ul{display:grid;gap:5px;margin:0;padding:0;list-style:none}
-.setup-progress-column li{position:relative;padding-left:16px;color:#8a959a;font-size:9px}
-.setup-progress-column li::before{content:"";position:absolute;left:0;top:4px;width:8px;height:8px;border-radius:50%;border:1px solid #d8dfdc}
-.setup-progress-column li.done{color:#426456}
-.setup-progress-column li.done::before{border-color:#4a865d;background:#4a865d}
-.next-best-action{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:#fff}
-.next-best-action .empty-icon{background:#ece8fb;color:var(--violet)}
+.setup-progress-column li{position:relative;padding-left:16px;color:var(--muted);font-size:9px}
+.setup-progress-column li::before{content:"";position:absolute;left:0;top:4px;width:8px;height:8px;border-radius:50%;border:1px solid var(--line)}
+.setup-progress-column li.done{color:var(--ink)}
+.setup-progress-column li.done::before{border-color:var(--lime);background:var(--lime)}
+.next-best-action{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--white)}
+.next-best-action .empty-icon{background:color-mix(in srgb,var(--violet) 18%,transparent);color:var(--violet)}
 .next-best-action strong{display:block;margin-top:2px;font-size:12px}
 .guide-library-card{display:grid;gap:12px}
 .guide-library-head{display:flex;align-items:flex-start;gap:12px}
 .guide-library-head>span{color:var(--violet);flex:none;margin-top:2px}
 .guide-library-head div{flex:1;min-width:0}
 .guide-library-head h2{margin:0;font-size:18px}
-.guide-library-head p{margin:4px 0 0;color:#6d7f84;font-size:10px;line-height:1.5}
-.guide-library-head small{flex:none;color:#93a0a3;font-size:8px;font-weight:800;text-transform:uppercase;white-space:nowrap}
-.guide-library-progress{display:block;height:5px;overflow:hidden;border-radius:999px;background:#edf0ed}
+.guide-library-head p{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
+.guide-library-head small{flex:none;color:var(--muted);font-size:8px;font-weight:800;text-transform:uppercase;white-space:nowrap}
+.guide-library-progress{display:block;height:5px;overflow:hidden;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .guide-library-progress b{display:block;height:100%;border-radius:inherit;background:var(--violet);transition:width .25s ease}
 .guide-library-card .primary-button{width:max-content}
-.guided-mode-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#6d7f84;font-size:9px;font-weight:800;cursor:pointer}
-.guided-mode-toggle i{width:8px;height:8px;border-radius:50%;background:#c7cfcc}
+.guide-library-card.guide-library-featured{border-color:color-mix(in srgb,var(--violet) 45%,transparent);background:color-mix(in srgb,var(--violet) 6%,var(--white))}
+.guide-library-featured .guide-library-head>span{color:var(--violet)}
+.guided-mode-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--white);color:var(--muted);font-size:9px;font-weight:800;cursor:pointer}
+.guided-mode-toggle i{width:8px;height:8px;border-radius:50%;background:color-mix(in srgb,var(--ink) 25%,transparent)}
 .guided-mode-toggle i.on{background:var(--violet)}
 
 /* Guided Studio onboarding — coach marks + the docked Follow Along panel.
    z-index slots between the existing 80 (drawer-scrim/wizard-panel/test-drawer)
-   and 100 (toast): follow-along-panel 82, coachmark-scrim 85, coachmark-ring
-   and coachmark-tooltip 90 — high enough to sit above a wizard/drawer since
-   several steps point at controls inside one. */
-.follow-along-tab{position:fixed;right:22px;bottom:22px;z-index:82;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:10px;font-weight:800;box-shadow:var(--shadow);cursor:pointer}
+   and 100 (toast): follow-along-panel 82, coachmark-ring and coachmark-tooltip
+   90 — high enough to sit above an open wizard, since several steps point at
+   controls inside one, and the coach mark must stay visible and clickable
+   there rather than being hidden while that wizard is open.
+   There is deliberately no separate full-page scrim div any more — the ring's
+   own box-shadow already dims everything outside the highlighted element
+   (see .coachmark-ring below), and a second overlay on top of that both
+   double-darkened the real page and — because it was a plain positioned div —
+   silently intercepted every click on the real UI a guide step needed the
+   user to make. */
+.follow-along-tab{position:fixed;right:22px;bottom:22px;z-index:82;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border:1px solid var(--line);border-radius:999px;background:var(--white);color:var(--ink);font-size:10px;font-weight:800;box-shadow:var(--shadow);cursor:pointer}
 .follow-along-tab svg{color:var(--violet)}
-.follow-along-panel{position:fixed;right:22px;bottom:22px;z-index:82;width:min(300px,calc(100vw - 32px));padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--shadow)}
+.follow-along-panel{position:fixed;right:22px;bottom:22px;z-index:82;width:min(300px,calc(100vw - 32px));padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--white);box-shadow:var(--shadow)}
 .follow-along-head{display:flex;align-items:flex-start;gap:10px}
-.follow-along-icon{display:grid;width:30px;height:30px;flex:none;place-items:center;border-radius:9px;background:#ece8fb;color:var(--violet)}
+.follow-along-icon{display:grid;width:30px;height:30px;flex:none;place-items:center;border-radius:9px;background:color-mix(in srgb,var(--violet) 18%,transparent);color:var(--violet)}
 .follow-along-head>div{display:grid;gap:3px;min-width:0}
-.follow-along-head small{color:#8a959a;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.follow-along-head small{color:var(--muted);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
 .follow-along-head strong{font-size:10px;line-height:1.4}
 .follow-along-head .icon-button{width:26px;height:26px;flex:none}
-.follow-along-progress{display:block;height:5px;margin:12px 0;overflow:hidden;border-radius:999px;background:#ece9f9}
+.follow-along-progress{display:block;height:5px;margin:12px 0;overflow:hidden;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .follow-along-progress b{display:block;height:100%;border-radius:inherit;background:var(--violet);transition:width .25s ease}
 .follow-along-locate{width:100%;margin-bottom:8px}
 .follow-along-actions{display:flex;justify-content:flex-end}
-.coachmark-scrim{position:fixed;inset:0;z-index:85;background:rgba(11,27,34,.4);backdrop-filter:blur(2px)}
-.coachmark-ring{position:fixed;z-index:90;border-radius:12px;box-shadow:0 0 0 4px var(--violet),0 0 0 9999px rgba(11,27,34,.45);pointer-events:none;transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease}
-.coachmark-tooltip{position:fixed;z-index:90;width:min(340px,calc(100vw - 32px));padding:16px;border-radius:15px;background:#fff;box-shadow:var(--shadow)}
+.coachmark-ring{position:fixed;z-index:90;border-radius:12px;box-shadow:0 0 0 4px var(--violet),0 0 0 9999px rgba(2,6,16,.28);pointer-events:none;transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease}
+.coachmark-tooltip{position:fixed;z-index:90;width:min(340px,calc(100vw - 32px));padding:16px;border-radius:15px;background:var(--white);color:var(--ink);box-shadow:var(--shadow)}
 .coachmark-tooltip-floating{right:22px;bottom:106px;left:auto!important;top:auto!important}
 .coachmark-close{position:absolute;top:10px;right:10px;width:26px;height:26px}
-.coachmark-tooltip h3{margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:500;padding-right:24px}
-.coachmark-tooltip>p:not(.eyebrow):not(.coachmark-waiting){margin:0;color:#5c6e73;font-size:10px;line-height:1.6}
-.coachmark-waiting{margin:8px 0 0;color:#93a0a3;font-size:9px;font-style:italic}
+.coachmark-tooltip h3{margin:0 0 6px;font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:500;padding-right:24px;color:var(--ink)}
+.coachmark-tooltip>p:not(.eyebrow):not(.coachmark-waiting){margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+.coachmark-waiting{margin:8px 0 0;color:var(--muted);font-size:9px;font-style:italic}
 .coachmark-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:14px}
 .coachmark-actions .plain-button{margin-right:auto}
+
+/* Automated Studio walkthrough — a genuinely separate window (its own opaque
+   overlay, z-index 110, above the toast at 100) rather than a coach mark
+   pointed at the real UI. It plays a fixed, illustrative, clearly-labelled
+   preview and never touches real data. */
+.walkthrough-overlay{position:fixed;inset:0;z-index:110;display:grid;place-items:center;padding:24px;background:rgba(2,6,16,.72)}
+.walkthrough-dialog{display:flex;flex-direction:column;gap:14px;width:min(600px,100%);max-height:min(720px,92vh);padding:26px;border-radius:20px;background:var(--white);color:var(--ink);box-shadow:var(--shadow)}
+.walkthrough-head{display:flex;align-items:center;gap:14px}
+.walkthrough-segments{display:flex;flex:1;gap:5px}
+.walkthrough-segments button{flex:1;height:4px;padding:0;border:0;border-radius:999px;background:color-mix(in srgb,var(--ink) 12%,transparent);cursor:pointer}
+.walkthrough-segments button.filled{background:var(--violet)}
+.walkthrough-demo-notice{margin:0;padding:8px 12px;border:1px solid color-mix(in srgb,var(--violet) 35%,transparent);border-radius:999px;background:color-mix(in srgb,var(--violet) 10%,transparent);color:var(--violet);font-size:9px;font-weight:800;text-align:center;text-transform:uppercase;letter-spacing:.04em}
+.walkthrough-frame{display:flex;flex:1;flex-direction:column;min-height:0;padding:6px 2px;overflow-y:auto}
+.walkthrough-frame .eyebrow{color:var(--violet)}
+.walkthrough-frame.track-digital-colleague .eyebrow{color:var(--coral)}
+.walkthrough-frame.track-result .eyebrow{color:var(--lime)}
+.walkthrough-frame h3{margin:6px 0 0;font-family:Georgia,"Times New Roman",serif;font-size:24px;font-weight:500}
+.walkthrough-caption{margin:8px 0 18px;color:var(--muted);font-size:12px;line-height:1.6}
+.walkthrough-intro-mark{display:grid;width:64px;height:64px;place-items:center;margin:10px auto 4px;border-radius:50%;background:color-mix(in srgb,var(--violet) 16%,transparent);color:var(--violet)}
+.walkthrough-mock-form{display:grid;gap:2px;border:1px solid var(--line);border-radius:13px;overflow:hidden}
+.walkthrough-mock-form>div{display:grid;grid-template-columns:140px 1fr;gap:10px;padding:12px 14px;background:color-mix(in srgb,var(--ink) 3%,var(--white))}
+.walkthrough-mock-form>div+div{border-top:1px solid var(--line)}
+.walkthrough-mock-form small{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.walkthrough-mock-form span{color:var(--ink);font-size:12px}
+.walkthrough-mock-checklist{display:grid;gap:2px}
+.walkthrough-mock-checklist>div{display:flex;align-items:center;gap:9px;padding:10px 4px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.walkthrough-mock-checklist>div:first-child{border-top:0}
+.walkthrough-mock-checklist>div.done{color:var(--ink)}
+.walkthrough-mock-checklist svg{color:color-mix(in srgb,var(--ink) 25%,transparent)}
+.walkthrough-mock-checklist>div.done svg{color:var(--lime)}
+.walkthrough-mock-result{display:flex;flex-direction:column;align-items:center;padding:18px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--lime) 8%,var(--white));text-align:center}
+.walkthrough-mock-result>span{display:grid;width:44px;height:44px;place-items:center;margin-bottom:10px;border-radius:50%;background:color-mix(in srgb,var(--lime) 20%,transparent);color:#3f7a52}
+.walkthrough-mock-result strong{font-family:Georgia,serif;font-size:16px;font-weight:500}
+.walkthrough-mock-result>p{margin:4px 0 0;color:var(--muted);font-size:11px}
+.walkthrough-mock-result-rows{display:grid;gap:2px;width:100%;margin-top:14px;text-align:left}
+.walkthrough-mock-result-rows>div{display:grid;grid-template-columns:110px 1fr;gap:10px;padding:8px 4px;border-top:1px solid var(--line)}
+.walkthrough-mock-result-rows small{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase}
+.walkthrough-mock-result-rows span{color:var(--ink);font-size:11px}
+.walkthrough-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:14px;border-top:1px solid var(--line)}
+.walkthrough-transport{display:flex;align-items:center;gap:6px}
+.walkthrough-transport span{margin-left:6px;color:var(--muted);font-size:10px;font-weight:700;white-space:nowrap}
+
+@media (max-width:560px){
+  .walkthrough-dialog{padding:18px;border-radius:16px}
+  .walkthrough-controls{flex-direction:column;align-items:stretch}
+  .walkthrough-controls .primary-button{width:100%;justify-content:center}
+}
 
 @media (max-width:560px){
   .follow-along-panel,.follow-along-tab{left:14px;right:14px;width:auto}

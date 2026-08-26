@@ -2408,7 +2408,7 @@ function TasksWorkspace() {
             copy="Only approved and deployed Digital Colleagues can receive live work."
             action={
               <Link href="/studio/workforce" className="secondary-button">
-                Open Digital Workforce
+                Open Digital Colleagues
               </Link>
             }
           />
