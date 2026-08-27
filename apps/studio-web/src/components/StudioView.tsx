@@ -50,6 +50,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { applications, DIGITAL_HUMAN_BUILDER_STEPS, humans, identityAlertCount, identityRecords } from "@/data/platform";
 import { useAuth } from "./AuthContext";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
+import { LiveHumanTestCall } from "./LiveHumanTestCall";
 import type { Room } from "livekit-client";
 import {
   ProductionApiKeys,
@@ -224,11 +225,6 @@ function DigitalHumans() {
   const [wizardHumanId, setWizardHumanId] = useState<string | null>(null);
   const [wizardStartStep, setWizardStartStep] = useState(1);
 
-  const [testMessage, setTestMessage] = useState('Tell me about a time you solved a difficult problem.');
-  const [testTurns, setTestTurns] = useState<{ role: 'user' | 'agent'; content: string; citations?: { document_title: string; content: string }[] }[]>([]);
-  const [testing, setTesting] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
-
   const [apps, setApps] = useState<RealApplication[]>([]);
   const [appLinks, setAppLinks] = useState<DigitalHumanApplicationLink[]>([]);
   const [appBusyId, setAppBusyId] = useState<string | null>(null);
@@ -264,31 +260,9 @@ function DigitalHumans() {
       setDetail(null);
     }
     setDetailLoading(false);
-    setTestTurns([]);
-    setTestError(null);
   }
   // eslint-disable-next-line react-hooks/set-state-in-effect -- loads the selected human's profile; re-runs when the list selection changes
   useEffect(() => { if (selectedId) loadDetail(selectedId); }, [selectedId]);
-
-  async function runTest(event: React.FormEvent) {
-    event.preventDefault();
-    if (!detail?.persona || !testMessage.trim() || testing) return;
-    setTesting(true);
-    setTestError(null);
-    const outgoing = testMessage.trim();
-    setTestTurns((prev) => [...prev, { role: 'user', content: outgoing }]);
-    setTestMessage('');
-    try {
-      const res = await fetch(`/api/v1/personas/${detail.persona.persona_id}/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: outgoing }) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || 'Could not run this test.');
-      setTestTurns((prev) => [...prev, { role: 'agent', content: body.data.reply, citations: body.data.citations }]);
-    } catch (err) {
-      setTestError(err instanceof Error ? err.message : 'Could not run this test.');
-    } finally {
-      setTesting(false);
-    }
-  }
 
   function openWizard(resumeId: string | null, startStep: number) {
     setWizardHumanId(resumeId);
@@ -465,36 +439,14 @@ function DigitalHumans() {
         </div>
       </section>
       {!detailLoading && detail && detail.persona && (
-        <section className="panel test-console">
-          <PanelTitle title={`Test ${detail.human.name}`} eyebrow="Live · grounded in this VowHuman's assigned knowledge" action={<StatusPill tone="good">Live</StatusPill>} />
-          <div className="console-grid">
-            <div className="console-chat">
-              <div className="chat-message agent"><span>VH</span><p>Hi, I&rsquo;m {detail.human.name}. Ask me something to see how I respond.</p></div>
-              {testTurns.map((turn, index) => (
-                <div className={`chat-message ${turn.role === 'user' ? 'user' : 'agent'}`} key={index}>
-                  <span>{turn.role === 'user' ? 'YOU' : 'VH'}</span>
-                  <div>
-                    <p>{turn.content}</p>
-                    {turn.citations && turn.citations.length > 0 && (
-                      <div className="citation-list">
-                        {turn.citations.map((c, i) => <div className="citation-row" key={i}><b>{c.document_title}</b><span>{c.content}</span></div>)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <form className="console-controls" onSubmit={runTest}>
-              {testError && <div className="review-warning"><CircleAlert size={17} />{testError}</div>}
-              <label>Test message<textarea value={testMessage} onChange={(e) => setTestMessage(e.target.value)} /></label>
-              <button className="primary-button" type="submit" disabled={testing}>{testing ? <RefreshCw size={17} className="spin" /> : <MessageSquareText size={17} />}{testing ? 'Thinking…' : 'Run test'}</button>
-              <p><ShieldCheck size={14} /> Live response from your organisation&rsquo;s OpenAI account, using this VowHuman&rsquo;s assigned persona and knowledge.</p>
-            </form>
-          </div>
-        </section>
+        <LiveHumanTestCall
+          human={{ id: detail.human.id, name: detail.human.name, faceAssetId: detail.face?.id ?? null }}
+          ready={detail.persona.state === 'published'}
+          notReadyReason="Publish this VowHuman's Persona (from the Personas page) before running a live test call — a draft Persona isn't what will actually run once deployed."
+        />
       )}
       {!detailLoading && detail && !detail.persona && (
-        <section className="panel ingestion-card"><span className="empty-icon"><MessageSquareText size={24} /></span><p className="eyebrow">No persona assigned yet</p><h2>Assign a persona to test this VowHuman</h2><p>The test console needs a persona to know how to respond — set one up above before testing.</p></section>
+        <section className="panel ingestion-card"><span className="empty-icon"><Mic size={24} /></span><p className="eyebrow">No persona assigned yet</p><h2>Assign a persona to test this VowHuman</h2><p>The live test call needs a persona to know how to respond — set one up above before testing.</p></section>
       )}
       {wizardOpen && <DigitalHumanWizard humanId={wizardHumanId} startStep={wizardStartStep} onClose={closeWizard} />}
     </div>
