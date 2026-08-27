@@ -1686,11 +1686,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // budget. 30 minutes matches the client's own STALE_SESSION_MS cutoff
     // (StudioView.tsx's sessionStateDisplay already shows a session this old
     // as "Timed out" rather than "Live") — close those out for real here
-    // instead of just hiding them cosmetically in the monitor table.
-    await sql`
-      UPDATE sessions SET state = 'failed', ended_at = now(), failure_reason = 'Timed out — no activity for 30 minutes.'
-      WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active') AND created_at < now() - interval '30 minutes'
-    `;
+    // instead of just hiding them cosmetically in the monitor table. This is
+    // a hygiene side effect, not the actual request — a failure here must
+    // never block starting a real, otherwise-valid call.
+    try {
+      await sql`
+        UPDATE sessions SET state = 'failed', ended_at = now(), failure_reason = 'Timed out — no activity for 30 minutes.'
+        WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active') AND created_at < now() - interval '30 minutes'
+      `;
+    } catch {
+      // Best-effort — the concurrency count below still runs either way.
+    }
 
     const [{ count: activeCount }] = await sql<{ count: string }[]>`
       SELECT count(*) FROM sessions WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active')
@@ -1699,23 +1705,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, code: "TOO_MANY_ACTIVE_SESSIONS", message: "Too many live sessions running at once. End one before starting another." }, { status: 429 });
     }
 
-    const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
-    const avatarMode = face ? "live-avatar" : "audio-only";
-
     // requested_language rides in the existing context jsonb rather than a new
     // sessions column — sessions has no dedicated language field, and context
     // already exists precisely for this kind of extensible per-session metadata.
     const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL") && typeof body.requested_language === "string" && body.requested_language ? body.requested_language : null;
-    const [session] = await sql<{ id: string }[]>`
-      INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_user_id, transport_provider, avatar_mode, context)
-      VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test", ...(requestedLanguage ? { requested_language: requestedLanguage } : {}) })})
-      RETURNING id
-    `;
-    return NextResponse.json({
-      success: true,
-      data: { session_id: session.id, disclosure: "You are testing an AI-generated digital human, not a real person." },
-      meta: { mode: "live", request_id: randomUUID() },
-    }, { status: 201 });
+    try {
+      const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
+      const avatarMode = face ? "live-avatar" : "audio-only";
+      const [session] = await sql<{ id: string }[]>`
+        INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_user_id, transport_provider, avatar_mode, context)
+        VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test", ...(requestedLanguage ? { requested_language: requestedLanguage } : {}) })})
+        RETURNING id
+      `;
+      return NextResponse.json({
+        success: true,
+        data: { session_id: session.id, disclosure: "You are testing an AI-generated digital human, not a real person." },
+        meta: { mode: "live", request_id: randomUUID() },
+      }, { status: 201 });
+    } catch (error) {
+      // Surface the real failure instead of an unstructured framework 500 —
+      // this endpoint is Studio-internal tooling, and a generic "could not
+      // start" with no detail is much harder to diagnose than the actual
+      // database error.
+      return NextResponse.json({ success: false, code: "SESSION_CREATE_FAILED", message: error instanceof Error ? `Could not start this test call: ${error.message}` : "Could not start this test call." }, { status: 500 });
+    }
   }
 
   if (resource === "live-sessions" && route[1] && route[2] === "token") {

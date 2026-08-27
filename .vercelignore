@@ -16,6 +16,15 @@ dist
 /infrastructure
 /docs
 **/*.sql
+# packages/database/migrations/*.sql is never web-servable either way — it sits
+# outside apps/studio-web/public, so Next.js never routes to it regardless of
+# this file. But scripts/migrate-workforce.mjs and migrate-schema-fixes.mjs
+# read these files server-side during `npm run build`'s prebuild step to apply
+# pending schema changes to the real database, and the blanket **/*.sql rule
+# above was silently excluding them from every Vercel build entirely — the
+# scripts appeared to run but always failed on a missing file. See
+# docs/DEPLOYMENT.md before narrowing this further.
+!packages/database/migrations/*.sql
 **/*.zip
 .env*
 !.env.example

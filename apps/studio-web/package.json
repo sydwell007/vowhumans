@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "prebuild": "node ../../scripts/migrate-workforce.mjs && node ../../scripts/migrate-schema-fixes.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
