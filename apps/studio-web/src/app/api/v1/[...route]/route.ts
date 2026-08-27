@@ -1680,6 +1680,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, code: "PERSONA_NOT_PUBLISHED", message: "Publish this VowHuman's persona before testing it live." }, { status: 409 });
     }
 
+    // A session a client abandons mid-call (closed tab, crash, lost network)
+    // never gets a real /end call, so it would otherwise sit in an
+    // active-looking state and permanently eat into this org's concurrency
+    // budget. 30 minutes matches the client's own STALE_SESSION_MS cutoff
+    // (StudioView.tsx's sessionStateDisplay already shows a session this old
+    // as "Timed out" rather than "Live") — close those out for real here
+    // instead of just hiding them cosmetically in the monitor table.
+    await sql`
+      UPDATE sessions SET state = 'failed', ended_at = now(), failure_reason = 'Timed out — no activity for 30 minutes.'
+      WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active') AND created_at < now() - interval '30 minutes'
+    `;
+
     const [{ count: activeCount }] = await sql<{ count: string }[]>`
       SELECT count(*) FROM sessions WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active')
     `;
@@ -1752,6 +1764,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       RETURNING id
     `;
     return NextResponse.json({ success: true, data: { id: route[1], ended: Boolean(row) }, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
+  // Self-service recovery for the concurrency check above: a session with no
+  // real client left to call its own /end (a closed tab, a crashed call, a
+  // page the user simply navigated away from) otherwise blocks new test
+  // calls until the 30-minute staleness cutoff clears it on its own. Ends
+  // every one of this organisation's own active-looking sessions immediately
+  // — unlike /end, not scoped to a single id the caller already knows — so a
+  // person who hits "too many active sessions" has an immediate way out
+  // rather than waiting.
+  if (resource === "live-sessions" && route[1] === "end-active" && !route[2]) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const rows = await sql<{ id: string }[]>`
+      UPDATE sessions SET state = 'completed', ended_at = now()
+      WHERE organisation_id = ${organisationId} AND state IN ('created','connecting','active')
+      RETURNING id
+    `;
+    return NextResponse.json({ success: true, data: { ended_count: rows.length }, meta: { mode: "live", request_id: randomUUID() } });
   }
 
   if (resource === "live-sessions" && route[1] && route[2] === "events") {

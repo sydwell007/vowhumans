@@ -139,6 +139,7 @@ describe("production control-plane endpoints require a session", () => {
     ["webhooks", { name: "Hook" }],
     ["safety", { description: "A concern" }],
     ["webhooks/11111111-1111-4111-8111-111111111111/test", {}],
+    ["live-sessions/end-active", {}],
   ] as const) {
     it(`POST ${resource}`, async () => expect((await post(resource, body)).status).toBe(401));
   }

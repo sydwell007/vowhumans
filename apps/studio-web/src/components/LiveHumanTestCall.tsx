@@ -43,6 +43,8 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
   const [agentJoined, setAgentJoined] = useState(false);
   const [noAgentTimeout, setNoAgentTimeout] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tooManyActive, setTooManyActive] = useState(false);
+  const [clearingStuckSessions, setClearingStuckSessions] = useState(false);
 
   useEffect(() => {
     if (callStage !== "live" || !callStartedAt) return;
@@ -81,9 +83,23 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
     setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — using ${res.data.resolved_language} instead.` : `Switched to ${res.data.resolved_language}.`);
   }
 
+  async function clearStuckSessions() {
+    setClearingStuckSessions(true);
+    try {
+      await fetch("/api/v1/live-sessions/end-active", { method: "POST" });
+      setTooManyActive(false);
+      setError(null);
+    } catch {
+      // The retry below will surface the same error again if this didn't help.
+    } finally {
+      setClearingStuckSessions(false);
+    }
+  }
+
   async function startTestCall() {
     if (!ready || callStage === "starting") return;
     setError(null);
+    setTooManyActive(false);
     setCallStage("starting");
     setReconnectedThisCall(false);
     setCallSummary(null);
@@ -92,7 +108,10 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
     try {
       const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id, requested_language: selectedLanguage }) });
       const sessionBody = await sessionRes.json().catch(() => ({}));
-      if (!sessionRes.ok) throw new Error(sessionBody.message || "Could not start this test call.");
+      if (!sessionRes.ok) {
+        if (sessionBody.code === "TOO_MANY_ACTIVE_SESSIONS") setTooManyActive(true);
+        throw new Error(sessionBody.message || "Could not start this test call.");
+      }
       const sessionId = sessionBody.data.session_id as string;
       setActiveSessionId(sessionId);
       const tokenRes = await fetch(`/api/v1/live-sessions/${sessionId}/token`, { method: "POST" });
@@ -146,7 +165,18 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
 
   return (
     <section className="panel test-console live-human-test-console">
-      {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
+      {error && (
+        <div className="review-warning">
+          <CircleAlert size={17} />
+          <span>{error}</span>
+          {tooManyActive && (
+            <button className="plain-button" type="button" disabled={clearingStuckSessions} onClick={clearStuckSessions}>
+              {clearingStuckSessions ? <RefreshCw size={13} className="spin" /> : null}
+              {clearingStuckSessions ? "Clearing…" : "Clear stuck sessions"}
+            </button>
+          )}
+        </div>
+      )}
       {callStage === "live" && liveRoom ? (
         <div className="live-call-stage">
           <span className="embed-disclosure"><Sparkles size={13} />Testing {human.name} — AI-generated, not a real person</span>
