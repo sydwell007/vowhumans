@@ -16,6 +16,9 @@ describe("parseGestureOverlay", () => {
       headNodEnabled: true,
       headNodDegrees: 4,
       breathingSwayEnabled: true,
+      blinkingEnabled: false,
+      blinkIntervalMinSeconds: 0,
+      blinkIntervalMaxSeconds: 0,
     });
   });
 
@@ -49,5 +52,48 @@ describe("parseGestureOverlay", () => {
     // Degrees are single-value (±N°), unlike blinking's two-value range — the
     // parser intentionally only needs the first number for head_tilt/head_nod.
     expect(parseGestureOverlay({ features: { head_tilt: { enabled: true, range: "2-5°" } } }).headTiltDegrees).toBe(2);
+  });
+
+  it("parses the real default blink range Studio ships (4–7s)", () => {
+    const overlay = parseGestureOverlay({ features: { blinking: { enabled: true, range: "4–7s" } } });
+    expect(overlay.blinkingEnabled).toBe(true);
+    expect(overlay.blinkIntervalMinSeconds).toBe(4);
+    expect(overlay.blinkIntervalMaxSeconds).toBe(7);
+  });
+
+  it("zeroes both blink bounds when the toggle is disabled, even with a range present", () => {
+    const overlay = parseGestureOverlay({ features: { blinking: { enabled: false, range: "4–7s" } } });
+    expect(overlay.blinkingEnabled).toBe(false);
+    expect(overlay.blinkIntervalMinSeconds).toBe(0);
+    expect(overlay.blinkIntervalMaxSeconds).toBe(0);
+  });
+
+  it("treats a single edited blink value as a fixed gap (min === max)", () => {
+    const overlay = parseGestureOverlay({ features: { blinking: { enabled: true, range: "5s" } } });
+    expect(overlay.blinkIntervalMinSeconds).toBe(5);
+    expect(overlay.blinkIntervalMaxSeconds).toBe(5);
+  });
+
+  it("sorts a reversed min–max blink range instead of producing an inverted window", () => {
+    const overlay = parseGestureOverlay({ features: { blinking: { enabled: true, range: "9-3s" } } });
+    expect(overlay.blinkIntervalMinSeconds).toBe(3);
+    expect(overlay.blinkIntervalMaxSeconds).toBe(9);
+  });
+
+  it("falls back to the real Studio default blink range for unparseable or blank input", () => {
+    expect(parseGestureOverlay({ features: { blinking: { enabled: true, range: "" } } })).toMatchObject({
+      blinkIntervalMinSeconds: 4,
+      blinkIntervalMaxSeconds: 7,
+    });
+    expect(parseGestureOverlay({ features: { blinking: { enabled: true, range: "often" } } })).toMatchObject({
+      blinkIntervalMinSeconds: 4,
+      blinkIntervalMaxSeconds: 7,
+    });
+  });
+
+  it("clamps an unreasonably fast edited blink range instead of a strobing render", () => {
+    const overlay = parseGestureOverlay({ features: { blinking: { enabled: true, range: "0.01-0.02s" } } });
+    expect(overlay.blinkIntervalMinSeconds).toBeGreaterThanOrEqual(1.5);
+    expect(overlay.blinkIntervalMaxSeconds).toBeGreaterThanOrEqual(1.5);
   });
 });

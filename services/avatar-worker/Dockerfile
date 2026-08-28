@@ -61,7 +61,7 @@ RUN pip install --no-cache-dir "huggingface-hub<1.0,>=0.20.0"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py musetalk_engine.py gesture_sway.py entrypoint.sh download_weights.sh download_weights.py ./
+COPY main.py musetalk_engine.py gesture_sway.py blink_synth.py entrypoint.sh download_weights.sh download_weights.py ./
 RUN chmod +x entrypoint.sh download_weights.sh
 
 EXPOSE 8000

@@ -3188,14 +3188,17 @@ function Usage() {
 }
 
 // appliedToRender: honest per-feature capability truth, not a UI aspiration —
-// avatar-worker's MuseTalk pipeline only has a face bounding box (no eye or
-// body landmarks), so only these three can genuinely drive rendered video
-// today, as one small continuous sway (see services/avatar-worker/
-// gesture_sway.py and docs/AVATAR_GESTURE_APPLICATION.md). The rest stay
-// configurable and shown here — never removed — but should read as "recorded
-// for later," not "already happening."
+// avatar-worker's MuseTalk pipeline only has a face bounding box (no eyelid/
+// iris contour or body landmarks), so only these four can genuinely drive
+// rendered video today: head_tilt/head_nod/breathing_sway as one small
+// continuous whole-frame sway, and blinking via a one-off Haar-cascade
+// eye-region detection per avatar (see services/avatar-worker/
+// gesture_sway.py, services/avatar-worker/blink_synth.py and
+// docs/AVATAR_GESTURE_APPLICATION.md). The rest stay configurable and shown
+// here — never removed — but should read as "recorded for later," not
+// "already happening."
 const GESTURE_FEATURE_DEFAULTS: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string; appliedToRender: boolean }> = {
-  blinking: { label: 'Blinking', hasRange: true, defaultEnabled: true, defaultRange: '4–7s', appliedToRender: false },
+  blinking: { label: 'Blinking', hasRange: true, defaultEnabled: true, defaultRange: '4–7s', appliedToRender: true },
   head_tilt: { label: 'Head tilt', hasRange: true, defaultEnabled: true, defaultRange: '±3°', appliedToRender: true },
   head_nod: { label: 'Head nod / shake', hasRange: true, defaultEnabled: true, defaultRange: '±4°', appliedToRender: true },
   micro_expressions: { label: 'Micro-expressions', hasRange: false, defaultEnabled: true, defaultRange: '', appliedToRender: false },
@@ -3423,7 +3426,7 @@ function GestureLibrary() {
   return (
     <div className="content-stack">
       <section className="asset-intro"><span><Sparkles size={26} /></span><div><p className="eyebrow">Motion with restraint</p><h2>Gesture profile library</h2><p>Choose which natural movements a digital human uses, and how pronounced each one is.</p></div></section>
-      <div className="studio-data-notice" role="note"><strong>Capability truth</strong><span>Head tilt, head nod and breathing/idle sway genuinely drive rendered avatar video today — a real disclosed digital human in a live call or a Presenter Studio render actually moves within the range configured below. Blinking, gaze shift, micro-expressions and hand gestures stay configurable and assigned, but the current rendering pipeline has no eye or body landmarks to apply them with — they are not yet reflected in rendered video.</span></div>
+      <div className="studio-data-notice" role="note"><strong>Capability truth</strong><span>Head tilt, head nod, breathing/idle sway and blinking genuinely drive rendered avatar video today — a real disclosed digital human in a live call or a Presenter Studio render actually moves and blinks within the ranges configured below. Blinking uses eye-region detection on the assigned face photo, so it needs both eyes clearly visible in that photo to take effect. Gaze shift, micro-expressions and hand gestures stay configurable and assigned, but the current rendering pipeline has no eyelid/iris contour or body pose to apply them with — they are not yet reflected in rendered video.</span></div>
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {loaded && profiles.length === 0 && (
         <section className="panel ingestion-card"><span className="empty-icon"><Sparkles size={24} /></span><p className="eyebrow">No gesture profiles yet</p><h2>Create your first profile</h2><p>Pick which movements to include using the form below — every feature is on by default except hand gestures.</p></section>

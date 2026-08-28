@@ -6,15 +6,19 @@ import sql from "@/lib/db";
 // parses those strings into the numeric parameters the rendering pipeline
 // (avatar-worker's MuseTalkEngine) can actually apply.
 //
-// Only three of the seven configured features are genuinely applied to
-// rendered video today: head_tilt, head_nod and breathing_sway, as a small
-// continuous cv2.warpAffine sway on the whole frame — the one motion effect
-// achievable without eye/body landmarks, which this face-bbox-only MuseTalk
-// pipeline does not have. blinking, gaze_shift, micro_expressions and
-// hand_gestures remain stored and shown in the UI, but are NOT applied by any
-// renderer — implementing them honestly needs real eye/pose landmarks or a
-// different avatar model, not something this module should fake. See
-// docs/AVATAR_GESTURE_APPLICATION.md.
+// Four of the seven configured features are genuinely applied to rendered
+// video today: head_tilt, head_nod and breathing_sway as a small continuous
+// cv2.warpAffine sway on the whole frame (no facial structure needed at
+// all), and — as of this pass — blinking, via a Haar-cascade eye detector
+// (bundled inside opencv-python-headless, no new/conflicting dependency)
+// run once against the prepared avatar's source photo. gaze_shift,
+// micro_expressions and hand_gestures remain stored and shown in the UI,
+// but are NOT applied by any renderer: gaze/micro-expressions would need a
+// real eyelid/iris landmark mesh (not just an eye bounding box) and hand
+// gestures need a full-body pose/render pipeline, not a headshot lip-sync
+// model — see docs/AVATAR_GESTURE_APPLICATION.md for the full reasoning,
+// including the avatar models evaluated and why none were swapped in
+// wholesale this pass.
 
 export type GestureOverlay = {
   headTiltEnabled: boolean;
@@ -22,6 +26,9 @@ export type GestureOverlay = {
   headNodEnabled: boolean;
   headNodDegrees: number;
   breathingSwayEnabled: boolean;
+  blinkingEnabled: boolean;
+  blinkIntervalMinSeconds: number;
+  blinkIntervalMaxSeconds: number;
 };
 
 export const NEUTRAL_GESTURE_OVERLAY: GestureOverlay = {
@@ -30,6 +37,9 @@ export const NEUTRAL_GESTURE_OVERLAY: GestureOverlay = {
   headNodEnabled: false,
   headNodDegrees: 0,
   breathingSwayEnabled: false,
+  blinkingEnabled: false,
+  blinkIntervalMinSeconds: 0,
+  blinkIntervalMaxSeconds: 0,
 };
 
 const DEFAULT_TILT_DEGREES = 3;
@@ -39,12 +49,42 @@ const DEFAULT_NOD_DEGREES = 4;
 // (e.g. "±300°") turning into a genuinely broken-looking render.
 const MAX_DEGREES = 12;
 
+const DEFAULT_BLINK_MIN_SECONDS = 4;
+const DEFAULT_BLINK_MAX_SECONDS = 7;
+// Real human blinks are rarely faster than ~1.5s apart even for a nervous
+// habit, and there's no real harm in an edited value slower than 20s beyond
+// looking a little unnatural — these bounds exist only to stop a mistyped
+// or malicious value ("0–0.01s") from producing a strobing render.
+const MIN_BLINK_SECONDS = 1.5;
+const MAX_BLINK_SECONDS = 20;
+
 function parseDegrees(range: string, fallback: number): number {
   const match = /(\d+(?:\.\d+)?)/.exec(range);
   if (!match) return fallback;
   const value = Number(match[1]);
   if (!Number.isFinite(value) || value <= 0) return fallback;
   return Math.min(value, MAX_DEGREES);
+}
+
+// Blinking's range is a two-value gap-between-blinks window ("4–7s"), unlike
+// degrees' single value — a Studio user can edit either number independently
+// (e.g. "2–9s"), a single value alone ("5s", meaning a fixed gap), or leave
+// it unparseable/blank, in which case this falls back to the real Studio
+// default rather than guessing.
+function parseBlinkSeconds(range: string): [min: number, max: number] {
+  const match = /(\d+(?:\.\d+)?)\s*(?:[–-]\s*(\d+(?:\.\d+)?))?/.exec(range);
+  if (!match) return [DEFAULT_BLINK_MIN_SECONDS, DEFAULT_BLINK_MAX_SECONDS];
+  const first = Number(match[1]);
+  const second = match[2] !== undefined ? Number(match[2]) : first;
+  if (!Number.isFinite(first) || !Number.isFinite(second) || first <= 0 || second <= 0) {
+    return [DEFAULT_BLINK_MIN_SECONDS, DEFAULT_BLINK_MAX_SECONDS];
+  }
+  const min = Math.min(first, second);
+  const max = Math.max(first, second);
+  return [
+    Math.min(Math.max(min, MIN_BLINK_SECONDS), MAX_BLINK_SECONDS),
+    Math.min(Math.max(max, MIN_BLINK_SECONDS), MAX_BLINK_SECONDS),
+  ];
 }
 
 type FeatureConfig = { enabled?: boolean; range?: string };
@@ -58,8 +98,11 @@ export function parseGestureOverlay(stateConfig: GestureStateConfig | null | und
   const tilt = features.head_tilt;
   const nod = features.head_nod;
   const sway = features.breathing_sway;
+  const blink = features.blinking;
   const tiltEnabled = Boolean(tilt?.enabled);
   const nodEnabled = Boolean(nod?.enabled);
+  const blinkEnabled = Boolean(blink?.enabled);
+  const [blinkMin, blinkMax] = blinkEnabled ? parseBlinkSeconds(blink?.range ?? "") : [0, 0];
   return {
     headTiltEnabled: tiltEnabled,
     // 0 whenever disabled — not just "unread by a caller that checks the
@@ -69,6 +112,9 @@ export function parseGestureOverlay(stateConfig: GestureStateConfig | null | und
     headNodEnabled: nodEnabled,
     headNodDegrees: nodEnabled ? parseDegrees(nod?.range ?? "", DEFAULT_NOD_DEGREES) : 0,
     breathingSwayEnabled: Boolean(sway?.enabled),
+    blinkingEnabled: blinkEnabled,
+    blinkIntervalMinSeconds: blinkMin,
+    blinkIntervalMaxSeconds: blinkMax,
   };
 }
 

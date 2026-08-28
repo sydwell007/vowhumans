@@ -3,14 +3,16 @@ to rendered avatar video — deliberately its own module, separate from
 musetalk_engine.py, so it needs only cv2/numpy (never torch or MuseTalk's own
 repo) and can be tested on its own.
 
-Only three of a Gesture Profile's seven configured features are applied here
-at all — head_tilt, head_nod, breathing_sway — as one small continuous
-whole-frame sway. See apps/studio-web/src/lib/gesture.ts for the full
-reasoning: MuseTalk's get_landmark_and_bbox() gives this pipeline only a face
-bounding box, no eye or body landmarks, so blinking, gaze_shift,
-micro_expressions and hand_gestures are not something this pipeline can
-honestly apply — they stay configured and shown in Studio, but unapplied,
-rather than faked.
+Three of a Gesture Profile's seven configured features are applied here —
+head_tilt, head_nod, breathing_sway — as one small continuous whole-frame
+sway needing no facial structure at all. A fourth, blinking, is applied by
+the sibling module blink_synth.py using a one-off Haar-cascade eye-region
+detection per avatar. See apps/studio-web/src/lib/gesture.ts and
+docs/AVATAR_GESTURE_APPLICATION.md for the full reasoning: MuseTalk's
+get_landmark_and_bbox() gives this pipeline only a face bounding box, no
+eyelid contour or body landmarks, so gaze_shift, micro_expressions and
+hand_gestures are not something this pipeline can honestly apply — they stay
+configured and shown in Studio, but unapplied, rather than faked.
 """
 from __future__ import annotations
 
@@ -28,6 +30,15 @@ class GestureConfig:
     head_nod_enabled: bool = False
     head_nod_degrees: float = 0.0
     breathing_sway_enabled: bool = False
+    # Blinking's fields live on this same shared config object (matching the
+    # one JSON blob apps/studio-web/src/lib/gesture.ts already produces and
+    # avatar-participant already forwards verbatim) but its actual detection/
+    # compositing logic lives in blink_synth.py, not here — unlike the sway
+    # fields above, applying a blink needs a one-off per-avatar eye-region
+    # detection pass, not just a per-frame transform.
+    blinking_enabled: bool = False
+    blink_interval_min_seconds: float = 4.0
+    blink_interval_max_seconds: float = 7.0
 
     @classmethod
     def from_dict(cls, data: dict) -> "GestureConfig":
@@ -37,10 +48,17 @@ class GestureConfig:
             head_nod_enabled=bool(data.get("headNodEnabled", False)),
             head_nod_degrees=float(data.get("headNodDegrees") or 0),
             breathing_sway_enabled=bool(data.get("breathingSwayEnabled", False)),
+            blinking_enabled=bool(data.get("blinkingEnabled", False)),
+            blink_interval_min_seconds=float(data.get("blinkIntervalMinSeconds") or 4.0),
+            blink_interval_max_seconds=float(data.get("blinkIntervalMaxSeconds") or 7.0),
         )
 
     @property
     def is_active(self) -> bool:
+        """Gates only the whole-frame sway this module applies. Blinking is a
+        separate effect with its own availability check (blink_synth.py's
+        build_blink_material() succeeding) — deliberately not folded in here,
+        so a render can genuinely blink without also swaying, or vice versa."""
         return self.head_tilt_enabled or self.head_nod_enabled or self.breathing_sway_enabled
 
 

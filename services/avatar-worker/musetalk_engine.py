@@ -26,6 +26,7 @@ a PositionalEncoding module, is unrelated to the whisper encoder).
 """
 from __future__ import annotations
 
+import logging
 import os
 import pickle
 import shutil
@@ -39,14 +40,20 @@ import cv2
 import numpy as np
 import torch
 
+from blink_synth import BlinkMaterial, BlinkSchedule, apply_blink, build_blink_material
 from gesture_sway import GestureConfig, apply_gesture_sway
+
+log = logging.getLogger(__name__)
 
 MODELS_DIR = Path(os.getenv("MUSETALK_MODELS_DIR", "./models"))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 FPS = 25
 BATCH_SIZE = int(os.getenv("MUSETALK_BATCH_SIZE", "16"))
 
-__all__ = ["GestureConfig", "MuseTalkEngine", "apply_gesture_sway", "save_avatar_cache", "load_avatar_cache"]
+__all__ = [
+    "GestureConfig", "MuseTalkEngine", "apply_gesture_sway",
+    "save_avatar_cache", "load_avatar_cache",
+]
 
 
 @dataclass
@@ -57,6 +64,11 @@ class PreparedAvatar:
     latent: torch.Tensor
     mask: np.ndarray
     mask_crop_box: tuple[int, int, int, int]
+    # None whenever the Haar cascade eye detector couldn't confidently find
+    # both eyes in this particular source photo — see blink_synth.py. A
+    # trailing field with a default so this stays a valid dataclass without
+    # having to touch every existing positional construction of this class.
+    blink_material: BlinkMaterial | None = None
 
 
 class MuseTalkEngine:
@@ -136,7 +148,22 @@ class MuseTalkEngine:
 
         mask, mask_crop_box = get_image_prepare_material(frame, bbox, fp=self.face_parser, mode="jaw")
 
-        return PreparedAvatar(original_frame=frame, bbox=bbox, latent=latent, mask=mask, mask_crop_box=mask_crop_box)
+        # Best-effort and one-off: a photo the Haar cascade can't confidently
+        # find both eyes in (steep angle, glasses glare, low light) must
+        # never fail avatar prep — it just means blinking stays unavailable
+        # for this one avatar while everything else still works.
+        try:
+            blink_material = build_blink_material(frame, bbox)
+        except Exception:  # noqa: BLE001 - deliberately broad, see comment above
+            log.warning("Blink material detection failed for this avatar; blinking will stay inactive.", exc_info=True)
+            blink_material = None
+        if blink_material is None:
+            log.info("No confident 2-eye detection for this avatar; blinking will stay inactive for it.")
+
+        return PreparedAvatar(
+            original_frame=frame, bbox=bbox, latent=latent, mask=mask, mask_crop_box=mask_crop_box,
+            blink_material=blink_material,
+        )
 
     def render(self, avatar: PreparedAvatar, audio_path: str, gesture: GestureConfig | None = None, out_dir: str | None = None) -> str:
         """Renders one short clip for one reply's audio against a prepared avatar.
@@ -163,6 +190,19 @@ class MuseTalkEngine:
 
         latents = [avatar.latent] * frame_count
         gen = datagen(whisper_chunks, latents, BATCH_SIZE)
+
+        # One schedule per reply, built once against this reply's real
+        # duration — not per-frame — so blink_alpha() below is a cheap,
+        # allocation-free lookup in the hot per-frame loop. Requires both a
+        # confident eye detection for this avatar (avatar.blink_material)
+        # and the feature actually being enabled on the assigned profile.
+        blink_schedule: BlinkSchedule | None = None
+        if gesture is not None and gesture.blinking_enabled and avatar.blink_material is not None:
+            blink_schedule = BlinkSchedule.build(
+                max(gesture.blink_interval_min_seconds, 0.5),
+                max(gesture.blink_interval_max_seconds, gesture.blink_interval_min_seconds, 0.5),
+                total_seconds=frame_count / FPS,
+            )
 
         silent_video_path = str(Path(out_dir) / "silent.mp4")
         height, width = avatar.original_frame.shape[:2]
@@ -199,7 +239,13 @@ class MuseTalkEngine:
                     blended = get_image_blending(
                         avatar.original_frame.copy(), resized, avatar.bbox, avatar.mask, avatar.mask_crop_box,
                     )
-                    blended = apply_gesture_sway(blended, frame_index / FPS, gesture)
+                    # Blink is composited before the gesture sway warp, not
+                    # after, so the eye region moves together with the rest
+                    # of the head during a tilt/nod/sway instead of visibly
+                    # lagging behind it.
+                    frame_t = frame_index / FPS
+                    blended = apply_blink(blended, avatar.blink_material, frame_t, blink_schedule)
+                    blended = apply_gesture_sway(blended, frame_t, gesture)
                     encoder.stdin.write(np.ascontiguousarray(blended).tobytes())
                     frame_index += 1
 

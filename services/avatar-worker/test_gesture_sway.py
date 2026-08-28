@@ -78,10 +78,32 @@ class GestureSwayTests(unittest.TestCase):
             "headNodEnabled": True,
             "headNodDegrees": 4,
             "breathingSwayEnabled": True,
+            "blinkingEnabled": True,
+            "blinkIntervalMinSeconds": 4,
+            "blinkIntervalMaxSeconds": 7,
         })
         self.assertTrue(gesture.is_active)
         self.assertEqual(gesture.head_tilt_degrees, 3)
         self.assertEqual(gesture.head_nod_degrees, 4)
+        self.assertTrue(gesture.blinking_enabled)
+        self.assertEqual(gesture.blink_interval_min_seconds, 4)
+        self.assertEqual(gesture.blink_interval_max_seconds, 7)
+
+    def test_from_dict_defaults_blink_interval_when_blinking_is_enabled_without_a_range(self):
+        # Mirrors gesture.ts's own fallback: an enabled toggle with no/blank
+        # range should still get a sane interval, not 0/0 (which would make
+        # BlinkSchedule.build loop or produce a nonsensical schedule).
+        gesture = GestureConfig.from_dict({"blinkingEnabled": True})
+        self.assertTrue(gesture.blinking_enabled)
+        self.assertEqual(gesture.blink_interval_min_seconds, 4.0)
+        self.assertEqual(gesture.blink_interval_max_seconds, 7.0)
+
+    def test_is_active_does_not_include_blinking(self):
+        # Blinking is a separate effect with its own availability check
+        # (blink_synth.py) — gesture_sway.apply_gesture_sway must stay a
+        # true no-op for a gesture that only has blinking enabled.
+        gesture = GestureConfig.from_dict({"blinkingEnabled": True, "blinkIntervalMinSeconds": 4, "blinkIntervalMaxSeconds": 7})
+        self.assertFalse(gesture.is_active)
 
     def test_from_dict_tolerates_a_missing_or_empty_payload(self):
         gesture = GestureConfig.from_dict({})
