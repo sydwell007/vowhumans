@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import hmac
+import json
 import logging
 import os
 import shutil
@@ -26,7 +27,7 @@ _render_lock = asyncio.Lock()
 
 if ENABLE_MUSETALK:
     try:
-        from musetalk_engine import MuseTalkEngine
+        from musetalk_engine import GestureConfig, MuseTalkEngine
         _engine = MuseTalkEngine()
         log.info("MuseTalk engine loaded.")
     except Exception as exc:  # noqa: BLE001 - deliberately broad: report via /health, never crash the process
@@ -118,10 +119,12 @@ async def render(request: Request, x_internal_key: str | None = Header(default=N
     # bytes in hand (e.g. PCM captured from a LiveKit track, muxed to WAV in memory) has
     # no URL to give us at all.
     content_type = request.headers.get("content-type", "")
+    gesture_json: str | None = None
     if content_type.startswith("multipart/form-data"):
         form = await request.form()
         avatar_id = form.get("avatar_id")
         upload = form.get("audio_file")
+        gesture_json = form.get("gesture_json")
         if not avatar_id or upload is None:
             raise HTTPException(422, "Multipart requests need both 'avatar_id' and 'audio_file'.")
         audio_path = await _save_upload(upload, ".wav")
@@ -129,9 +132,21 @@ async def render(request: Request, x_internal_key: str | None = Header(default=N
         body = await request.json()
         avatar_id = body.get("avatar_id")
         audio_url = body.get("audio_url")
+        gesture = body.get("gesture")
+        gesture_json = json.dumps(gesture) if gesture is not None else None
         if not avatar_id or not audio_url:
             raise HTTPException(422, "Missing 'avatar_id'/'audio_url' (or upload 'audio_file' as multipart/form-data).")
         audio_path = _download(audio_url, ".wav")
+
+    # Optional and best-effort: a caller that omits it (or sends something
+    # unparseable) still gets exactly today's rendering, no motion overlay —
+    # never a failed render over a gesture-profile problem.
+    gesture_config = None
+    if gesture_json:
+        try:
+            gesture_config = GestureConfig.from_dict(json.loads(gesture_json))
+        except (ValueError, TypeError) as exc:
+            log.warning("Ignoring unparseable gesture_json (%s): %r", exc, gesture_json)
 
     avatar = _avatars.get(avatar_id)
     if avatar is None:
@@ -142,7 +157,7 @@ async def render(request: Request, x_internal_key: str | None = Header(default=N
         # MuseTalk uses one shared model on one GPU. Serialize inference explicitly
         # and run it off the FastAPI event loop so /health remains responsive.
         async with _render_lock:
-            video_path = await run_in_threadpool(_engine.render, avatar, audio_path)
+            video_path = await run_in_threadpool(_engine.render, avatar, audio_path, gesture_config)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"Rendering failed: {exc}") from exc
     finally:

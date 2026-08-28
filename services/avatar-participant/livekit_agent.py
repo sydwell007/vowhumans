@@ -103,8 +103,9 @@ async def entrypoint(ctx: JobContext) -> None:
             return
         avatar_id, preview_frame = prepared_avatar
         _log(f"entrypoint: avatar prepared, avatar_id={avatar_id}")
+        gesture = await _fetch_gesture(client, organisation_id, human_slug)
 
-        session = AvatarSession(ctx, client, avatar_id, preview_frame)
+        session = AvatarSession(ctx, client, avatar_id, preview_frame, gesture)
         try:
             await session.run()
         finally:
@@ -144,6 +145,30 @@ async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human
         return None
 
 
+async def _fetch_gesture(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> dict | None:
+    """Best-effort — the digital human's real configured head-motion range
+    (see apps/studio-web/src/lib/gesture.ts), forwarded to avatar-worker so a
+    rendered reply actually moves the way it was configured to. A failure or
+    no-assignment here must never block or degrade the call itself; the
+    caller just proceeds without a gesture_json field, identical to today's
+    behavior before this existed."""
+    if not (STUDIO_WEB_URL and INTERNAL_KEY):
+        return None
+    try:
+        resp = await client.get(
+            f"{STUDIO_WEB_URL.rstrip('/')}/api/internal/v1/gesture",
+            headers={"x-internal-key": INTERNAL_KEY, "x-organisation-id": organisation_id},
+            params={"human_slug": human_slug},
+        )
+        if resp.status_code != 200:
+            return None
+        body = resp.json()
+        return body.get("data") if isinstance(body, dict) else None
+    except httpx.HTTPError as exc:
+        _log(f"Could not fetch gesture profile for {organisation_id}/{human_slug}: {exc}")
+        return None
+
+
 async def _release_avatar(client: httpx.AsyncClient, avatar_id: str) -> None:
     if not AVATAR_WORKER_URL:
         return
@@ -157,11 +182,12 @@ class AvatarSession:
     """One room's worth of state: the published tracks, which participant is the
     voice agent, and the buffered-audio-to-rendered-video pipeline for each turn."""
 
-    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray) -> None:
+    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray, gesture: dict | None = None) -> None:
         self._ctx = ctx
         self._client = client
         self._avatar_id = avatar_id
         self._preview_frame = preview_frame
+        self._gesture = gesture
         self._video_source = rtc.VideoSource(width=PUBLISH_VIDEO_WIDTH, height=PUBLISH_VIDEO_HEIGHT)
         self._audio_source = rtc.AudioSource(sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         self._agent_participant: rtc.RemoteParticipant | None = None
@@ -319,10 +345,13 @@ class AvatarSession:
     async def _render(self, frames: list[rtc.AudioFrame]) -> bytes | None:
         wav_bytes = _frames_to_wav(frames)
         _log(f"_render: sending {len(wav_bytes)} bytes of WAV audio to avatar-worker")
+        data = {"avatar_id": self._avatar_id}
+        if self._gesture is not None:
+            data["gesture_json"] = json.dumps(self._gesture)
         resp = await self._client.post(
             f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/render",
             headers={"x-internal-key": INTERNAL_KEY},
-            data={"avatar_id": self._avatar_id},
+            data=data,
             files={"audio_file": ("turn.wav", wav_bytes, "audio/wav")},
         )
         if resp.status_code != 200:

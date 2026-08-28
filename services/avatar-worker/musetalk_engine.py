@@ -39,10 +39,14 @@ import cv2
 import numpy as np
 import torch
 
+from gesture_sway import GestureConfig, apply_gesture_sway
+
 MODELS_DIR = Path(os.getenv("MUSETALK_MODELS_DIR", "./models"))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 FPS = 25
 BATCH_SIZE = int(os.getenv("MUSETALK_BATCH_SIZE", "16"))
+
+__all__ = ["GestureConfig", "MuseTalkEngine", "apply_gesture_sway", "save_avatar_cache", "load_avatar_cache"]
 
 
 @dataclass
@@ -134,7 +138,7 @@ class MuseTalkEngine:
 
         return PreparedAvatar(original_frame=frame, bbox=bbox, latent=latent, mask=mask, mask_crop_box=mask_crop_box)
 
-    def render(self, avatar: PreparedAvatar, audio_path: str, out_dir: str | None = None) -> str:
+    def render(self, avatar: PreparedAvatar, audio_path: str, gesture: GestureConfig | None = None, out_dir: str | None = None) -> str:
         """Renders one short clip for one reply's audio against a prepared avatar.
         Returns the path to an MP4 (video + the same audio, muxed) on disk."""
         from musetalk.utils.blending import get_image_blending
@@ -176,6 +180,7 @@ class MuseTalkEngine:
         try:
             x1, y1, x2, y2 = avatar.bbox
             assert encoder.stdin is not None
+            frame_index = 0
             for whisper_batch, latent_batch in gen:
                 with torch.no_grad():
                     audio_feature_batch = self.pe(whisper_batch.to(DEVICE))
@@ -194,7 +199,9 @@ class MuseTalkEngine:
                     blended = get_image_blending(
                         avatar.original_frame.copy(), resized, avatar.bbox, avatar.mask, avatar.mask_crop_box,
                     )
+                    blended = apply_gesture_sway(blended, frame_index / FPS, gesture)
                     encoder.stdin.write(np.ascontiguousarray(blended).tobytes())
+                    frame_index += 1
 
             encoder.stdin.close()
             stderr = encoder.stderr.read() if encoder.stderr is not None else b""

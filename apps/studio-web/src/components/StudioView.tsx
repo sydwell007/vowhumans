@@ -3187,14 +3187,21 @@ function Usage() {
   return <div className="content-stack"><section className="metric-grid">{[['Session minutes','0','Usage source not connected'],['Realtime audio','0 min','Provider disabled'],['Presenter jobs','0','Queue not connected'],['Estimated cost','R 0','No provider invoice source']].map(([label,value,note])=><article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><small>{note}</small></article>)}</section><section className="split-grid wide-left"><div className="panel usage-chart"><PanelTitle title="Sample session-volume shape" eyebrow="Illustrative data only" action={<button className="table-action" onClick={() => setGrainIndex((i) => (i + 1) % usageGrains.length)}>{grain.label} <ChevronRight size={14}/></button>}/><div className="chart-area"><div className="chart-y"><span>3k</span><span>2k</span><span>1k</span><span>0</span></div><div className="bars">{grain.bars.map((bar,index)=><div key={index}><i style={{height:`${bar}%`}}/><small>{grain.steps[index]}</small></div>)}</div></div></div><div className="panel provider-cost"><PanelTitle title="Provider cost categories" eyebrow="No live costs loaded"/>{[['Realtime voice','R 0','Not connected','coral'],['Transcription','R 0','Disabled','cyan'],['Language models','R 0','Disabled','lime'],['Storage + media','R 0','Not connected','violet']].map(([name,cost,share,tone])=><div className="cost-row" key={name}><i className={tone}/><span><b>{name}</b><small>{share}</small></span><strong>{cost}</strong></div>)}<div className="budget-meter"><span><i style={{width:'0%'}}/></span><small>No production budget source connected</small></div></div></section></div>;
 }
 
-const GESTURE_FEATURE_DEFAULTS: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string }> = {
-  blinking: { label: 'Blinking', hasRange: true, defaultEnabled: true, defaultRange: '4–7s' },
-  head_tilt: { label: 'Head tilt', hasRange: true, defaultEnabled: true, defaultRange: '±3°' },
-  head_nod: { label: 'Head nod / shake', hasRange: true, defaultEnabled: true, defaultRange: '±4°' },
-  micro_expressions: { label: 'Micro-expressions', hasRange: false, defaultEnabled: true, defaultRange: '' },
-  gaze_shift: { label: 'Gaze shift', hasRange: false, defaultEnabled: true, defaultRange: '' },
-  breathing_sway: { label: 'Breathing / idle sway', hasRange: false, defaultEnabled: true, defaultRange: '' },
-  hand_gestures: { label: 'Hand gestures', hasRange: false, defaultEnabled: false, defaultRange: '' },
+// appliedToRender: honest per-feature capability truth, not a UI aspiration —
+// avatar-worker's MuseTalk pipeline only has a face bounding box (no eye or
+// body landmarks), so only these three can genuinely drive rendered video
+// today, as one small continuous sway (see services/avatar-worker/
+// gesture_sway.py and docs/AVATAR_GESTURE_APPLICATION.md). The rest stay
+// configurable and shown here — never removed — but should read as "recorded
+// for later," not "already happening."
+const GESTURE_FEATURE_DEFAULTS: Record<string, { label: string; hasRange: boolean; defaultEnabled: boolean; defaultRange: string; appliedToRender: boolean }> = {
+  blinking: { label: 'Blinking', hasRange: true, defaultEnabled: true, defaultRange: '4–7s', appliedToRender: false },
+  head_tilt: { label: 'Head tilt', hasRange: true, defaultEnabled: true, defaultRange: '±3°', appliedToRender: true },
+  head_nod: { label: 'Head nod / shake', hasRange: true, defaultEnabled: true, defaultRange: '±4°', appliedToRender: true },
+  micro_expressions: { label: 'Micro-expressions', hasRange: false, defaultEnabled: true, defaultRange: '', appliedToRender: false },
+  gaze_shift: { label: 'Gaze shift', hasRange: false, defaultEnabled: true, defaultRange: '', appliedToRender: false },
+  breathing_sway: { label: 'Breathing / idle sway', hasRange: false, defaultEnabled: true, defaultRange: '', appliedToRender: true },
+  hand_gestures: { label: 'Hand gestures', hasRange: false, defaultEnabled: false, defaultRange: '', appliedToRender: false },
 };
 
 type FaceAsset = { id: string; media_type: string; detector_provider: string | null; preprocessing_state: string; state: string };
@@ -3416,6 +3423,7 @@ function GestureLibrary() {
   return (
     <div className="content-stack">
       <section className="asset-intro"><span><Sparkles size={26} /></span><div><p className="eyebrow">Motion with restraint</p><h2>Gesture profile library</h2><p>Choose which natural movements a digital human uses, and how pronounced each one is.</p></div></section>
+      <div className="studio-data-notice" role="note"><strong>Capability truth</strong><span>Head tilt, head nod and breathing/idle sway genuinely drive rendered avatar video today — a real disclosed digital human in a live call or a Presenter Studio render actually moves within the range configured below. Blinking, gaze shift, micro-expressions and hand gestures stay configurable and assigned, but the current rendering pipeline has no eye or body landmarks to apply them with — they are not yet reflected in rendered video.</span></div>
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {loaded && profiles.length === 0 && (
         <section className="panel ingestion-card"><span className="empty-icon"><Sparkles size={24} /></span><p className="eyebrow">No gesture profiles yet</p><h2>Create your first profile</h2><p>Pick which movements to include using the form below — every feature is on by default except hand gestures.</p></section>
@@ -3452,7 +3460,8 @@ function GestureLibrary() {
             {Object.entries(GESTURE_FEATURE_DEFAULTS).map(([key, def]) => (
               <div key={key}>
                 <span>
-                  <strong>{def.label}</strong>
+                  <strong>{def.label}</strong>{' '}
+                  <StatusPill tone={def.appliedToRender ? 'good' : 'muted'}>{def.appliedToRender ? 'Applied to rendered video' : 'Recorded, not yet rendered'}</StatusPill>
                   {def.hasRange && selectedFeatures[key]?.enabled && (
                     <input
                       className="gesture-range-input"

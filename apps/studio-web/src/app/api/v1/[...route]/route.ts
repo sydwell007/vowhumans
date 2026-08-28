@@ -9,6 +9,7 @@ import { transcribeSpeech } from "@/lib/speech";
 import { chunkText, extractText, fetchWebsiteText, retrieveChunks } from "@/lib/ingest";
 import { mintEmbedToken } from "@/lib/embedToken";
 import { getCapabilityMatrix, recordLanguageUsage, resolveForCapability } from "@/lib/languageRouter";
+import { resolveGestureOverlay } from "@/lib/gesture";
 import type { CapabilityKind } from "@vowhumans/persona-schema";
 
 const allowedResources = new Set(["auth","dashboard","organisations","workspaces","users","consents","digital-humans","identities","voices","voice-assignments","faces","face-assignments","gesture-profiles","gesture-assignments","personas","persona-versions","persona-assignments","guardrails","knowledge","knowledge-bases","knowledge-documents","knowledge-assignments","sessions","livekit","presenter-projects","generated-videos","renders","applications","digital-human-applications","live-sessions","integrations","templates","marketplace","academy","partners","notifications","support-requests","sales-requests","demo-requests","contact-requests","signup-requests","signin-requests","partner-requests","investor-requests","trust-requests","billing","plans","analytics","api-keys","webhooks","usage","health","safety","audit-logs","languages","digital-human-languages","terminology","language-reviews","guide-progress","guide-preferences"]);
@@ -1977,9 +1978,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           });
           if (prepareRes.ok) {
             const { avatar_id: avatarId } = (await prepareRes.json()) as { avatar_id: string };
+            // Best-effort — a resolution failure here must never block the
+            // render itself; the neutral overlay (no motion) is what a
+            // caller who never sent this field at all would already get.
+            const gesture = await resolveGestureOverlay(organisationId, project.digital_human_id).catch(() => null);
             const renderForm = new FormData();
             renderForm.append("avatar_id", avatarId);
             renderForm.append("audio_file", new Blob([new Uint8Array(speech.data)], { type: "audio/wav" }), "narration.wav");
+            if (gesture) renderForm.append("gesture_json", JSON.stringify(gesture));
             const renderRes = await fetch(`${avatarWorkerUrl.replace(/\/$/, "")}/internal/v1/render`, {
               method: "POST",
               headers: { "x-internal-key": internalKey },
