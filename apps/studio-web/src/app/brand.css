@@ -3677,3 +3677,100 @@ body {
   .studio-shell .wizard-steps > div::after { display: none; }
   .studio-shell .wizard-review-summary .requirement-list { grid-template-columns: 1fr; }
 }
+
+/* Photoreal Replica Studio — capture-led, consent-first and deliberately
+   distinct from the legacy portrait editor without introducing a new theme. */
+.replica-studio { gap: 18px; }
+.replica-tier-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.replica-tier { position: relative; display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 14px; min-height: 172px; overflow: hidden; }
+.replica-tier::after { position: absolute; right: -35px; bottom: -55px; width: 140px; height: 140px; border-radius: 50%; background: rgba(37,99,255,.08); content: ""; filter: blur(4px); }
+.replica-tier.recommended { border-color: rgba(0,217,255,.42) !important; background: linear-gradient(145deg,rgba(0,217,255,.075),rgba(124,58,237,.06)),var(--vh-surface) !important; box-shadow: inset 0 1px rgba(255,255,255,.04),0 18px 50px rgba(0,10,30,.24) !important; }
+.replica-tier.experimental { opacity: .86; }
+.replica-tier-icon,.replica-list-icon { display: grid; place-items: center; flex: none; border: 1px solid rgba(0,217,255,.2); border-radius: 12px; background: rgba(0,217,255,.08); color: var(--vh-cyan); }
+.replica-tier-icon { width: 44px; height: 44px; }
+.replica-list-icon { width: 38px; height: 38px; }
+.replica-tier h2 { margin: 3px 0 8px !important; }
+.replica-tier p:not(.eyebrow) { margin: 0 !important; }
+.replica-tier > .status-pill { grid-column: 1/-1; align-self: end; }
+.replica-truth { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 15px; border-color: rgba(52,211,153,.2) !important; background: linear-gradient(90deg,rgba(52,211,153,.055),rgba(0,217,255,.035)),var(--vh-surface) !important; }
+.replica-truth > svg { color: var(--vh-success); }
+.replica-truth strong { color: var(--vh-text); font-size: 15px; }
+.replica-truth p { margin: 3px 0 0 !important; }
+.replica-truth-flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.replica-truth-flags span { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid var(--vh-border); border-radius: 999px; color: var(--vh-text-muted); white-space: nowrap; }
+.replica-truth-flags i { width: 7px; height: 7px; border-radius: 50%; background: var(--vh-warning); box-shadow: 0 0 10px rgba(251,191,36,.28); }
+.replica-truth-flags i.on { background: var(--vh-success); box-shadow: 0 0 10px rgba(52,211,153,.38); }
+.replica-layout { display: grid; grid-template-columns: minmax(290px,.34fr) minmax(0,1fr); gap: 18px; align-items: start; }
+.replica-catalogue { display: grid; gap: 7px; }
+.replica-catalogue > button { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 11px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--vh-text); text-align: left; cursor: pointer; }
+.replica-catalogue > button:hover,.replica-catalogue > button.selected { border-color: rgba(0,217,255,.25); background: rgba(0,217,255,.055); }
+.replica-catalogue > button > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.replica-catalogue > button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replica-empty { display: grid; justify-items: start; gap: 9px; padding: 25px 5px 8px; color: var(--vh-text-muted); }
+.replica-empty > svg { color: var(--vh-cyan); }
+.replica-empty p { margin: 0 0 8px !important; }
+.replica-workspace { min-height: 520px; }
+.replica-workspace-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.replica-workspace-heading h2 { margin: 3px 0 !important; font-size: 29px !important; }
+.replica-workspace-heading p:not(.eyebrow) { margin: 0 !important; }
+.replica-stepper { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 7px; margin: 24px 0; }
+.replica-stepper button { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 7px; min-width: 0; padding: 8px; border: 1px solid var(--vh-border); border-radius: 9px; background: rgba(148,163,184,.035); color: var(--vh-text-muted); text-align: left; cursor: pointer; }
+.replica-stepper button:hover { border-color: var(--vh-border-strong); }
+.replica-stepper button.active { border-color: rgba(0,217,255,.48); background: rgba(0,217,255,.08); color: var(--vh-text); }
+.replica-stepper button.done { border-color: rgba(52,211,153,.22); color: #a7f3d0; }
+.replica-stepper button > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; background: var(--vh-midnight-2); color: inherit; font-weight: 800; }
+.replica-stepper small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replica-workflow-card { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 18px; min-height: 250px; align-content: center; padding: 28px; border: 1px solid var(--vh-border); border-radius: 18px; background: radial-gradient(circle at 90% 10%,rgba(124,58,237,.09),transparent 35%),var(--vh-midnight-2); }
+.replica-workflow-card > span { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid rgba(0,217,255,.24); border-radius: 15px; background: rgba(0,217,255,.08); color: var(--vh-cyan); }
+.replica-workflow-card h3,.replica-gate h3,.replica-capture-card h3 { margin: 10px 0 7px; color: var(--vh-text); font-size: 21px; }
+.replica-workflow-card p { max-width: 720px; margin: 0 0 18px !important; }
+.replica-capture-grid { display: grid; gap: 14px; }
+.replica-capture-card { display: grid; grid-template-columns: minmax(240px,.75fr) minmax(0,1fr); gap: 18px; padding: 16px; border: 1px solid var(--vh-border); border-radius: 17px; background: var(--vh-midnight-2); }
+.replica-capture-card.complete { border-color: rgba(52,211,153,.24); }
+.capture-preview { position: relative; min-height: 210px; overflow: hidden; border-radius: 13px; background: radial-gradient(circle at 50% 40%,rgba(37,99,255,.18),transparent 44%),#050816; }
+.capture-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.capture-preview > span { position: absolute; left: 10px; bottom: 10px; padding: 6px 9px; border-radius: 999px; background: rgba(5,8,22,.82); color: var(--vh-text-secondary); backdrop-filter: blur(8px); }
+.replica-capture-card > div:last-child { align-self: center; }
+.replica-capture-card p { margin: 0 0 15px !important; }
+.capture-error { display: block; margin-bottom: 10px; color: var(--vh-danger) !important; }
+.replica-gate { display: grid; justify-items: start; min-height: 250px; align-content: center; padding: 28px; border: 1px solid rgba(0,217,255,.22); border-radius: 18px; background: linear-gradient(135deg,rgba(0,217,255,.055),rgba(124,58,237,.055)),var(--vh-midnight-2); }
+.replica-gate p { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 18px !important; }
+.replica-gate ul { display: grid; gap: 7px; margin: 0 0 20px; padding: 0; list-style: none; }
+.replica-gate li { display: flex; align-items: center; gap: 7px; color: var(--vh-warning); }
+.replica-gate.approval { border-color: rgba(52,211,153,.25); }
+.replica-quality-review { display: grid; gap: 17px; padding: 24px; border: 1px solid var(--vh-border); border-radius: 18px; background: var(--vh-midnight-2); }
+.replica-quality-review > div:first-child h3 { margin: 3px 0 5px; color: var(--vh-text); font-size: 21px; }
+.replica-quality-review > div:first-child p:not(.eyebrow) { margin: 0 !important; }
+.replica-evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.replica-evidence-grid article { display: grid; align-content: start; gap: 10px; padding: 16px; border: 1px solid var(--vh-border); border-radius: 14px; background: var(--vh-surface); }
+.replica-evidence-grid article h3,.replica-evidence-grid article p { margin: 0 !important; }
+.replica-evidence-grid :is(textarea,input) { width: 100%; min-height: 44px; padding: 11px; border: 1px solid var(--vh-border); border-radius: 9px; background: var(--vh-midnight-2); color: var(--vh-text); resize: vertical; }
+.replica-evidence-grid textarea { min-height: 88px; }
+.replica-workflow-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--vh-border); }
+.replica-create { max-width: 960px; }
+.replica-create .panel-note { margin-bottom: 20px; }
+.studio-shell .replica-prerequisite { align-items: flex-start; padding: 16px; border-color: rgba(251,191,36,.28); background: rgba(251,191,36,.08) !important; color: #fde68a !important; }
+.replica-prerequisite > div { display: grid; gap: 7px; }
+.replica-prerequisite p { margin: 0 !important; color: var(--vh-text-secondary) !important; font-weight: 500; line-height: 1.55; }
+.replica-prerequisite .editor-actions { margin-top: 3px; }
+.wizard-appearance-tiers { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; margin-bottom: 14px; }
+.wizard-appearance-tiers > * { display: grid; grid-template-columns: auto 1fr; gap: 9px; padding: 11px; border: 1px solid var(--vh-border); border-radius: 11px; background: var(--vh-midnight-2); color: var(--vh-text-secondary); text-decoration: none; }
+.wizard-appearance-tiers > *.selected { border-color: rgba(52,211,153,.24); }
+.wizard-appearance-tiers > a { border-color: rgba(0,217,255,.32); }
+.wizard-appearance-tiers > * > svg { color: var(--vh-cyan); }
+.wizard-appearance-tiers > * > span { display: grid; gap: 2px; }
+.wizard-appearance-tiers .status-pill { grid-column: 1/-1; }
+
+@media (max-width: 1100px) {
+  .replica-tier-grid { grid-template-columns: 1fr; }
+  .replica-truth { grid-template-columns: auto 1fr; }
+  .replica-truth-flags { grid-column: 1/-1; justify-content: flex-start; }
+  .replica-layout { grid-template-columns: 1fr; }
+  .replica-stepper { grid-template-columns: repeat(4,minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+  .replica-stepper { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .replica-capture-card,.replica-workflow-card { grid-template-columns: 1fr; }
+  .wizard-appearance-tiers { grid-template-columns: 1fr; }
+  .replica-evidence-grid { grid-template-columns: 1fr; }
+}

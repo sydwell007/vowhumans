@@ -89,6 +89,11 @@ function publicFeatureStatus() {
     openai_realtime: flagEnabled("ENABLE_OPENAI_REALTIME"),
     avatar_participant: flagEnabled("ENABLE_AVATAR_PARTICIPANT"),
     gpu_avatar: flagEnabled("ENABLE_MUSETALK") || flagEnabled("ENABLE_LIVEPORTRAIT") || flagEnabled("ENABLE_AUDIO2FACE"),
+    legacy_portrait_renderer: process.env.ENABLE_LEGACY_PORTRAIT_RENDERER !== "false",
+    video_replica: flagEnabled("ENABLE_VIDEO_REPLICA"),
+    streaming_replica: flagEnabled("ENABLE_STREAMING_REPLICA"),
+    replica_gestures: flagEnabled("ENABLE_REPLICA_GESTURES"),
+    rigged_3d: flagEnabled("ENABLE_RIGGED_3D"),
   };
 }
 

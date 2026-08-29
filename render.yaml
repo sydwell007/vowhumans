@@ -113,3 +113,24 @@ services:
         value: "1.5"
       - key: AVATAR_TURN_DRAIN_SECONDS
         value: "0.25"
+      # Replica selection is additive and falls back to Quick Portrait. Keep off
+      # until one authorised capture passes visual and LiveKit acceptance tests.
+      - key: ENABLE_VIDEO_REPLICA
+        value: "false"
+
+  # Validates private performer captures and produces a safe motion manifest.
+  # It performs no identity generation and persists no raw media on local disk.
+  - type: web
+    name: vowhumans-replica-processor
+    runtime: docker
+    rootDir: services/replica-processor
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: VOWHUMANS_INTERNAL_KEY
+        sync: false
+      - key: REPLICA_MAX_CAPTURE_BYTES
+        value: "314572800"
+      - key: REPLICA_FACE_SAMPLE_COUNT
+        value: "12"

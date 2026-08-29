@@ -61,6 +61,10 @@ export function StudioShell({ section, children }: { section: string; children: 
       window.dispatchEvent(new CustomEvent("studio:new-digital-human"));
       return;
     }
+    if (section === "replicas") {
+      window.dispatchEvent(new CustomEvent("studio:new-replica"));
+      return;
+    }
     if (section === "live-sessions") {
       window.dispatchEvent(new CustomEvent("studio:start-test-session"));
       return;

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "prebuild": "node ../../scripts/migrate-workforce.mjs && node ../../scripts/migrate-schema-fixes.mjs",
+    "prebuild": "node ../../scripts/migrate-workforce.mjs && node ../../scripts/migrate-schema-fixes.mjs && node ../../scripts/migrate-replicas.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1121.0",
+    "@aws-sdk/s3-request-presigner": "^3.1121.0",
     "@napi-rs/canvas": "^0.1.80",
     "@vowhumans/commercial-core": "*",
     "@vowhumans/persona-schema": "*",

@@ -29,7 +29,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-ZA">
+    <html lang="en-ZA" data-scroll-behavior="smooth">
       <body>
         {children}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "SoftwareApplication", name: "VowHumans", applicationCategory: "BusinessApplication", operatingSystem: "Web", url: "https://vowhumans.com", creator: { "@type": "Organization", name: "GoalVow" } }).replaceAll("<", "\\u003c") }} />

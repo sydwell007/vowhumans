@@ -57,6 +57,7 @@ AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 AVATAR_WORKER_URL = os.getenv("AVATAR_WORKER_URL", "")
 STUDIO_WEB_URL = os.getenv("STUDIO_WEB_URL", "")
 INTERNAL_KEY = os.getenv("VOWHUMANS_INTERNAL_KEY", "")
+ENABLE_VIDEO_REPLICA = os.getenv("ENABLE_VIDEO_REPLICA", "false").lower() == "true"
 
 # Speech-only audio throughout: matches Whisper's own native rate (avatar-worker
 # resamples internally regardless, but requesting this directly skips one resample
@@ -96,21 +97,89 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
     _log(f"entrypoint: connected to room {ctx.room.name} as {ctx.room.local_participant.identity}")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        prepared_avatar = await _prepare_avatar(client, organisation_id, human_slug)
-        if prepared_avatar is None:
-            _log(f"No usable face for {organisation_id}/{human_slug} — this call stays audio-only.")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=30.0)) as client:
+        prepared_appearance = await _prepare_appearance(client, organisation_id, human_slug)
+        if prepared_appearance is None:
+            _log(f"No usable appearance for {organisation_id}/{human_slug} — this call stays audio-only.")
             return
-        avatar_id, preview_frame = prepared_avatar
-        _log(f"entrypoint: avatar prepared, avatar_id={avatar_id}")
+        appearance_id, preview_frame, renderer = prepared_appearance
+        _log(f"entrypoint: appearance prepared, renderer={renderer}, id={appearance_id}")
         gesture = await _fetch_gesture(client, organisation_id, human_slug)
 
-        session = AvatarSession(ctx, client, avatar_id, preview_frame, gesture)
+        session = AvatarSession(ctx, client, appearance_id, preview_frame, gesture, renderer)
         try:
             await session.run()
         finally:
-            _log("entrypoint: session.run() returned, releasing avatar")
-            await _release_avatar(client, avatar_id)
+            _log(f"entrypoint: session.run() returned, releasing {renderer}")
+            await _release_appearance(client, appearance_id, renderer)
+
+
+async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray, str] | None:
+    if ENABLE_VIDEO_REPLICA:
+        replica = await _prepare_replica(client, organisation_id, human_slug)
+        if replica is not None:
+            return replica[0], replica[1], "video_replica"
+        _log("No approved usable replica assignment; falling back to Quick Portrait.")
+    portrait = await _prepare_avatar(client, organisation_id, human_slug)
+    return (portrait[0], portrait[1], "portrait") if portrait is not None else None
+
+
+async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray] | None:
+    if not (AVATAR_WORKER_URL and STUDIO_WEB_URL and INTERNAL_KEY):
+        return None
+    try:
+        manifest_response = await client.get(
+            f"{STUDIO_WEB_URL.rstrip('/')}/api/internal/v1/replica",
+            headers={"x-internal-key": INTERNAL_KEY, "x-organisation-id": organisation_id},
+            params={"human_slug": human_slug},
+        )
+        if manifest_response.status_code != 200:
+            return None
+        payload = manifest_response.json().get("data", {})
+        raw_clips = payload.get("clips")
+        if not isinstance(raw_clips, list) or not raw_clips:
+            return None
+        files: dict[str, tuple[str, bytes, str]] = {}
+        manifest_clips: list[dict] = []
+        preview_frame: np.ndarray | None = None
+        for raw in raw_clips:
+            if not isinstance(raw, dict) or not isinstance(raw.get("key"), str) or not isinstance(raw.get("url"), str):
+                return None
+            clip_response = await client.get(raw["url"])
+            clip_response.raise_for_status()
+            key = raw["key"]
+            files[f"clip__{key}"] = (f"{key}.mp4", clip_response.content, clip_response.headers.get("content-type", "video/mp4"))
+            manifest_clips.append({field: value for field, value in raw.items() if field != "url"})
+            if preview_frame is None and raw.get("state") == "idle":
+                preview_frame = _first_video_frame(clip_response.content)
+        if preview_frame is None:
+            return None
+        prepare_response = await client.post(
+            f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/replicas",
+            headers={"x-internal-key": INTERNAL_KEY},
+            data={"manifest_json": json.dumps({"clips": manifest_clips})},
+            files=files,
+        )
+        if prepare_response.status_code != 201:
+            _log(f"avatar-worker replica prepare failed: {prepare_response.status_code} {prepare_response.text}")
+            return None
+        return prepare_response.json()["replica_id"], preview_frame
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        _log(f"Could not prepare Video Replica for {organisation_id}/{human_slug}: {exc}")
+        return None
+
+
+def _first_video_frame(video_bytes: bytes) -> np.ndarray | None:
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temporary:
+        temporary.write(video_bytes)
+        path = temporary.name
+    capture = cv2.VideoCapture(path)
+    try:
+        ok, frame = capture.read()
+        return frame if ok else None
+    finally:
+        capture.release()
+        Path(path).unlink(missing_ok=True)
 
 
 async def _prepare_avatar(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray] | None:
@@ -169,11 +238,12 @@ async def _fetch_gesture(client: httpx.AsyncClient, organisation_id: str, human_
         return None
 
 
-async def _release_avatar(client: httpx.AsyncClient, avatar_id: str) -> None:
+async def _release_appearance(client: httpx.AsyncClient, appearance_id: str, renderer: str) -> None:
     if not AVATAR_WORKER_URL:
         return
     try:
-        await client.delete(f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/avatars/{avatar_id}", headers={"x-internal-key": INTERNAL_KEY})
+        resource = "replicas" if renderer == "video_replica" else "avatars"
+        await client.delete(f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/{resource}/{appearance_id}", headers={"x-internal-key": INTERNAL_KEY})
     except httpx.HTTPError:
         pass  # Best-effort — avatar-worker's own in-memory cache is per-process anyway.
 
@@ -182,12 +252,14 @@ class AvatarSession:
     """One room's worth of state: the published tracks, which participant is the
     voice agent, and the buffered-audio-to-rendered-video pipeline for each turn."""
 
-    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray, gesture: dict | None = None) -> None:
+    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray, gesture: dict | None = None, renderer: str = "portrait") -> None:
         self._ctx = ctx
         self._client = client
         self._avatar_id = avatar_id
         self._preview_frame = preview_frame
         self._gesture = gesture
+        self._renderer = renderer
+        self._pending_gesture: str | None = None
         self._video_source = rtc.VideoSource(width=PUBLISH_VIDEO_WIDTH, height=PUBLISH_VIDEO_HEIGHT)
         self._audio_source = rtc.AudioSource(sample_rate=AUDIO_SAMPLE_RATE, num_channels=AUDIO_CHANNELS)
         self._agent_participant: rtc.RemoteParticipant | None = None
@@ -262,6 +334,12 @@ class AvatarSession:
         try:
             message = json.loads(data_packet.data.decode("utf-8"))
         except (AttributeError, UnicodeDecodeError, ValueError):
+            return
+        if message.get("type") == "vhm_motion_cue":
+            gesture = message.get("gesture")
+            if self._renderer == "video_replica" and gesture in {"acknowledge", "explain", "emphasise", "reassure"}:
+                self._pending_gesture = gesture
+                _log(f"captured motion cue queued: {gesture}")
             return
         if message.get("type") != "vhm_voice_state":
             return
@@ -345,11 +423,16 @@ class AvatarSession:
     async def _render(self, frames: list[rtc.AudioFrame]) -> bytes | None:
         wav_bytes = _frames_to_wav(frames)
         _log(f"_render: sending {len(wav_bytes)} bytes of WAV audio to avatar-worker")
-        data = {"avatar_id": self._avatar_id}
-        if self._gesture is not None:
+        data = {"replica_id" if self._renderer == "video_replica" else "avatar_id": self._avatar_id}
+        if self._gesture is not None and self._renderer == "portrait":
             data["gesture_json"] = json.dumps(self._gesture)
+        if self._renderer == "video_replica":
+            data["conversation_state"] = "speaking"
+            if self._pending_gesture is not None:
+                data["gesture_key"] = self._pending_gesture
+                self._pending_gesture = None
         resp = await self._client.post(
-            f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/render",
+            f"{AVATAR_WORKER_URL.rstrip('/')}/internal/v1/{'replica-render' if self._renderer == 'video_replica' else 'render'}",
             headers={"x-internal-key": INTERNAL_KEY},
             data=data,
             files={"audio_file": ("turn.wav", wav_bytes, "audio/wav")},

@@ -1,5 +1,15 @@
 # Avatar providers
 
+## Appearance tiers
+
+`renderer_contract.py` is the common capability boundary:
+
+- `LegacyPortraitProvider`: the deployed single-image MuseTalk path with optional synthetic blink/head sway.
+- `VideoReplicaProvider`: performer-captured per-frame motion with mouth-only retargeting. It is gated by `ENABLE_VIDEO_REPLICA` and is not a production claim until the authorised-capture benchmark passes.
+- `Rigged3DProvider`: an unavailable experimental contract for future MetaHuman/ACE or another licensed renderer.
+
+The fallback order is explicit: Rigged 3D → Video Replica → Quick Portrait → caller-managed audio-only. A provider cannot silently present portrait output as a replica.
+
 `MockAvatarProvider` validates the contract and fallback path. `MuseTalkAvatarProvider` will accept PCM/WAV chunks, warm approved weights, report frame latency, honour cancellation and expose only an authenticated internal endpoint. `LivePortraitMotionProvider` composes restrained expression templates through a replaceable detector abstraction. Commercial production must not use the restricted bundled InsightFace model. `NvidiaAudio2FaceProvider` is a future adapter only.
 
 The LiveKit avatar participant is separately responsible for consuming agent audio, backpressure, frame/audio synchronisation, publishing tracks, preventing room reuse and disconnecting cleanly. Rendering failure always returns to audio-only.

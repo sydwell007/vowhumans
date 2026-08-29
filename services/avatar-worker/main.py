@@ -20,9 +20,11 @@ log = logging.getLogger("avatar-worker")
 app = FastAPI(title="VowHumans Avatar Worker", version="1.1.0")
 
 ENABLE_MUSETALK = os.getenv("ENABLE_MUSETALK", "false").lower() == "true"
+ENABLE_VIDEO_REPLICA = os.getenv("ENABLE_VIDEO_REPLICA", "false").lower() == "true"
 _engine = None
 _engine_error: str | None = None
 _avatars: dict[str, object] = {}  # avatar_id -> PreparedAvatar, in-memory only
+_replicas: dict[str, object] = {}  # replica_id -> PreparedVideoReplica, in-memory only
 _render_lock = asyncio.Lock()
 
 if ENABLE_MUSETALK:
@@ -63,6 +65,9 @@ def health():
         "model_loaded": _engine is not None,
         "model_error": _engine_error,
         "cached_avatars": len(_avatars),
+        "video_replica_enabled": ENABLE_VIDEO_REPLICA,
+        "cached_replicas": len(_replicas),
+        "replica_motion_source": "captured-video" if ENABLE_VIDEO_REPLICA else "disabled",
         "render_batch_size": int(os.getenv("MUSETALK_BATCH_SIZE", "16")),
         "fallback": "audio-only",
     }
@@ -107,6 +112,99 @@ def release_avatar(avatar_id: str, x_internal_key: str | None = Header(default=N
     _require_internal_key(x_internal_key)
     _avatars.pop(avatar_id, None)
     return {"avatar_id": avatar_id, "released": True}
+
+
+@app.post("/internal/v1/replicas", status_code=201)
+async def prepare_replica(request: Request, x_internal_key: str | None = Header(default=None)):
+    _require_internal_key(x_internal_key)
+    if not ENABLE_VIDEO_REPLICA:
+        raise HTTPException(503, "Video Replica is disabled; enable it only after an authorised capture passes the POC quality gate.")
+    if _engine is None:
+        raise HTTPException(503, f"MuseTalk is not available ({_engine_error or 'ENABLE_MUSETALK is off'}).")
+    if not request.headers.get("content-type", "").startswith("multipart/form-data"):
+        raise HTTPException(415, "Replica preparation requires multipart capture clips.")
+    form = await request.form()
+    manifest_json = form.get("manifest_json")
+    if not isinstance(manifest_json, str):
+        raise HTTPException(422, "Missing multipart field 'manifest_json'.")
+    try:
+        manifest = json.loads(manifest_json)
+    except ValueError as exc:
+        raise HTTPException(422, "Replica manifest is not valid JSON.") from exc
+    clip_paths: dict[str, str] = {}
+    try:
+        for raw in manifest.get("clips", []):
+            if not isinstance(raw, dict) or not isinstance(raw.get("key"), str):
+                raise HTTPException(422, "Every manifest clip needs a key.")
+            key = raw["key"]
+            upload = form.get(f"clip__{key}")
+            if upload is None or not hasattr(upload, "read"):
+                raise HTTPException(422, f"Missing multipart clip 'clip__{key}'.")
+            clip_paths[key] = await _save_upload(upload, ".mp4")
+        from video_replica_engine import prepare_video_replica
+        replica = await run_in_threadpool(prepare_video_replica, _engine, clip_paths, manifest)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(422, f"Could not prepare captured replica: {exc}") from exc
+    finally:
+        for path in clip_paths.values():
+            Path(path).unlink(missing_ok=True)
+    replica_id = str(uuid.uuid4())
+    _replicas[replica_id] = replica
+    return {"replica_id": replica_id, "prepared_at": time.time(), "motion_source": "captured-video", "dynamic_region": "mouth-only"}
+
+
+@app.delete("/internal/v1/replicas/{replica_id}")
+def release_replica(replica_id: str, x_internal_key: str | None = Header(default=None)):
+    _require_internal_key(x_internal_key)
+    _replicas.pop(replica_id, None)
+    return {"replica_id": replica_id, "released": True}
+
+
+@app.post("/internal/v1/replica-render")
+async def render_replica(request: Request, x_internal_key: str | None = Header(default=None)):
+    _require_internal_key(x_internal_key)
+    if not ENABLE_VIDEO_REPLICA or _engine is None:
+        raise HTTPException(503, "Video Replica is not available; caller should use the portrait or audio-only fallback.")
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        replica_id = form.get("replica_id")
+        upload = form.get("audio_file")
+        conversation_state = str(form.get("conversation_state") or "speaking")
+        gesture_key = form.get("gesture_key")
+        if not replica_id or upload is None:
+            raise HTTPException(422, "Multipart requests need both 'replica_id' and 'audio_file'.")
+        audio_path = await _save_upload(upload, ".wav")
+    else:
+        body = await request.json()
+        replica_id = body.get("replica_id")
+        audio_url = body.get("audio_url")
+        conversation_state = str(body.get("conversation_state") or "speaking")
+        gesture_key = body.get("gesture_key")
+        if not replica_id or not audio_url:
+            raise HTTPException(422, "Missing 'replica_id'/'audio_url'.")
+        audio_path = _download(audio_url, ".wav")
+    replica = _replicas.get(str(replica_id))
+    if replica is None:
+        Path(audio_path).unlink(missing_ok=True)
+        raise HTTPException(404, "Unknown replica_id — prepare the published replica first.")
+    started_at = time.perf_counter()
+    try:
+        from video_replica_engine import render_video_replica
+        async with _render_lock:
+            video_path = await run_in_threadpool(render_video_replica, _engine, replica, audio_path, conversation_state, str(gesture_key) if gesture_key else None)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Replica rendering failed: {exc}") from exc
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
+    render_ms = round((time.perf_counter() - started_at) * 1000)
+    return FileResponse(
+        video_path, media_type="video/mp4", filename="replica-reply.mp4",
+        headers={"X-VowHumans-Render-Ms": str(render_ms), "X-VowHumans-Motion-Source": "captured-video"},
+        background=BackgroundTask(shutil.rmtree, Path(video_path).parent, ignore_errors=True),
+    )
 
 
 @app.post("/internal/v1/render")

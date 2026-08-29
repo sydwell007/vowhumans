@@ -15,6 +15,7 @@ import {
   BookOpenText,
   Bot,
   BrainCircuit,
+  Camera,
   Check,
   ChevronRight,
   CircleAlert,
@@ -42,6 +43,7 @@ import {
   Trash2,
   UploadCloud,
   UserCheck,
+  Video,
   WandSparkles,
   Webhook,
   X,
@@ -63,6 +65,7 @@ import {
   ProductionWebhooks,
 } from "./ProductionControlPlane";
 import { WorkforceStudio } from "./WorkforceStudio";
+import { ReplicaStudio } from "./ReplicaStudio";
 
 async function requireSuccessfulResponse(response: Response, fallback: string) {
   if (response.ok) return;
@@ -72,10 +75,10 @@ async function requireSuccessfulResponse(response: Response, fallback: string) {
 
 const readiness = [
   { name: "Voice-only", state: "Adapter ready", tone: "good" },
-  { name: "Static portrait", state: "Functional", tone: "good" },
-  { name: "Pre-rendered avatar", state: "Scaffold", tone: "warn" },
-  { name: "Live 2D avatar", state: "GPU required", tone: "muted" },
-  { name: "3D avatar", state: "Planned", tone: "muted" },
+  { name: "Quick Portrait", state: "Functional", tone: "good" },
+  { name: "Photoreal Replica", state: "Authorised POC gate", tone: "warn" },
+  { name: "Streaming Replica", state: "Not validated", tone: "muted" },
+  { name: "Fully Rigged 3D", state: "Contract only", tone: "muted" },
 ];
 
 
@@ -740,8 +743,13 @@ function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => vo
 
   return (
     <div>
-      <h3>Face</h3>
-      <p className="panel-note">Choose an existing face asset, or generate a new one.</p>
+      <h3>Appearance technology</h3>
+      <div className="wizard-appearance-tiers">
+        <div className="selected"><Camera size={18} /><span><strong>Quick Portrait</strong><small>Continue here with an approved image.</small></span><StatusPill tone="good">Available</StatusPill></div>
+        <Link href="/studio/replicas"><Video size={18} /><span><strong>Photoreal Replica</strong><small>Capture real blink, gaze, breathing and gestures.</small></span><StatusPill tone="warn">Recommended</StatusPill></Link>
+        <div><Sparkles size={18} /><span><strong>Fully Rigged 3D</strong><small>Provider contract only; no production claim.</small></span><StatusPill tone="muted">Experimental</StatusPill></div>
+      </div>
+      <p className="panel-note">Choose an existing face asset, or generate a new one for the Quick Portrait tier.</p>
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {faces.length > 0 && (
         <div className="form-grid two">
@@ -3964,6 +3972,7 @@ export function StudioView({ section }: { section: string }) {
     case 'knowledge': return <Knowledge/>;
     case 'voices': return <VoiceLibrary/>;
     case 'faces': return <FaceLibrary/>;
+    case 'replicas': return <ReplicaStudio/>;
     case 'gesture-profiles': return <GestureLibrary/>;
     case 'live-sessions': return <LiveSessions/>;
     case 'presenter-studio': return <PresenterStudio/>;
