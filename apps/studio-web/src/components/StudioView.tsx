@@ -402,7 +402,7 @@ function DigitalHumans() {
               {detail.languages.length > 0 && (
                 <div className="wizard-subsection">
                   <PanelTitle title="Languages" eyebrow="Real status — never shown as production without passing the quality gate" />
-                  <DigitalHumanLanguageRow humanId={detail.human.id} languages={detail.languages} onChanged={() => loadDetail(detail.human.id)} />
+                  <DigitalHumanLanguageRow key={detail.human.id} humanId={detail.human.id} languages={detail.languages} onChanged={() => loadDetail(detail.human.id)} />
                 </div>
               )}
               <div className="wizard-subsection">
@@ -479,6 +479,7 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
 
 function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCode, setSelectedCode] = useState('en-ZA');
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -503,19 +504,45 @@ function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: s
     }
   }
 
+  const english = languages.find((language) => language.code === 'en-ZA') ?? languages[0];
+  const selectedLanguage = languages.find((language) => language.code === selectedCode) ?? english;
+  const otherLanguages = selectedLanguage ? languages.filter((language) => language.code !== selectedLanguage.code) : [];
+
   return (
-    <div className="language-status-list">
+    <div className="digital-human-language-picker">
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
-      {languages.map((lang) => (
-        <div className="language-status-row" key={lang.code}>
-          <span>{lang.english_name}</span>
-          <LanguageStatusBadge status={lang.status} />
-          <select value={lang.voice_id ?? ''} onChange={(e) => assignVoice(lang.code, e.target.value)} disabled={busyCode === lang.code}>
-            <option value="">Use organisation default</option>
-            {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
+      <div className="digital-human-language-toolbar">
+        <div>
+          <Languages size={18} />
+          <span><strong>Selected language</strong><small>Only one language configuration is shown at a time.</small></span>
         </div>
-      ))}
+        {otherLanguages.length > 0 && (
+          <label className="other-language-select">
+            <span>Other languages</span>
+            <select value="" onChange={(event) => setSelectedCode(event.target.value)} aria-label="Choose another language">
+              <option value="" disabled>Choose a language</option>
+              {otherLanguages.map((language) => <option key={language.code} value={language.code}>{language.english_name} — {language.status.replace(/-/g, ' ')}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      {selectedLanguage && (
+        <article className="digital-human-language-card">
+          <div className="digital-human-language-identity">
+            <span className="language-code-mark">{selectedLanguage.code.split('-')[0].toUpperCase()}</span>
+            <span><strong>{selectedLanguage.english_name}</strong><small>{selectedLanguage.code}</small></span>
+          </div>
+          <LanguageStatusBadge status={selectedLanguage.status} />
+          <label className="digital-human-language-voice">
+            <span>Voice for {selectedLanguage.english_name}</span>
+            <select value={selectedLanguage.voice_id ?? ''} onChange={(event) => assignVoice(selectedLanguage.code, event.target.value)} disabled={busyCode === selectedLanguage.code}>
+              <option value="">Use organisation default</option>
+              {voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}
+            </select>
+          </label>
+          {busyCode === selectedLanguage.code && <RefreshCw className="spin language-save-indicator" size={17} aria-label="Saving language voice" />}
+        </article>
+      )}
     </div>
   );
 }
