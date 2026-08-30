@@ -3680,7 +3680,11 @@ body {
 
 /* Photoreal Replica Studio — capture-led, consent-first and deliberately
    distinct from the legacy portrait editor without introducing a new theme. */
-.replica-studio { gap: 18px; }
+.replica-studio {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
 .replica-tier-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .replica-tier { position: relative; display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 14px; min-height: 172px; overflow: hidden; }
 .replica-tier::after { position: absolute; right: -35px; bottom: -55px; width: 140px; height: 140px; border-radius: 50%; background: rgba(37,99,255,.08); content: ""; filter: blur(4px); }
