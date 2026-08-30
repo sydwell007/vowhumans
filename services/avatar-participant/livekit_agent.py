@@ -141,17 +141,23 @@ async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, huma
             return None
         files: dict[str, tuple[str, bytes, str]] = {}
         manifest_clips: list[dict] = []
+        source_bytes: dict[str, bytes] = {}
         preview_frame: np.ndarray | None = None
         for raw in raw_clips:
             if not isinstance(raw, dict) or not isinstance(raw.get("key"), str) or not isinstance(raw.get("url"), str):
                 return None
-            clip_response = await client.get(raw["url"])
-            clip_response.raise_for_status()
             key = raw["key"]
-            files[f"clip__{key}"] = (f"{key}.mp4", clip_response.content, clip_response.headers.get("content-type", "video/mp4"))
-            manifest_clips.append({field: value for field, value in raw.items() if field != "url"})
+            source_key = raw.get("source_key") if isinstance(raw.get("source_key"), str) else key
+            content = source_bytes.get(source_key)
+            if content is None:
+                clip_response = await client.get(raw["url"])
+                clip_response.raise_for_status()
+                content = clip_response.content
+                source_bytes[source_key] = content
+                files[f"source__{source_key}"] = (f"{source_key}.mp4", content, clip_response.headers.get("content-type", "video/mp4"))
+            manifest_clips.append({**{field: value for field, value in raw.items() if field != "url"}, "source_key": source_key})
             if preview_frame is None and raw.get("state") == "idle":
-                preview_frame = _first_video_frame(clip_response.content)
+                preview_frame = _video_frame_at(content, int(raw.get("trim_start_ms") or 0))
         if preview_frame is None:
             return None
         prepare_response = await client.post(
@@ -169,12 +175,14 @@ async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, huma
         return None
 
 
-def _first_video_frame(video_bytes: bytes) -> np.ndarray | None:
+def _video_frame_at(video_bytes: bytes, position_ms: int = 0) -> np.ndarray | None:
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temporary:
         temporary.write(video_bytes)
         path = temporary.name
     capture = cv2.VideoCapture(path)
     try:
+        if position_ms > 0:
+            capture.set(cv2.CAP_PROP_POS_MSEC, position_ms)
         ok, frame = capture.read()
         return frame if ok else None
     finally:

@@ -26,6 +26,15 @@ export const REPLICA_SEGMENT_TYPES = [
 export type ReplicaSegmentType = (typeof REPLICA_SEGMENT_TYPES)[number];
 export type ReplicaGesture = "acknowledge" | "explain" | "emphasise" | "reassure";
 export type ReplicaQualityMode = "standard" | "premium" | "presenter";
+export type ReplicaVideoChapter = {
+  type: ReplicaSegmentType;
+  gesture?: ReplicaGesture;
+  start_ms: number;
+  end_ms: number;
+};
+
+export const MIN_REPLICA_CHAPTER_MS = 1_500;
+export const MAX_REPLICA_CHAPTER_MS = 30_000;
 
 export const REQUIRED_CAPTURE_SEGMENTS: ReadonlyArray<{
   type: ReplicaSegmentType;
@@ -63,4 +72,60 @@ export function replicaCaptureReadiness(
     && segment.ends_neutral === true,
   )).map((requirement) => requirement.label);
   return { ready: missing.length === 0, missing };
+}
+
+export function validateCompletePerformanceChapters(value: unknown, sourceDurationMs: number) {
+  const errors: string[] = [];
+  if (!Number.isSafeInteger(sourceDurationMs) || sourceDurationMs < MIN_REPLICA_CHAPTER_MS * REQUIRED_CAPTURE_SEGMENTS.length) {
+    return { valid: false as const, chapters: [] as ReplicaVideoChapter[], errors: ["The source video must contain at least 7.5 seconds for five distinct performance chapters."] };
+  }
+  if (!Array.isArray(value)) {
+    return { valid: false as const, chapters: [] as ReplicaVideoChapter[], errors: ["Five performance chapters are required."] };
+  }
+
+  const chapters: ReplicaVideoChapter[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      errors.push("Every performance chapter must be an object.");
+      continue;
+    }
+    const chapter = raw as Record<string, unknown>;
+    const type = chapter.type;
+    const gesture = chapter.gesture;
+    const startMs = Number(chapter.start_ms);
+    const endMs = Number(chapter.end_ms);
+    if (!isReplicaSegmentType(type) || !["idle", "listening", "speaking", "gesture"].includes(type)) {
+      errors.push("A chapter has an unsupported performance type.");
+      continue;
+    }
+    if (type === "gesture" && gesture !== "acknowledge" && gesture !== "explain") {
+      errors.push("Gesture chapters must be acknowledgement or explanation.");
+      continue;
+    }
+    if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs > sourceDurationMs || endMs <= startMs) {
+      errors.push("Every chapter needs a valid start and end within the source video.");
+      continue;
+    }
+    const duration = endMs - startMs;
+    if (duration < MIN_REPLICA_CHAPTER_MS || duration > MAX_REPLICA_CHAPTER_MS) {
+      errors.push(`Every chapter must be between ${MIN_REPLICA_CHAPTER_MS / 1000} and ${MAX_REPLICA_CHAPTER_MS / 1000} seconds.`);
+      continue;
+    }
+    chapters.push({ type, ...(type === "gesture" ? { gesture: gesture as ReplicaGesture } : {}), start_ms: startMs, end_ms: endMs });
+  }
+
+  for (const requirement of REQUIRED_CAPTURE_SEGMENTS) {
+    const matches = chapters.filter((chapter) => chapter.type === requirement.type && (!requirement.gesture || chapter.gesture === requirement.gesture));
+    if (matches.length !== 1) errors.push(`${requirement.label} must have exactly one chapter.`);
+  }
+  if (chapters.length !== REQUIRED_CAPTURE_SEGMENTS.length) errors.push("Exactly five required performance chapters must be supplied.");
+  const ordered = [...chapters].sort((left, right) => left.start_ms - right.start_ms);
+  for (let index = 1; index < ordered.length; index += 1) {
+    if (ordered[index].start_ms < ordered[index - 1].end_ms) {
+      errors.push("Performance chapters must not overlap.");
+      break;
+    }
+  }
+
+  return { valid: errors.length === 0, chapters, errors: [...new Set(errors)] };
 }

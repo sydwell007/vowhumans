@@ -48,14 +48,24 @@ class PreparedVideoReplica:
     provider: str = "musetalk-video-replica"
 
 
-def _decode_video(path: str) -> tuple[list[np.ndarray], float]:
+def _decode_video(path: str, trim_start_ms: int | None = None, trim_end_ms: int | None = None) -> tuple[list[np.ndarray], float]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
         raise ValueError(f"Could not open replica clip at {path}")
     fps = float(capture.get(cv2.CAP_PROP_FPS) or FPS)
+    source_frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
+    start_ms = trim_start_ms or 0
+    end_ms = trim_end_ms or source_duration_ms
+    if start_ms < 0 or end_ms <= start_ms or (source_duration_ms and end_ms > source_duration_ms + 1000):
+        capture.release()
+        raise ValueError("Replica clip chapter is outside the source video.")
+    end_ms = min(end_ms, source_duration_ms)
+    capture.set(cv2.CAP_PROP_POS_MSEC, start_ms)
+    max_source_frames = min(MAX_FRAMES_PER_CLIP, max(1, round(((end_ms - start_ms) / 1000) * fps)))
     frames: list[np.ndarray] = []
     try:
-        while len(frames) < MAX_FRAMES_PER_CLIP:
+        while len(frames) < max_source_frames:
             ok, frame = capture.read()
             if not ok:
                 break
@@ -99,7 +109,9 @@ def prepare_video_replica(engine, clip_paths: dict[str, str], manifest: dict) ->
             starts_neutral=raw.get("starts_neutral") is True,
             ends_neutral=raw.get("ends_neutral") is True,
         )
-        source_frames, _ = _decode_video(clip_paths[key])
+        trim_start_ms = raw.get("trim_start_ms") if isinstance(raw.get("trim_start_ms"), int) else None
+        trim_end_ms = raw.get("trim_end_ms") if isinstance(raw.get("trim_end_ms"), int) else None
+        source_frames, _ = _decode_video(clip_paths[key], trim_start_ms, trim_end_ms)
         temp_dir = tempfile.mkdtemp(prefix="replica-landmarks-")
         try:
             frame_paths: list[str] = []

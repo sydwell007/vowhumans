@@ -51,10 +51,13 @@ export async function GET(request: NextRequest) {
     if (!assignment) return NextResponse.json({ message: "No approved replica assignment" }, { status: 404 });
     const clips = await sql<{
       key: string; state: string; gesture_key: string | null; intensity: number;
-      object_key: string; starts_neutral: boolean; ends_neutral: boolean;
+      object_key: string; sha256: string; starts_neutral: boolean; ends_neutral: boolean;
+      trim_start_ms: number | null; trim_end_ms: number | null;
     }[]>`
       SELECT clip_key AS key, conversation_state AS state, gesture_key, intensity,
-        object_key, starts_neutral, ends_neutral
+        object_key, sha256, starts_neutral, ends_neutral,
+        CASE WHEN metadata->>'trim_start_ms' ~ '^[0-9]+$' THEN (metadata->>'trim_start_ms')::integer END AS trim_start_ms,
+        CASE WHEN metadata->>'trim_end_ms' ~ '^[0-9]+$' THEN (metadata->>'trim_end_ms')::integer END AS trim_end_ms
       FROM replica_motion_clips WHERE organisation_id=${organisationId}
         AND replica_version_id=${assignment.version_id} ORDER BY conversation_state, clip_key
     `;
@@ -64,7 +67,10 @@ export async function GET(request: NextRequest) {
     const signedClips = await Promise.all(clips.map(async (clip) => ({
       key: clip.key, state: clip.state, gesture_key: clip.gesture_key,
       intensity: clip.intensity, starts_neutral: clip.starts_neutral,
-      ends_neutral: clip.ends_neutral, url: await createPrivateReplicaDownload(clip.object_key),
+      ends_neutral: clip.ends_neutral, source_key: clip.sha256,
+      ...(clip.trim_start_ms !== null ? { trim_start_ms: clip.trim_start_ms } : {}),
+      ...(clip.trim_end_ms !== null ? { trim_end_ms: clip.trim_end_ms } : {}),
+      url: await createPrivateReplicaDownload(clip.object_key),
     })));
     return NextResponse.json({
       success: true,

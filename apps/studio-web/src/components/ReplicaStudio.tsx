@@ -19,7 +19,14 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusPill } from "./StatusPill";
-import { REPLICA_CAPTURE_STEPS, REQUIRED_CAPTURE_SEGMENTS, type ReplicaGesture, type ReplicaSegmentType } from "@/lib/replicas";
+import {
+  REPLICA_CAPTURE_STEPS,
+  REQUIRED_CAPTURE_SEGMENTS,
+  validateCompletePerformanceChapters,
+  type ReplicaGesture,
+  type ReplicaSegmentType,
+  type ReplicaVideoChapter,
+} from "@/lib/replicas";
 
 type ReplicaSummary = {
   id: string;
@@ -41,6 +48,7 @@ type Segment = {
   state: string;
   starts_neutral: boolean;
   ends_neutral: boolean;
+  metadata?: Record<string, unknown>;
 };
 type ReplicaDetail = {
   profile: ReplicaSummary & { identity_id: string };
@@ -177,7 +185,7 @@ export function ReplicaStudio() {
             )) : <div className="replica-empty"><Video size={27} /><strong>No replicas captured</strong><p>Register an authorised performer and start the guided capture protocol.</p><button className="primary-button" type="button" onClick={() => setCreating(true)}>Create Photoreal Replica</button></div>}
           </aside>
           <section className="panel replica-workspace">
-            {detail ? <ReplicaCaptureWorkflow detail={detail} storageConfigured={catalogue?.storage_configured ?? false} onRefresh={async () => { await refreshDetail(); await refreshCatalogue(); }} /> : <div className="replica-empty"><LockKeyhole size={28} /><strong>Select a replica</strong><p>Capture footage and biometric evidence are private and organisation-scoped.</p></div>}
+            {detail ? <ReplicaCaptureWorkflow key={detail.profile.id} detail={detail} storageConfigured={catalogue?.storage_configured ?? false} onRefresh={async () => { await refreshDetail(); await refreshCatalogue(); }} /> : <div className="replica-empty"><LockKeyhole size={28} /><strong>Select a replica</strong><p>Capture footage and biometric evidence are private and organisation-scoped.</p></div>}
           </section>
         </div>
       )}
@@ -225,9 +233,22 @@ function CreateReplicaForm({ identities, humans, onCancel, onCreated }: { identi
 
 function ReplicaCaptureWorkflow({ detail, storageConfigured, onRefresh }: { detail: ReplicaDetail; storageConfigured: boolean; onRefresh: () => Promise<void> }) {
   const [step, setStep] = useState(1);
+  const completeVideoMapped = detail.segments.some((segment) => segment.segment_type === "calibration" && segment.state === "uploaded" && segment.metadata?.source_mode === "complete_performance_source");
+  const [captureMethod, setCaptureMethod] = useState<"guided" | "complete-video">(completeVideoMapped ? "complete-video" : "guided");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestJob = detail.jobs[0];
+  const requiredEvidencePassed = ["lip_sync_visual_review", "livekit_latency"].every((code) => detail.quality_checks.find((check) => check.check_code === code)?.status === "passed");
+
+  function isStepComplete(stepNumber: number) {
+    if (stepNumber === 1) return true;
+    if (stepNumber >= 2 && stepNumber <= 8 && completeVideoMapped && detail.readiness.ready) return true;
+    if (stepNumber === 9) return detail.readiness.ready;
+    if (stepNumber === 10) return latestJob?.status === "completed";
+    if (stepNumber === 11) return requiredEvidencePassed;
+    if (stepNumber === 12) return detail.profile.status === "approved";
+    return false;
+  }
 
   function hasSegment(type: ReplicaSegmentType, gesture?: ReplicaGesture) {
     return detail.segments.some((segment) => segment.state === "uploaded" && segment.segment_type === type && (!gesture || segment.gesture_key === gesture));
@@ -266,11 +287,11 @@ function ReplicaCaptureWorkflow({ detail, storageConfigured, onRefresh }: { deta
     <div>
       <div className="replica-workspace-heading"><div><p className="eyebrow">12-step controlled capture</p><h2>{detail.profile.name}</h2><p>{detail.profile.identity_name} · {detail.profile.quality_mode} quality</p></div><StatusPill tone={toneForStatus(detail.profile.status)}>{detail.profile.status.replaceAll("_", " ")}</StatusPill></div>
       <div className="replica-stepper" aria-label="Replica capture progress">
-        {REPLICA_CAPTURE_STEPS.map((label, index) => <button type="button" className={step === index + 1 ? "active" : index + 1 < step ? "done" : ""} key={label} onClick={() => setStep(index + 1)}><span>{index + 1 < step ? <Check size={12} /> : index + 1}</span><small>{label}</small></button>)}
+        {REPLICA_CAPTURE_STEPS.map((label, index) => { const stepNumber = index + 1; const complete = isStepComplete(stepNumber); return <button type="button" className={step === stepNumber ? "active" : complete ? "done" : ""} key={label} onClick={() => setStep(stepNumber)} aria-current={step === stepNumber ? "step" : undefined}><span>{complete ? <Check size={12} /> : stepNumber}</span><small>{label}</small></button>; })}
       </div>
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {step === 1 && <WorkflowCard icon={ShieldCheck} title="Identity and consent verified" copy="The selected identity has active likeness and commercial-use consent. Revocation disables runtime assignments immediately." action="Continue to camera" onAction={() => setStep(2)} complete />}
-      {step === 2 && <WorkflowCard icon={Camera} title="Camera check" copy="Use a stable 1080p camera at eye level. Disable virtual backgrounds, beauty filters, auto-framing and portrait effects." action="Camera is ready" onAction={() => setStep(3)} />}
+      {step === 2 && <section className="replica-capture-method"><div className="replica-method-heading"><p className="eyebrow">Choose the capture route</p><h3>Record now or upload one complete performance</h3><p>Both routes preserve the same consent, quality, processing and human-approval gates.</p></div><div className="replica-method-tabs" role="tablist" aria-label="Replica capture method"><button type="button" role="tab" aria-selected={captureMethod === "guided"} className={captureMethod === "guided" ? "active" : ""} onClick={() => setCaptureMethod("guided")}><Camera size={19} /><span><strong>Guided camera capture</strong><small>Record each performance separately</small></span></button><button type="button" role="tab" aria-selected={captureMethod === "complete-video"} className={captureMethod === "complete-video" ? "active" : ""} onClick={() => setCaptureMethod("complete-video")}><UploadCloud size={19} /><span><strong>Upload complete video</strong><small>Map one authorised video into five chapters</small></span></button></div>{captureMethod === "guided" ? <WorkflowCard icon={Camera} title="Camera check" copy="Use a stable 1080p camera at eye level. Disable virtual backgrounds, beauty filters, auto-framing and portrait effects." action="Camera is ready" onAction={() => setStep(3)} /> : <CompletePerformanceUpload profileId={detail.profile.id} storageConfigured={storageConfigured} mapped={completeVideoMapped} onMapped={async () => { await onRefresh(); setStep(9); }} />}</section>}
       {step === 3 && <WorkflowCard icon={Sparkles} title="Lighting check" copy="Use soft, even front lighting. Avoid flicker, harsh side shadows, changing daylight and reflective eyewear glare." action="Lighting is ready" onAction={() => setStep(4)} />}
       {[4, 5, 6, 8].includes(step) && <div className="replica-capture-grid">{captureForStep[step]?.map((capture) => <CaptureCard key={`${capture.type}-${capture.gesture ?? ""}`} profileId={detail.profile.id} capture={capture} uploaded={hasSegment(capture.type, capture.gesture)} disabled={!storageConfigured} onUploaded={onRefresh} />)}</div>}
       {step === 7 && <WorkflowCard icon={Video} title="Expression coverage" copy="Optional in the first proof: capture restrained warmth, concern and reassurance. Do not exaggerate or generate expressions the performer did not authorise." action="Continue to gestures" onAction={() => setStep(8)} />}
@@ -281,6 +302,91 @@ function ReplicaCaptureWorkflow({ detail, storageConfigured, onRefresh }: { deta
       <div className="replica-workflow-footer"><button className="secondary-button" type="button" disabled={step === 1} onClick={() => setStep((current) => Math.max(1, current - 1))}><ArrowLeft size={15} />Back</button><span>Step {step} of 12</span><button className="secondary-button" type="button" disabled={step === 12} onClick={() => setStep((current) => Math.min(12, current + 1))}>Next<ArrowRight size={15} /></button></div>
     </div>
   );
+}
+
+function CompletePerformanceUpload({ profileId, storageConfigured, mapped, onMapped }: { profileId: string; storageConfigured: boolean; mapped: boolean; onMapped: () => Promise<void> }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [durationMs, setDurationMs] = useState(0);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [chapters, setChapters] = useState<ReplicaVideoChapter[]>([]);
+  const [authorised, setAuthorised] = useState(false);
+  const [neutral, setNeutral] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  function chooseFile(selected: File | null) {
+    setError(null);
+    if (!selected) return;
+    const extension = selected.name.toLowerCase().match(/\.(mp4|webm|mov)$/)?.[1];
+    if (!extension || selected.size < 1 || selected.size > 300 * 1024 * 1024) {
+      setError("Choose an MP4, WebM or MOV video no larger than 300 MB.");
+      return;
+    }
+    setFile(selected);
+    setDurationMs(0);
+    setChapters([]);
+    setPreviewUrl(URL.createObjectURL(selected));
+  }
+
+  function videoReady() {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+      setError("This browser could not read the selected video's duration.");
+      return;
+    }
+    const sourceDuration = Math.round(video.duration * 1000);
+    const chapterLength = Math.max(1500, Math.min(6000, Math.floor(sourceDuration / 10)));
+    const availableStart = Math.max(0, sourceDuration - chapterLength);
+    const suggestions = REQUIRED_CAPTURE_SEGMENTS.map((requirement, index) => {
+      const start = Math.round((availableStart * index) / Math.max(REQUIRED_CAPTURE_SEGMENTS.length - 1, 1));
+      return { type: requirement.type, ...(requirement.gesture ? { gesture: requirement.gesture } : {}), start_ms: start, end_ms: Math.min(sourceDuration, start + chapterLength) };
+    });
+    setDurationMs(sourceDuration);
+    setDimensions({ width: video.videoWidth, height: video.videoHeight });
+    setChapters(suggestions);
+  }
+
+  function updateChapter(index: number, field: "start_ms" | "end_ms", seconds: string) {
+    const milliseconds = Math.max(0, Math.round(Number(seconds) * 1000));
+    setChapters((current) => current.map((chapter, chapterIndex) => chapterIndex === index ? { ...chapter, [field]: milliseconds } : chapter));
+  }
+
+  function previewChapter(chapter: ReplicaVideoChapter) {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = chapter.start_ms / 1000;
+    void videoRef.current.play();
+  }
+
+  async function uploadAndMap() {
+    if (!file) return;
+    const validation = validateCompletePerformanceChapters(chapters, durationMs);
+    if (!validation.valid) { setError(validation.errors.join(" ")); return; }
+    if (!authorised || !neutral) { setError("Confirm authorisation and neutral boundaries before uploading."); return; }
+    setError(null);
+    setBusyLabel("Hashing private source…");
+    try {
+      const contentType = file.type.split(";")[0] || (file.name.toLowerCase().endsWith(".mov") ? "video/quicktime" : file.name.toLowerCase().endsWith(".webm") ? "video/webm" : "video/mp4");
+      const sha256 = await sha256Hex(file);
+      setBusyLabel("Creating secure upload…");
+      const intent = await api<{ segment_id: string; upload_url: string; required_headers: Record<string, string> }>(`/api/v1/replicas/${profileId}/upload-intents`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ segment_type: "calibration", content_type: contentType, file_name: file.name, byte_size: file.size, sha256 }) });
+      setBusyLabel("Uploading encrypted source…");
+      const uploadResponse = await fetch(intent.upload_url, { method: "PUT", headers: intent.required_headers, body: file });
+      if (!uploadResponse.ok) throw new Error("The private complete-video upload failed.");
+      setBusyLabel("Verifying upload integrity…");
+      await api(`/api/v1/replicas/${profileId}/segments/${intent.segment_id}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duration_ms: durationMs, width: dimensions.width, height: dimensions.height, starts_neutral: false, ends_neutral: false }) });
+      setBusyLabel("Mapping performance chapters…");
+      await api(`/api/v1/replicas/${profileId}/complete-video`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source_segment_id: intent.segment_id, source_duration_ms: durationMs, chapters: validation.chapters, authorised_capture_confirmed: authorised, neutral_boundaries_confirmed: neutral }) });
+      await onMapped();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not prepare this complete performance video.");
+    } finally { setBusyLabel(null); }
+  }
+
+  return <div className="replica-complete-upload" role="tabpanel"><div className="replica-upload-intro"><span><Video size={24} /></span><div><StatusPill tone={mapped ? "good" : storageConfigured ? "muted" : "warn"}>{mapped ? "Mapped" : storageConfigured ? "Private upload" : "Storage required"}</StatusPill><h3>{mapped ? "Complete performance video mapped" : "Upload an authorised protocol video"}</h3><p>The source stays in private object storage. Define exactly where each required performance occurs; suggested ranges are only starting points and must be reviewed.</p></div></div>{previewUrl ? <video className="replica-source-preview" ref={videoRef} src={previewUrl} controls playsInline onLoadedMetadata={videoReady} /> : <label className="replica-file-drop"><UploadCloud size={28} /><strong>Select complete performance video</strong><span>MP4, WebM or MOV · up to 300 MB · 1080p/25–30 fps recommended</span><input type="file" accept="video/mp4,video/webm,video/quicktime,.mov" disabled={!storageConfigured || Boolean(busyLabel)} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} /></label>}{file && <div className="replica-source-meta"><span><strong>{file.name}</strong>{(file.size / 1024 / 1024).toFixed(1)} MB</span><span><strong>{durationMs ? `${(durationMs / 1000).toFixed(1)} seconds` : "Reading video…"}</strong>{dimensions.width ? `${dimensions.width} × ${dimensions.height}` : "Metadata pending"}</span><label className="secondary-button">Choose another<input type="file" accept="video/mp4,video/webm,video/quicktime,.mov" disabled={Boolean(busyLabel)} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} /></label></div>}{chapters.length > 0 && <div className="replica-chapter-editor"><div><p className="eyebrow">Five required chapters</p><h3>Mark the real performance ranges</h3><p>Each 1.5–30 second range must be unique, non-overlapping, and return to neutral.</p></div><div className="replica-chapter-list">{chapters.map((chapter, index) => { const requirement = REQUIRED_CAPTURE_SEGMENTS[index]; return <div className="replica-chapter-row" key={`${chapter.type}-${chapter.gesture ?? ""}`}><span>{index + 1}</span><div><strong>{requirement.label}</strong><small>{requirement.instruction}</small></div><label>Start<input type="number" min="0" step="0.1" value={(chapter.start_ms / 1000).toFixed(1)} onChange={(event) => updateChapter(index, "start_ms", event.target.value)} /></label><label>End<input type="number" min="0" step="0.1" value={(chapter.end_ms / 1000).toFixed(1)} onChange={(event) => updateChapter(index, "end_ms", event.target.value)} /></label><button className="plain-button" type="button" onClick={() => previewChapter(chapter)}>Preview</button></div>; })}</div><div className="replica-attestations"><label><input type="checkbox" checked={authorised} onChange={(event) => setAuthorised(event.target.checked)} /><span><strong>Authorised private capture</strong>I confirm the named performer consented to this exact source video and its replica use.</span></label><label><input type="checkbox" checked={neutral} onChange={(event) => setNeutral(event.target.checked)} /><span><strong>Neutral boundaries reviewed</strong>I reviewed every range and confirmed a neutral start and finish with one visible performer.</span></label></div></div>}{error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}<div className="editor-actions"><button className="primary-button" type="button" disabled={!file || !durationMs || !storageConfigured || Boolean(busyLabel) || mapped} onClick={uploadAndMap}>{busyLabel ? <RefreshCw className="spin" size={17} /> : mapped ? <CircleCheck size={17} /> : <UploadCloud size={17} />}{busyLabel ?? (mapped ? "Video mapped" : "Upload, verify & map chapters")}</button><small>Uploading supplies capture evidence only. Automated quality, processing, preview and approval remain mandatory.</small></div></div>;
 }
 
 function QualityEvidenceReview({ profileId, checks, processingReady, onRefresh }: { profileId: string; checks: ReplicaDetail["quality_checks"]; processingReady: boolean; onRefresh: () => Promise<void> }) {

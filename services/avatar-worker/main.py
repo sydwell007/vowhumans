@@ -132,15 +132,21 @@ async def prepare_replica(request: Request, x_internal_key: str | None = Header(
     except ValueError as exc:
         raise HTTPException(422, "Replica manifest is not valid JSON.") from exc
     clip_paths: dict[str, str] = {}
+    source_paths: dict[str, str] = {}
     try:
         for raw in manifest.get("clips", []):
             if not isinstance(raw, dict) or not isinstance(raw.get("key"), str):
                 raise HTTPException(422, "Every manifest clip needs a key.")
             key = raw["key"]
-            upload = form.get(f"clip__{key}")
-            if upload is None or not hasattr(upload, "read"):
-                raise HTTPException(422, f"Missing multipart clip 'clip__{key}'.")
-            clip_paths[key] = await _save_upload(upload, ".mp4")
+            source_key = raw.get("source_key") if isinstance(raw.get("source_key"), str) else key
+            source_path = source_paths.get(source_key)
+            if source_path is None:
+                upload = form.get(f"source__{source_key}") or form.get(f"clip__{key}")
+                if upload is None or not hasattr(upload, "read"):
+                    raise HTTPException(422, f"Missing multipart source 'source__{source_key}'.")
+                source_path = await _save_upload(upload, ".mp4")
+                source_paths[source_key] = source_path
+            clip_paths[key] = source_path
         from video_replica_engine import prepare_video_replica
         replica = await run_in_threadpool(prepare_video_replica, _engine, clip_paths, manifest)
     except HTTPException:
@@ -148,7 +154,7 @@ async def prepare_replica(request: Request, x_internal_key: str | None = Header(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(422, f"Could not prepare captured replica: {exc}") from exc
     finally:
-        for path in clip_paths.values():
+        for path in set(source_paths.values()) | set(clip_paths.values()):
             Path(path).unlink(missing_ok=True)
     replica_id = str(uuid.uuid4())
     _replicas[replica_id] = replica

@@ -15,7 +15,17 @@ Date: 2026-08-29
 - Dedicated replica processor Docker service.
 - Twelve-step Replica Studio and three appearance technology choices inside the existing eight-step Digital Human journey.
 - Internal consent-gated runtime manifest with short-lived signed clip URLs.
+- Complete-performance upload route: one authorised private source video can be mapped into the five required motion chapters without duplicating the raw biometric object.
+- Chapter-aware processor and GPU renderer: neutral idle, listening, speaking, acknowledgement and explanation ranges are validated and decoded from their declared time boundaries.
 - Safe-default feature flags and Render service definition.
+
+## Complete performance video rules
+
+- The source must remain private and must belong to the approved performer identity; a video in `public/` is not acceptable replica training media.
+- Exactly five non-overlapping chapters of 1.5–30 seconds are required, each with a reviewer-confirmed neutral start and finish.
+- Upload and chapter mapping can complete capture steps 2–8, but cannot complete the automated quality gate, processing, GPU preview, LiveKit evidence or accountable approval steps.
+- The processor remains authoritative for resolution, frame rate, single-face continuity and readable chapter duration. The acceptance floor is 720p and 24 fps, with 1080p at 25–30 fps recommended.
+- The participant and worker deduplicate a shared source by SHA-256 during preparation, then the GPU decoder reads only the chapter range selected by the motion director.
 
 ## Deliberately not claimed
 

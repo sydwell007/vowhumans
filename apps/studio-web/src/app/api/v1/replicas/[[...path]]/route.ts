@@ -11,8 +11,10 @@ import {
 } from "@/lib/objectStorage";
 import {
   isReplicaSegmentType,
+  REQUIRED_CAPTURE_SEGMENTS,
   replicaCaptureReadiness,
   safeCaptureExtension,
+  validateCompletePerformanceChapters,
   type ReplicaGesture,
   type ReplicaQualityMode,
 } from "@/lib/replicas";
@@ -105,7 +107,43 @@ type ProcessorClip = {
   sha256: string;
   starts_neutral: boolean;
   ends_neutral: boolean;
+  trim_start_ms?: number;
+  trim_end_ms?: number;
 };
+
+type StoredCaptureSegment = ProcessorClip & {
+  state: string;
+  metadata: unknown;
+  created_at: Date;
+};
+
+function processingClip(segment: StoredCaptureSegment): ProcessorClip {
+  const metadata = segment.metadata && typeof segment.metadata === "object" && !Array.isArray(segment.metadata)
+    ? segment.metadata as Record<string, unknown>
+    : {};
+  const trimStart = Number(metadata.trim_start_ms);
+  const trimEnd = Number(metadata.trim_end_ms);
+  return {
+    segment_id: segment.segment_id,
+    segment_type: segment.segment_type,
+    gesture_key: segment.gesture_key,
+    object_key: segment.object_key,
+    sha256: segment.sha256,
+    starts_neutral: segment.starts_neutral,
+    ends_neutral: segment.ends_neutral,
+    ...(Number.isSafeInteger(trimStart) && Number.isSafeInteger(trimEnd) && trimEnd > trimStart
+      ? { trim_start_ms: trimStart, trim_end_ms: trimEnd }
+      : {}),
+  };
+}
+
+function latestRequiredProcessingClips(segments: StoredCaptureSegment[]) {
+  return REQUIRED_CAPTURE_SEGMENTS.map((requirement) => segments.find((segment) =>
+    segment.state === "uploaded"
+    && segment.segment_type === requirement.type
+    && (!requirement.gesture || segment.gesture_key === requirement.gesture),
+  )).filter((segment): segment is StoredCaptureSegment => Boolean(segment)).map(processingClip);
+}
 
 type ProcessorResult = {
   manifest: Record<string, unknown> & { clips?: Array<Record<string, unknown>> };
@@ -146,11 +184,11 @@ async function dispatchReplicaProcessing(input: { jobId: string; organisationId:
         `;
       }
       for (const rawClip of result.manifest.clips ?? []) {
-        const clip = rawClip as { segment_id?: string; key?: string; state?: string; gesture_key?: string | null; object_key?: string; sha256?: string; duration_ms?: number; fps?: number; frame_count?: number; starts_neutral?: boolean; ends_neutral?: boolean };
+        const clip = rawClip as { segment_id?: string; key?: string; state?: string; gesture_key?: string | null; object_key?: string; sha256?: string; duration_ms?: number; fps?: number; frame_count?: number; starts_neutral?: boolean; ends_neutral?: boolean; trim_start_ms?: number; trim_end_ms?: number };
         if (!clip.segment_id || !clip.key || !clip.state || !clip.object_key || !clip.sha256 || !clip.duration_ms || !clip.fps || !clip.frame_count) continue;
         await transaction`
-          INSERT INTO replica_motion_clips (organisation_id, replica_version_id, source_segment_id, clip_key, conversation_state, gesture_key, object_key, sha256, duration_ms, fps, frame_count, starts_neutral, ends_neutral)
-          VALUES (${input.organisationId}, ${versionId}, ${clip.segment_id}, ${clip.key}, ${clip.state}, ${clip.gesture_key ?? null}, ${clip.object_key}, ${clip.sha256}, ${clip.duration_ms}, ${clip.fps}, ${clip.frame_count}, ${clip.starts_neutral === true}, ${clip.ends_neutral === true})
+          INSERT INTO replica_motion_clips (organisation_id, replica_version_id, source_segment_id, clip_key, conversation_state, gesture_key, object_key, sha256, duration_ms, fps, frame_count, starts_neutral, ends_neutral, metadata)
+          VALUES (${input.organisationId}, ${versionId}, ${clip.segment_id}, ${clip.key}, ${clip.state}, ${clip.gesture_key ?? null}, ${clip.object_key}, ${clip.sha256}, ${clip.duration_ms}, ${clip.fps}, ${clip.frame_count}, ${clip.starts_neutral === true}, ${clip.ends_neutral === true}, ${transaction.json({ trim_start_ms: clip.trim_start_ms ?? null, trim_end_ms: clip.trim_end_ms ?? null })})
         `;
       }
       await transaction`UPDATE replica_processing_jobs SET status='completed', progress=100, output_manifest_object_key=${manifestObjectKey}, safe_metrics=${transaction.json({ check_count: result.checks.length, failed })}, completed_at=now() WHERE id=${input.jobId} AND organisation_id=${input.organisationId}`;
@@ -203,7 +241,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     `;
     const segments = profile.capture_session_id ? await sql`
       SELECT id, segment_type, gesture_key, expression_key, media_type, byte_size,
-        duration_ms, width, height, fps, starts_neutral, ends_neutral, state, created_at
+        duration_ms, width, height, fps, starts_neutral, ends_neutral, state, metadata, created_at
       FROM replica_capture_segments
       WHERE organisation_id=${user.organisationId} AND capture_session_id=${profile.capture_session_id}
       ORDER BY created_at
@@ -322,17 +360,89 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return ok({ id: segmentId, state: "uploaded", integrity_verified: true });
     }
 
+    if (action === "complete-video" && path.length === 2) {
+      if (!profile.capture_session_id) return problem("No active capture session exists.", "CAPTURE_SESSION_REQUIRED", 409);
+      const consent = await identityConsentReady(user.organisationId, profile.identity_id);
+      if (!consent.ready) return problem("Consent is no longer valid; video mapping is blocked.", "CONSENT_REQUIRED", 409, { missing: consent.missing });
+      const sourceSegmentId = typeof body.source_segment_id === "string" ? body.source_segment_id : "";
+      const sourceDurationMs = Number(body.source_duration_ms);
+      if (body.neutral_boundaries_confirmed !== true || body.authorised_capture_confirmed !== true) {
+        return problem("Confirm performer authorisation and neutral chapter boundaries before mapping the video.", "ATTESTATION_REQUIRED", 409);
+      }
+      const validation = validateCompletePerformanceChapters(body.chapters, sourceDurationMs);
+      if (!validation.valid) return problem("The complete video needs five valid, non-overlapping performance chapters.", "CHAPTERS_INVALID", 422, { errors: validation.errors });
+      const sources = await sql<{
+        id: string; object_key: string; sha256: string; media_type: string; byte_size: number;
+        width: number | null; height: number | null; fps: number | null;
+      }[]>`
+        SELECT rseg.id, rseg.object_key, rseg.sha256, rseg.media_type, rseg.byte_size,
+          rseg.width, rseg.height, rseg.fps
+        FROM replica_capture_segments rseg JOIN replica_capture_sessions rcs ON rcs.id=rseg.capture_session_id
+        WHERE rseg.id=${sourceSegmentId} AND rseg.organisation_id=${user.organisationId}
+          AND rcs.replica_profile_id=${profileId} AND rseg.capture_session_id=${profile.capture_session_id}
+          AND rseg.segment_type='calibration' AND rseg.state='uploaded' LIMIT 1
+      `;
+      const source = sources[0];
+      if (!source) return problem("The complete source video has not finished its private upload and integrity check.", "SOURCE_VIDEO_REQUIRED", 409);
+      await sql.begin(async (transaction) => {
+        await transaction`
+          UPDATE replica_capture_segments SET state='deleted', deleted_at=now()
+          WHERE organisation_id=${user.organisationId} AND capture_session_id=${profile.capture_session_id}
+            AND state <> 'deleted' AND metadata->>'source_mode'='complete_performance'
+        `;
+        await transaction`
+          UPDATE replica_capture_segments SET
+            duration_ms=${sourceDurationMs},
+            metadata=${transaction.json({
+              source_mode: "complete_performance_source",
+              authorised_capture_confirmed: true,
+              neutral_boundaries_confirmed: true,
+              chapter_count: validation.chapters.length,
+            })}
+          WHERE id=${sourceSegmentId} AND organisation_id=${user.organisationId}
+        `;
+        for (const chapter of validation.chapters) {
+          const segmentId = randomUUID();
+          await transaction`
+            INSERT INTO replica_capture_segments (
+              id, organisation_id, capture_session_id, segment_type, gesture_key,
+              object_key, sha256, media_type, byte_size, duration_ms, width, height, fps,
+              starts_neutral, ends_neutral, state, metadata
+            ) VALUES (
+              ${segmentId}, ${user.organisationId}, ${profile.capture_session_id}, ${chapter.type}, ${chapter.gesture ?? null},
+              ${source.object_key}, ${source.sha256}, ${source.media_type}, ${source.byte_size}, ${chapter.end_ms - chapter.start_ms},
+              ${source.width}, ${source.height}, ${source.fps}, true, true, 'uploaded',
+              ${transaction.json({
+                source_mode: "complete_performance",
+                source_segment_id: sourceSegmentId,
+                trim_start_ms: chapter.start_ms,
+                trim_end_ms: chapter.end_ms,
+              })}
+            )
+          `;
+        }
+        await transaction`
+          UPDATE replica_capture_sessions SET status='uploaded', capture_settings=capture_settings || ${transaction.json({ source_mode: "complete_performance", source_segment_id: sourceSegmentId })}
+          WHERE id=${profile.capture_session_id} AND organisation_id=${user.organisationId}
+        `;
+      });
+      return ok({ source_segment_id: sourceSegmentId, mapped_chapters: validation.chapters.length, next_step: 9 }, 201);
+    }
+
     if (action === "submit" && path.length === 2) {
       const consent = await identityConsentReady(user.organisationId, profile.identity_id);
       if (!consent.ready) return problem("Consent is no longer valid; processing is blocked.", "CONSENT_REQUIRED", 409, { missing: consent.missing });
-      const segments = await sql<(ProcessorClip & { state: string })[]>`
+      const segments = await sql<StoredCaptureSegment[]>`
         SELECT rseg.id AS segment_id, rseg.segment_type, rseg.gesture_key, rseg.object_key,
-          rseg.sha256, rseg.state, rseg.starts_neutral, rseg.ends_neutral
+          rseg.sha256, rseg.state, rseg.starts_neutral, rseg.ends_neutral, rseg.metadata, rseg.created_at
         FROM replica_capture_segments rseg JOIN replica_capture_sessions rcs ON rcs.id=rseg.capture_session_id
         WHERE rseg.organisation_id=${user.organisationId} AND rcs.replica_profile_id=${profileId}
+        ORDER BY rseg.created_at DESC
       `;
       const readiness = replicaCaptureReadiness(segments);
       if (!readiness.ready) return problem("Required performer captures are missing or do not return to neutral.", "CAPTURE_INCOMPLETE", 409, readiness);
+      const clips = latestRequiredProcessingClips(segments);
+      if (clips.length !== REQUIRED_CAPTURE_SEGMENTS.length) return problem("Exactly five validated performance chapters are required.", "CAPTURE_INCOMPLETE", 409);
       const jobId = randomUUID();
       await sql.begin(async (transaction) => {
         await transaction`UPDATE replica_capture_sessions SET status='accepted', completed_at=now() WHERE id=${profile.capture_session_id} AND organisation_id=${user.organisationId}`;
@@ -343,7 +453,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         `;
       });
       const providerExecution = process.env.ENABLE_VIDEO_REPLICA === "true" && Boolean(process.env.REPLICA_PROCESSOR_URL && process.env.VOWHUMANS_INTERNAL_KEY);
-      if (providerExecution) after(() => dispatchReplicaProcessing({ jobId, organisationId: user.organisationId, profileId, clips: segments }));
+      if (providerExecution) after(() => dispatchReplicaProcessing({ jobId, organisationId: user.organisationId, profileId, clips }));
       return ok({ job_id: jobId, status: "queued", provider_execution: providerExecution }, 202);
     }
 

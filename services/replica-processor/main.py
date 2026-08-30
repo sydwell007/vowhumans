@@ -33,6 +33,8 @@ class ClipInput(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     starts_neutral: bool = False
     ends_neutral: bool = False
+    trim_start_ms: int | None = Field(default=None, ge=0)
+    trim_end_ms: int | None = Field(default=None, gt=0)
 
 
 class ProcessRequest(BaseModel):
@@ -69,17 +71,30 @@ def _download(url: str, expected_sha256: str) -> str:
         raise
 
 
-def _analyse(path: str) -> dict[str, object]:
+def _analyse(path: str, trim_start_ms: int | None = None, trim_end_ms: int | None = None) -> dict[str, object]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
         raise ValueError("CAPTURE_UNREADABLE")
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
-    frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    source_frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-    duration_ms = int((frame_count / fps) * 1000) if fps > 0 else 0
+    source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
+    start_ms = trim_start_ms or 0
+    end_ms = trim_end_ms or source_duration_ms
+    if fps <= 0 or start_ms < 0 or end_ms <= start_ms or end_ms > source_duration_ms + 1000:
+        capture.release()
+        raise ValueError("CAPTURE_CHAPTER_RANGE_INVALID")
+    end_ms = min(end_ms, source_duration_ms)
+    start_frame = max(0, round((start_ms / 1000) * fps))
+    end_frame = min(source_frame_count, round((end_ms / 1000) * fps))
+    frame_count = end_frame - start_frame
+    if frame_count < 1:
+        capture.release()
+        raise ValueError("CAPTURE_CHAPTER_EMPTY")
+    duration_ms = int((frame_count / fps) * 1000)
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    sample_indexes = {int(i * max(frame_count - 1, 0) / max(FACE_SAMPLE_COUNT - 1, 1)) for i in range(FACE_SAMPLE_COUNT)}
+    sample_indexes = {start_frame + int(i * max(frame_count - 1, 0) / max(FACE_SAMPLE_COUNT - 1, 1)) for i in range(FACE_SAMPLE_COUNT)}
     detected = 0
     sampled = 0
     luminance: list[float] = []
@@ -101,6 +116,7 @@ def _analyse(path: str) -> dict[str, object]:
         "fps": round(fps, 3), "frame_count": frame_count, "width": width, "height": height,
         "duration_ms": duration_ms, "face_detection_ratio": round(detected / sampled, 4) if sampled else 0,
         "mean_luminance": round(sum(luminance) / len(luminance), 2) if luminance else 0,
+        "trim_start_ms": start_ms, "trim_end_ms": end_ms,
     }
 
 
@@ -133,12 +149,15 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
     _require_key(x_internal_key)
     started = time.perf_counter()
     analysed: list[dict[str, object]] = []
-    paths: list[str] = []
+    downloaded: dict[tuple[str, str], str] = {}
     try:
         for clip in payload.clips:
-            path = _download(str(clip.object_url), clip.sha256)
-            paths.append(path)
-            metrics = _analyse(path)
+            source_key = (clip.object_key, clip.sha256)
+            path = downloaded.get(source_key)
+            if path is None:
+                path = _download(str(clip.object_url), clip.sha256)
+                downloaded[source_key] = path
+            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms)
             analysed.append({
                 "segment_id": clip.segment_id,
                 "key": f"{clip.segment_type}-{clip.gesture_key or clip.segment_id[:8]}",
@@ -153,7 +172,7 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:
-        for path in paths:
+        for path in downloaded.values():
             Path(path).unlink(missing_ok=True)
     checks = quality_checks(analysed)
     manifest = {
