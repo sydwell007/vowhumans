@@ -14,9 +14,10 @@ All 11 official South African languages are represented in the registry, selecta
 |---|---|---|---|---|---|
 | English (en-ZA) | beta | production | production | production | beta |
 | Afrikaans (af-ZA) | experimental | experimental | experimental | experimental | experimental |
-| isiZulu, isiXhosa, Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | unsupported | unsupported | unsupported | unsupported |
+| isiZulu, isiXhosa | unsupported | experimental | unsupported | experimental | unsupported |
+| Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | unsupported | unsupported | unsupported | unsupported |
 
-- **Machine-tested only**: none. The seed statuses reflect OpenAI's documented language coverage, not any test run performed here (Whisper documents Afrikaans; it does not document the other 9 in its evaluated set).
+- **Observed preview capability**: isiZulu and isiXhosa reasoning/realtime speech were reported working in a live Digital Human conversation on 31 August 2026. They are therefore selectable as `experimental`, not production; formal repeatable native-speaker QA remains outstanding.
 - **Requiring native-speaker testing before any status can move**: all 11 languages, all 5 capabilities — see `docs/SOUTH_AFRICAN_LANGUAGE_QA.md`, currently 0 completed reviews.
 - **Production-ready**: English only (reasoning, TTS, realtime). English STT and translation are real code paths but seeded `beta` since they're new this pass and untested against real audio/text in this environment.
 - **Beta**: none besides the English exceptions above.
@@ -49,6 +50,7 @@ Not separately estimated in this pass — no new provider account exists to pric
 
 - Whisper's transcription quality for the 9 unsupported languages is untested here and, per its own documented training coverage, likely poor — this is exactly why they're seeded `unsupported` rather than `experimental`.
 - OpenAI's TTS/Realtime voices' pronunciation quality for any non-English language has not been human-verified in this pass.
+- A Digital Human now persists `default_language_code`. Studio tests and embedded applications start in that language, and the realtime prompt keeps it active until an explicit UI or verbal language-change request. A verbal change persists in the model's live conversation context; a Studio UI change is additionally written to session context so reconnection preserves it.
 - Cross-lingual knowledge retrieval (an isiZulu query against English source documents) is architecturally supported by the existing embedding pipeline but its real-world relevance quality has not been tested — flagged as Phase 2 work, not asserted here.
 - The mid-call language hot-swap (`AgentSession.update_agent()` + `RealtimeModel.update_options(voice=...)`) was verified against the actually-installed `livekit-agents~=1.6`/`livekit-plugins-openai~=1.6` package source in a throwaway venv, and the browser-side data-channel signal (`vhm_language_switch_request`) plus server-side resolution and `session_events` logging are real — but it has not been exercised against a real live OpenAI Realtime call in this environment (no test call was placed).
 - No turn-by-turn transcript persistence pipeline exists anywhere in this repository yet (confirmed in the original audit) — the new `transcripts.detected_language`/`requested_language`/`translated_language`/`translated_encrypted_text` columns are additive schema only, ready for whenever that pipeline is built.

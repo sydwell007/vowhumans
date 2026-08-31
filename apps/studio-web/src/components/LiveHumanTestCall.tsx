@@ -15,7 +15,7 @@ import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 // configured it on. Every call this starts is a real session: it shows up
 // in the Live Sessions monitor exactly like an embedded-application call
 // would, because it goes through the identical /api/v1/live-sessions flow.
-export type LiveTestHuman = { id: string; name: string; faceAssetId: string | null };
+export type LiveTestHuman = { id: string; name: string; faceAssetId: string | null; defaultLanguageCode: string };
 
 type CallStage = "idle" | "starting" | "live" | "ended";
 
@@ -27,7 +27,7 @@ function formatCallDuration(totalSeconds: number): string {
 
 export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: LiveTestHuman; ready: boolean; notReadyReason?: string }) {
   const [callStage, setCallStage] = useState<CallStage>("idle");
-  const [selectedLanguage, setSelectedLanguage] = useState("en-ZA");
+  const [selectedLanguage, setSelectedLanguage] = useState(human.defaultLanguageCode || "en-ZA");
   const [switchingLanguage, setSwitchingLanguage] = useState(false);
   const [languageSwitchNote, setLanguageSwitchNote] = useState<string | null>(null);
   const liveRoomRef = useRef<Room | null>(null);
@@ -210,7 +210,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
           </div>
           <div className="live-call-controls">
             <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
-            <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="enabled-only" disabled={switchingLanguage} />
+            <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage} />
             <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
           </div>
           {languageSwitchNote && <p className="panel-note">{languageSwitchNote}</p>}
@@ -228,14 +228,14 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
           <PanelHeading name={human.name} />
           {ready ? (
             <>
-              <label className="pre-call-language">Language for this call
-                <LanguageSelect value={selectedLanguage} onChange={setSelectedLanguage} capability="realtime" scope="enabled-only" showStatusBadge includeNone="Auto-detect language" />
+              <label className="pre-call-language">Conversation language
+                <LanguageSelect value={selectedLanguage} onChange={setSelectedLanguage} capability="realtime" scope="usable-only" showStatusBadge />
               </label>
               <button className="primary-button" type="button" disabled={callStage === "starting"} onClick={startTestCall}>
                 {callStage === "starting" ? <RefreshCw size={17} className="spin" /> : <Mic size={17} />}
                 {callStage === "starting" ? "Connecting…" : `Start live test call with ${human.name}`}
               </button>
-              <p className="panel-note">Starts a real disclosed LiveKit call, scoped to your organisation, using {human.name}&rsquo;s actual published Persona, voice and knowledge — the same experience it will have once embedded in an application.</p>
+              <p className="panel-note">Starts in {selectedLanguage} and keeps that language until the user explicitly asks to switch. The call uses {human.name}&rsquo;s published Persona, voice and knowledge.</p>
             </>
           ) : (
             <p className="panel-note">{notReadyReason ?? "Publish this VowHuman's Persona before running a live test call."}</p>

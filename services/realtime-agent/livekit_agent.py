@@ -33,6 +33,20 @@ FALLBACK_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
 AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
 AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 
+LANGUAGE_NAMES = {
+    "en-ZA": "English (South Africa)",
+    "zu-ZA": "isiZulu",
+    "xh-ZA": "isiXhosa",
+    "af-ZA": "Afrikaans",
+    "nso-ZA": "Sepedi",
+    "tn-ZA": "Setswana",
+    "st-ZA": "Sesotho",
+    "ts-ZA": "Xitsonga",
+    "ss-ZA": "siSwati",
+    "ve-ZA": "Tshivenda",
+    "nr-ZA": "isiNdebele",
+}
+
 
 class VowHumansAgent(Agent):
     def __init__(self, instructions: str, tools: list | None = None):
@@ -159,12 +173,22 @@ def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_
     persona = persona_data.get("persona") if persona_data else None
     if not persona:
         return None
+    configured_language = str(persona["language"])
+    language_name = LANGUAGE_NAMES.get(configured_language, configured_language)
     instructions = (
         f"{persona['system_instructions']}\n\n"
         f"Conversation style: {persona['conversation_style']}\n"
-        f"Respond in {persona['language']}. Keep responses under {persona['max_response_words']} words."
+        f"ACTIVE CONVERSATION LANGUAGE: {language_name} ({configured_language}).\n"
+        f"Respond in {language_name} for every substantive spoken turn, even when the user uses another language. "
+        "Do not drift back to English, mirror a different input language, or code-switch merely because the user used a foreign word, name, quotation, or short phrase. "
+        "Change the active language only when the user explicitly asks to switch, change, or continue in another language. "
+        "When an explicit language-change request occurs, acknowledge it briefly in the new language and then keep using that new language for every later turn until another explicit request changes it. "
+        f"Keep responses under {persona['max_response_words']} words."
     )
-    opening_instruction = f"Disclose that you are AI, then deliver this opening message: {persona['opening_message']}"
+    opening_instruction = (
+        f"In {language_name}, disclose that you are AI and deliver the meaning of this approved opening message naturally: {persona['opening_message']}. "
+        f"Translate it before speaking when its source wording is not already in {language_name}; do not read the English source wording aloud."
+    )
     voice_info = persona_data.get("voice")
     voice = voice_info["provider_voice_id"] if voice_info and voice_info.get("provider_voice_id") else FALLBACK_VOICE
     knowledge_base_ids = persona.get("knowledge_base_ids") or []

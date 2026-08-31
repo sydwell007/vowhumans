@@ -75,12 +75,13 @@ export async function POST(request: NextRequest) {
 
   const [pairing] = await sql<{
     organisation_id: string; application_id: string; digital_human_id: string; persona_version_id: string;
-    application_settings: unknown; face_identity_id: string | null; voice_identity_id: string | null;
+    application_settings: unknown; face_identity_id: string | null; voice_identity_id: string | null; default_language_code: string;
   }[]>`
     SELECT dha.organisation_id, dha.application_id, dha.digital_human_id, dha.persona_version_id, a.settings AS application_settings,
-      fa.identity_id AS face_identity_id, v.identity_id AS voice_identity_id
+      fa.identity_id AS face_identity_id, v.identity_id AS voice_identity_id, dh.default_language_code
     FROM digital_human_applications dha
     JOIN applications a ON a.id = dha.application_id AND a.organisation_id = dha.organisation_id
+    JOIN digital_humans dh ON dh.id = dha.digital_human_id AND dh.organisation_id = dha.organisation_id
     LEFT JOIN human_face_assignments hfa ON hfa.organisation_id = dha.organisation_id AND hfa.human_slug = dha.digital_human_id::text
     LEFT JOIN face_assets fa ON fa.id = hfa.face_asset_id
     LEFT JOIN human_voice_assignments hva ON hva.organisation_id = dha.organisation_id AND hva.human_slug = dha.digital_human_id::text
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
 
   const [session] = await sql<{ id: string }[]>`
     INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_external_ref_hash, transport_provider, avatar_mode, context)
-    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, ...(lessonContext ? { lesson: lessonContext } : {}) })})
+    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: pairing.default_language_code, ...(lessonContext ? { lesson: lessonContext } : {}) })})
     RETURNING id
   `;
 

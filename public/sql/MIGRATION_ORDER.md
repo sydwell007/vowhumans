@@ -11,4 +11,6 @@
 
 8. `008_retire_applications.sql` — disables and archives the duplicate GoalVow Academies entry and discontinued VowTools application while preserving history
 
+9. `009_digital_human_default_language.sql` — adds the persistent default conversation language used by newly started Digital Human sessions
+
 Do not import the PostgreSQL migrations into Afrihost MySQL. Do not expose this folder through a public web route; the PHP `.htaccess` blocks SQL/config artefacts but uploads should remain outside the API document root when possible.

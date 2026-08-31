@@ -75,7 +75,7 @@ export function LanguageSelect({
 }: {
   value: string;
   onChange: (code: string) => void;
-  scope?: "any" | "enabled-only";
+  scope?: "any" | "enabled-only" | "usable-only";
   capability?: string;
   showStatusBadge?: boolean;
   includeNone?: string;
@@ -93,7 +93,11 @@ export function LanguageSelect({
     };
   }, []);
 
-  const options = scope === "enabled-only" ? languages.filter((l) => l.enabled) : languages;
+  const options = scope === "enabled-only"
+    ? languages.filter((l) => l.enabled)
+    : scope === "usable-only" && capability
+      ? languages.filter((l) => ["production", "beta", "experimental"].includes(bestStatusFor(l.capabilities, capability)))
+      : languages;
 
   return (
     <select className={className} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>

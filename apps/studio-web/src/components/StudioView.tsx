@@ -200,7 +200,7 @@ function Dashboard() {
   );
 }
 
-type DigitalHumanSummary = { id: string; name: string; role: string; disclosure: string; state: string; created_at: string; updated_at: string; face_asset_id: string | null };
+type DigitalHumanSummary = { id: string; name: string; role: string; disclosure: string; default_language_code: string; state: string; created_at: string; updated_at: string; face_asset_id: string | null };
 type DigitalHumanProfile = {
   human: DigitalHumanSummary;
   face: { id: string; media_type: string; detector_provider: string | null; preprocessing_state: string; state: string } | null;
@@ -402,7 +402,7 @@ function DigitalHumans() {
               {detail.languages.length > 0 && (
                 <div className="wizard-subsection">
                   <PanelTitle title="Languages" eyebrow="Real status — never shown as production without passing the quality gate" />
-                  <DigitalHumanLanguageRow key={detail.human.id} humanId={detail.human.id} languages={detail.languages} onChanged={() => loadDetail(detail.human.id)} />
+                  <DigitalHumanLanguageRow key={detail.human.id} humanId={detail.human.id} defaultLanguageCode={detail.human.default_language_code} languages={detail.languages} onChanged={() => loadDetail(detail.human.id)} />
                 </div>
               )}
               <div className="wizard-subsection">
@@ -443,7 +443,8 @@ function DigitalHumans() {
       </section>
       {!detailLoading && detail && detail.persona && (
         <LiveHumanTestCall
-          human={{ id: detail.human.id, name: detail.human.name, faceAssetId: detail.face?.id ?? null }}
+          key={detail.human.id}
+          human={{ id: detail.human.id, name: detail.human.name, faceAssetId: detail.face?.id ?? null, defaultLanguageCode: detail.human.default_language_code }}
           ready={detail.persona.state === 'published'}
           notReadyReason="Publish this VowHuman's Persona (from the Personas page) before running a live test call — a draft Persona isn't what will actually run once deployed."
         />
@@ -477,10 +478,11 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
   );
 }
 
-function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
+function DigitalHumanLanguageRow({ humanId, defaultLanguageCode, languages, onChanged }: { humanId: string; defaultLanguageCode: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
-  const [selectedCode, setSelectedCode] = useState('en-ZA');
+  const [selectedCode, setSelectedCode] = useState(defaultLanguageCode || 'en-ZA');
   const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [savingDefault, setSavingDefault] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     fetch('/api/v1/voices').then(async (response) => {
@@ -504,6 +506,21 @@ function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: s
     }
   }
 
+  async function selectDefaultLanguage(code: string) {
+    setSavingDefault(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/digital-humans/${humanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ default_language_code: code }) });
+      await requireSuccessfulResponse(response, 'Could not save the conversation language.');
+      setSelectedCode(code);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the conversation language.');
+    } finally {
+      setSavingDefault(false);
+    }
+  }
+
   const english = languages.find((language) => language.code === 'en-ZA') ?? languages[0];
   const selectedLanguage = languages.find((language) => language.code === selectedCode) ?? english;
   const otherLanguages = selectedLanguage ? languages.filter((language) => language.code !== selectedLanguage.code) : [];
@@ -514,14 +531,14 @@ function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: s
       <div className="digital-human-language-toolbar">
         <div>
           <Languages size={18} />
-          <span><strong>Selected language</strong><small>Only one language configuration is shown at a time.</small></span>
+          <span><strong>Active conversation language</strong><small>New conversations continue in this language until the user explicitly asks to switch.</small></span>
         </div>
         {otherLanguages.length > 0 && (
           <label className="other-language-select">
             <span>Other languages</span>
-            <select value="" onChange={(event) => setSelectedCode(event.target.value)} aria-label="Choose another language">
-              <option value="" disabled>Choose a language</option>
-              {otherLanguages.map((language) => <option key={language.code} value={language.code}>{language.english_name} — {language.status.replace(/-/g, ' ')}</option>)}
+            <select value="" onChange={(event) => selectDefaultLanguage(event.target.value)} aria-label="Choose another language" disabled={savingDefault}>
+              <option value="" disabled>{savingDefault ? 'Saving language…' : 'Choose a language'}</option>
+              {otherLanguages.map((language) => <option key={language.code} value={language.code} disabled={language.status === 'unsupported' || language.status === 'temporarily-unavailable'}>{language.english_name} — {language.status.replace(/-/g, ' ')}</option>)}
             </select>
           </label>
         )}
@@ -533,6 +550,7 @@ function DigitalHumanLanguageRow({ humanId, languages, onChanged }: { humanId: s
             <span><strong>{selectedLanguage.english_name}</strong><small>{selectedLanguage.code}</small></span>
           </div>
           <LanguageStatusBadge status={selectedLanguage.status} />
+          <span className="default-language-indicator"><Check size={14} />Default for every new conversation</span>
           <label className="digital-human-language-voice">
             <span>Voice for {selectedLanguage.english_name}</span>
             <select value={selectedLanguage.voice_id ?? ''} onChange={(event) => assignVoice(selectedLanguage.code, event.target.value)} disabled={busyCode === selectedLanguage.code}>
@@ -2283,7 +2301,7 @@ type LiveSessionMetrics = {
   telemetry_insufficient: boolean;
 };
 type GatewayHealthStatus = { gateway_reachable: boolean; realtime_configured: boolean; realtime_check_available: boolean; avatar_configured: boolean };
-type TestReadyHuman = { id: string; name: string; role: string; ready: boolean; faceAssetId: string | null };
+type TestReadyHuman = { id: string; name: string; role: string; ready: boolean; faceAssetId: string | null; defaultLanguageCode: string };
 
 function formatCallDuration(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
@@ -2325,7 +2343,8 @@ function LiveSessions() {
 
   const [callStage, setCallStage] = useState<CallStage>("idle");
   const [activeHuman, setActiveHuman] = useState<TestReadyHuman | null>(null);
-  const [selectedLanguage, setSelectedLanguage] = useState("en-ZA");
+  const [selectedLanguage, setSelectedLanguage] = useState("");
+  const [languageOverridden, setLanguageOverridden] = useState(false);
   const [switchingLanguage, setSwitchingLanguage] = useState(false);
   const [languageSwitchNote, setLanguageSwitchNote] = useState<string | null>(null);
   const liveRoomRef = useRef<Room | null>(null);
@@ -2356,7 +2375,7 @@ function LiveSessions() {
     if (humansRes?.success) {
       const readySlugs = new Set<string>((assignRes?.data?.items ?? []).filter((a: { state: string }) => a.state === "published").map((a: { human_slug: string }) => a.human_slug));
       const faceBySlug = new Map<string, string>((faceAssignRes?.data?.items ?? []).map((f: { human_slug: string; face_asset_id: string }) => [f.human_slug, f.face_asset_id]));
-      setTestHumans(humansRes.data.items.map((h: DigitalHumanSummary) => ({ id: h.id, name: h.name, role: h.role, ready: readySlugs.has(h.id), faceAssetId: faceBySlug.get(h.id) ?? null })));
+      setTestHumans(humansRes.data.items.map((h: DigitalHumanSummary) => ({ id: h.id, name: h.name, role: h.role, ready: readySlugs.has(h.id), faceAssetId: faceBySlug.get(h.id) ?? null, defaultLanguageCode: h.default_language_code || "en-ZA" })));
     }
     setLoaded(true);
   }
@@ -2428,8 +2447,10 @@ function LiveSessions() {
     setCallSummary(null);
     setAgentJoined(false);
     setNoAgentTimeout(false);
+    const callLanguage = languageOverridden && selectedLanguage ? selectedLanguage : human.defaultLanguageCode;
+    setSelectedLanguage(callLanguage);
     try {
-      const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id, requested_language: selectedLanguage }) });
+      const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id, requested_language: callLanguage }) });
       const sessionBody = await sessionRes.json().catch(() => ({}));
       if (!sessionRes.ok) throw new Error(sessionBody.message || "Could not start this test call.");
       const sessionId = sessionBody.data.session_id as string;
@@ -2476,6 +2497,8 @@ function LiveSessions() {
     setLiveStatus(null);
     setSpeaking(false);
     setCallSummary(null);
+    setSelectedLanguage("");
+    setLanguageOverridden(false);
   }
 
   const stateChip = callStage !== "live" ? null
@@ -2572,7 +2595,7 @@ function LiveSessions() {
               </div>
               <div className="live-call-controls">
                 <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
-                <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="enabled-only" disabled={switchingLanguage} />
+                <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage} />
                 <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
               </div>
               {languageSwitchNote && <p className="panel-note">{languageSwitchNote}</p>}
@@ -2588,8 +2611,8 @@ function LiveSessions() {
           ) : (
             <>
               <PanelTitle title="Test console" eyebrow="Real live voice + avatar call" action={<StatusPill tone="good">Live</StatusPill>} />
-              <label className="pre-call-language">Language for this call
-                <LanguageSelect value={selectedLanguage} onChange={setSelectedLanguage} capability="realtime" scope="enabled-only" showStatusBadge includeNone="Auto-detect language" />
+              <label className="pre-call-language">Optional language override
+                <LanguageSelect value={selectedLanguage} onChange={(code) => { setSelectedLanguage(code); setLanguageOverridden(Boolean(code)); }} capability="realtime" scope="usable-only" showStatusBadge includeNone="Use each Digital Human's default" />
               </label>
               {testHumans.length === 0 && loaded && (
                 <div className="ingestion-card compact"><p>No digital humans yet.</p><Link href="/studio/digital-humans" className="secondary-button"><ArrowRight size={15} />Create one</Link></div>

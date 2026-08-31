@@ -552,7 +552,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (resource === "digital-humans" && route[1] && !route[2]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const [human] = await sql`SELECT id, name, role, disclosure, state, created_at, updated_at FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
+    const [human] = await sql`SELECT id, name, role, disclosure, default_language_code, state, created_at, updated_at FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
     if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     const [[face], [voice], [gestureRow], [persona], knowledgeBases, languageRows] = await Promise.all([
       sql`SELECT fa.id, fa.media_type, fa.detector_provider, fa.preprocessing_state, fa.state FROM human_face_assignments hfa JOIN face_assets fa ON fa.id = hfa.face_asset_id WHERE hfa.organisation_id = ${organisationId} AND hfa.human_slug = ${route[1]}`,
@@ -566,7 +566,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       flagEnabled("ENABLE_MULTILINGUAL")
         ? sql`
             SELECT l.code, l.english_name,
-              (SELECT lc.status FROM language_capabilities lc WHERE lc.language_code = l.code AND lc.capability = 'tts'
+              (SELECT lc.status FROM language_capabilities lc WHERE lc.language_code = l.code AND lc.capability = 'realtime'
                ORDER BY CASE lc.status WHEN 'production' THEN 1 WHEN 'beta' THEN 2 WHEN 'experimental' THEN 3 WHEN 'degraded' THEN 4 WHEN 'temporarily-unavailable' THEN 5 ELSE 6 END LIMIT 1) AS status,
               dhlv.voice_id, v.name AS voice_name
             FROM languages l
@@ -584,7 +584,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const rows = await sql`
-      SELECT dh.id, dh.name, dh.role, dh.disclosure, dh.state, dh.created_at, dh.updated_at,
+      SELECT dh.id, dh.name, dh.role, dh.disclosure, dh.default_language_code, dh.state, dh.created_at, dh.updated_at,
         (SELECT hfa.face_asset_id FROM human_face_assignments hfa
          WHERE hfa.organisation_id = dh.organisation_id AND hfa.human_slug = dh.id::text
          LIMIT 1) AS face_asset_id
@@ -1678,7 +1678,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id is required." }, { status: 422 });
     }
 
-    const [human] = await sql<{ id: string }[]>`SELECT id FROM digital_humans WHERE id = ${digitalHumanId} AND organisation_id = ${organisationId}`;
+    const [human] = await sql<{ id: string; default_language_code: string }[]>`SELECT id, default_language_code FROM digital_humans WHERE id = ${digitalHumanId} AND organisation_id = ${organisationId}`;
     if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "VowHuman not found." }, { status: 404 });
 
     const [publishedVersion] = await sql<{ id: string }[]>`
@@ -1717,7 +1717,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // requested_language rides in the existing context jsonb rather than a new
     // sessions column — sessions has no dedicated language field, and context
     // already exists precisely for this kind of extensible per-session metadata.
-    const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL") && typeof body.requested_language === "string" && body.requested_language ? body.requested_language : null;
+    const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL")
+      ? (typeof body.requested_language === "string" && body.requested_language ? body.requested_language : human.default_language_code)
+      : null;
     try {
       const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
       const avatarMode = face ? "live-avatar" : "audio-only";
@@ -1851,6 +1853,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ${sql.json({ target_language: targetLanguage, resolved_status: realtimeResolution?.status ?? "unsupported", used_fallback: realtimeResolution?.usedFallback ?? true, fallback_language_code: realtimeResolution?.fallbackLanguageCode ?? null })})
     `;
     if (realtimeResolution) await recordLanguageUsage({ organisationId, sessionId: route[1], languageCode: targetLanguage, capability: "realtime", provider: realtimeResolution.provider });
+    if (realtimeResolution?.resolvedLanguageCode) {
+      await sql`
+        UPDATE sessions
+        SET context = jsonb_set(COALESCE(context, '{}'::jsonb), '{requested_language}', to_jsonb(${realtimeResolution.resolvedLanguageCode}::text), true)
+        WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+      `;
+    }
     return response({
       target_language: targetLanguage,
       resolved_language: realtimeResolution?.resolvedLanguageCode ?? null,
@@ -2680,15 +2689,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (state && !["draft", "active", "archived", "revoked"].includes(state)) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Invalid state." }, { status: 422 });
     }
+    const requestedDefaultLanguage = typeof body.default_language_code === "string" ? body.default_language_code.trim() : null;
+    if (requestedDefaultLanguage) {
+      const [language] = await sql<{ code: string }[]>`
+        SELECT l.code FROM languages l
+        WHERE l.code = ${requestedDefaultLanguage}
+          AND EXISTS (
+            SELECT 1 FROM language_capabilities lc
+            WHERE lc.language_code = l.code AND lc.capability = 'realtime' AND lc.status IN ('production', 'beta', 'experimental')
+          )
+      `;
+      if (!language) return NextResponse.json({ success: false, code: "LANGUAGE_NOT_READY", message: "This language is not ready for continuous realtime conversations yet." }, { status: 422 });
+      await sql`
+        INSERT INTO organisation_languages (organisation_id, language_code, enabled)
+        VALUES (${organisationId}, ${requestedDefaultLanguage}, true)
+        ON CONFLICT (organisation_id, language_code) DO UPDATE SET enabled = true, updated_at = now()
+      `;
+    }
     const [row] = await sql`
       UPDATE digital_humans SET
         name = COALESCE(${typeof body.name === "string" && body.name.trim() ? body.name.trim() : null}, name),
         role = COALESCE(${typeof body.role === "string" && body.role.trim() ? body.role.trim() : null}, role),
         disclosure = COALESCE(${typeof body.disclosure === "string" && body.disclosure.trim() ? body.disclosure.trim() : null}, disclosure),
+        default_language_code = COALESCE(${requestedDefaultLanguage}, default_language_code),
         state = COALESCE(${state}::lifecycle_state, state),
         updated_at = now()
       WHERE id = ${route[1]} AND organisation_id = ${organisationId}
-      RETURNING id, name, role, disclosure, state, created_at, updated_at
+      RETURNING id, name, role, disclosure, default_language_code, state, created_at, updated_at
     `;
     if (!row) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     return NextResponse.json({ success: true, data: row, meta: { mode: "live", request_id: randomUUID() } });
