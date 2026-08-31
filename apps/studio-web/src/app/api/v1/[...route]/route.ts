@@ -842,7 +842,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (resource === "applications" && !route[1]) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
-    const rows = await sql`SELECT id, name, slug, status, settings, created_at FROM applications WHERE organisation_id = ${organisationId} ORDER BY created_at DESC`;
+    const rows = await sql`SELECT id, name, slug, status, settings, created_at FROM applications WHERE organisation_id = ${organisationId} AND status <> 'archived' ORDER BY created_at DESC`;
     return response({ items: rows });
   }
 
@@ -852,7 +852,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const rows = await sql`
       SELECT dha.digital_human_id, dha.application_id, a.name AS application_name, a.slug AS application_slug, dha.persona_version_id, dha.enabled
       FROM digital_human_applications dha JOIN applications a ON a.id = dha.application_id
-      WHERE dha.organisation_id = ${organisationId}
+      WHERE dha.organisation_id = ${organisationId} AND a.status <> 'archived'
     `;
     return response({ items: rows });
   }
@@ -1610,6 +1610,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!name) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Give the application a name." }, { status: 422 });
     const requestedSlug = typeof body.slug === "string" && body.slug.trim() ? body.slug.trim() : name;
     const baseSlug = requestedSlug.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "application";
+    if (baseSlug === "vowtools") return NextResponse.json({ success: false, code: "APPLICATION_RETIRED", message: "VowTools has been discontinued and cannot be connected." }, { status: 410 });
+    const [existingApplication] = await sql<{ id: string }[]>`SELECT id FROM applications WHERE organisation_id=${organisationId} AND slug=${baseSlug} LIMIT 1`;
+    if (existingApplication) return NextResponse.json({ success: false, code: "APPLICATION_EXISTS", message: "An application with this name or slug is already connected." }, { status: 409 });
     let applicationRow: { id: string; name: string; slug: string; status: string; settings: unknown; created_at: string } | undefined;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;

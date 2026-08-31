@@ -46,6 +46,10 @@ const migration020 = await readFile(
   new URL("../packages/database/migrations/020_guide_progress.sql", import.meta.url),
   "utf8",
 );
+const migration022 = await readFile(
+  new URL("../packages/database/migrations/022_retire_applications.sql", import.meta.url),
+  "utf8",
+);
 
 const sql = postgres(connectionString, {
   max: 1,
@@ -96,6 +100,12 @@ try {
   } else {
     console.log("[schema-fixes] guide_progress already installed");
   }
+
+  // Retire two exact application records without deleting session history:
+  // one duplicate GoalVow Academies slug and the discontinued VowTools app.
+  // The migration is intentionally idempotent and safe on every production build.
+  console.log("[schema-fixes] enforcing retired application catalogue entries");
+  await connection.unsafe(migration022);
 
   console.log("[schema-fixes] done");
 } finally {

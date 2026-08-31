@@ -9,4 +9,6 @@
 6. `006_post_deployment_runtime.sql` — operator pointer; canonical runtime migration remains PostgreSQL migration 019
 7. `007_photoreal_replicas.sql` — additive consent, capture-reference, processing, version, quality and assignment tables (never raw media)
 
+8. `008_retire_applications.sql` — disables and archives the duplicate GoalVow Academies entry and discontinued VowTools application while preserving history
+
 Do not import the PostgreSQL migrations into Afrihost MySQL. Do not expose this folder through a public web route; the PHP `.htaccess` blocks SQL/config artefacts but uploads should remain outside the API document root when possible.

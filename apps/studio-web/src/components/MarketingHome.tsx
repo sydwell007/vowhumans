@@ -241,12 +241,6 @@ export function MarketingHome() {
           <span>
             VOWLMS <small>INTERNAL DEMO</small>
           </span>
-          <span>
-            VOWSUPPORT <small>PLANNED</small>
-          </span>
-          <span>
-            VOWTOOLS <small>PLANNED</small>
-          </span>
         </div>
       </section>
 

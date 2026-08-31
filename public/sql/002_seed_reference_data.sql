@@ -6,8 +6,7 @@ INSERT IGNORE INTO vhm_applications(id,organisation_id,name,slug,status,settings
 ('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','PlugConnect','plugconnect','active','{}'),
 ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','GoalVow Academies','goalvow-academies','active','{}'),
 ('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','VowLMS','vowlms','active','{}'),
-('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','VowSupport','vowsupport','sandbox','{}'),
-('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','VowTools','vowtools','sandbox','{}');
+('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','VowSupport','vowsupport','sandbox','{}');
 
 INSERT IGNORE INTO vhm_identities(id,organisation_id,owner_name,display_name,source_provenance,geographic_scope,commercial_use_confirmed,consent_complete,consent_status,expires_at) VALUES
 ('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','GoalVow original placeholder','Thandi Mokoena','Original AI-generated placeholder; no actor source media','South Africa',1,1,'approved','2027-12-31 23:59:59'),
@@ -25,4 +24,3 @@ INSERT IGNORE INTO vhm_personas(id,organisation_id,name,description) VALUES
 ('40000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','Career Coach','Non-clinical career coach'),
 ('40000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','Learning Mentor','Supportive learning mentor'),
 ('40000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','Support Adviser','Scoped support adviser');
-

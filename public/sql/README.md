@@ -10,6 +10,8 @@ These files are manual phpMyAdmin migrations for the Afrihost integration adapte
 
 These migrations create tables and indexes without dropping existing data. The seed uses stable UUIDs and `INSERT IGNORE` so it is safe to re-run. Test on staging before production.
 
+After the base schema and feature migrations, import `008_retire_applications.sql` to disable and archive the duplicate GoalVow Academies record and discontinued VowTools record without deleting operational history.
+
 The Digital Workforce adapter stores configuration and governance evidence only. Model inference, external tool side effects and scheduled execution remain disabled until separately approved platform workers are configured. The starter catalogue creates drafts, never approvals or deployments.
 
 The Photoreal Replica adapter stores consent state, private object references, hashes and review evidence only. It does not accept or store capture video. Capture uploads, processing and GPU runtime remain the responsibility of the canonical platform API and private object-storage boundary.
