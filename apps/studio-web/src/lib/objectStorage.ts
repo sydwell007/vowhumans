@@ -2,6 +2,7 @@ import "server-only";
 
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { objectStorageEndpointUsable } from "./storageConfiguration";
 
 type StorageConfiguration = {
   endpoint?: string;
@@ -23,9 +24,10 @@ function configuration(): StorageConfiguration | null {
   const bucket = process.env.S3_BUCKET?.trim();
   const accessKeyId = process.env.S3_ACCESS_KEY?.trim();
   const secretAccessKey = process.env.S3_SECRET_KEY?.trim();
-  if (!bucket || !accessKeyId || !secretAccessKey) return null;
+  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
+  if (!bucket || !accessKeyId || !secretAccessKey || !objectStorageEndpointUsable(endpoint, process.env.NODE_ENV === "production")) return null;
   return {
-    endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
+    endpoint,
     bucket,
     region: process.env.S3_REGION?.trim() || "af-south-1",
     accessKeyId,
