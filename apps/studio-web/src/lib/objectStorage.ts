@@ -11,6 +11,14 @@ type StorageConfiguration = {
   secretAccessKey: string;
 };
 
+type ReplicaObjectInput = {
+  organisationId: string;
+  profileId: string;
+  captureSessionId: string;
+  segmentId: string;
+  extension: string;
+};
+
 function configuration(): StorageConfiguration | null {
   const bucket = process.env.S3_BUCKET?.trim();
   const accessKeyId = process.env.S3_ACCESS_KEY?.trim();
@@ -38,6 +46,13 @@ export function privateObjectStorageConfigured(): boolean {
   return configuration() !== null;
 }
 
+export function privateReplicaObjectKey(input: ReplicaObjectInput): string {
+  return [
+    "organisations", input.organisationId, "replicas", input.profileId,
+    "captures", input.captureSessionId, `${input.segmentId}.${input.extension}`,
+  ].join("/");
+}
+
 export async function createPrivateReplicaUpload(input: {
   organisationId: string;
   profileId: string;
@@ -49,10 +64,7 @@ export async function createPrivateReplicaUpload(input: {
 }) {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
-  const objectKey = [
-    "organisations", input.organisationId, "replicas", input.profileId,
-    "captures", input.captureSessionId, `${input.segmentId}.${input.extension}`,
-  ].join("/");
+  const objectKey = privateReplicaObjectKey(input);
   const command = new PutObjectCommand({
     Bucket: config.bucket,
     Key: objectKey,
@@ -69,6 +81,24 @@ export async function createPrivateReplicaUpload(input: {
     },
     expiresInSeconds: 15 * 60,
   };
+}
+
+export async function storePrivateReplicaCapture(input: {
+  objectKey: string;
+  contentType: string;
+  sha256: string;
+  body: Uint8Array;
+}) {
+  const config = configuration();
+  if (!config) throw new Error("Private object storage is not configured.");
+  await client(config).send(new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: input.objectKey,
+    Body: input.body,
+    ContentLength: input.body.byteLength,
+    ContentType: input.contentType,
+    Metadata: { sha256: input.sha256, classification: "biometric-capture" },
+  }));
 }
 
 export async function verifyPrivateReplicaObject(objectKey: string, expectedBytes: number, expectedSha256: string) {

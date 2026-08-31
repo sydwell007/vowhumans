@@ -5,12 +5,15 @@ import sql, { databaseConfigured } from "@/lib/db";
 import {
   createPrivateReplicaUpload,
   createPrivateReplicaDownload,
+  privateReplicaObjectKey,
   privateObjectStorageConfigured,
+  storePrivateReplicaCapture,
   storePrivateReplicaManifest,
   verifyPrivateReplicaObject,
 } from "@/lib/objectStorage";
 import {
   isReplicaSegmentType,
+  MAX_GUIDED_CAPTURE_BYTES,
   REQUIRED_CAPTURE_SEGMENTS,
   replicaCaptureReadiness,
   safeCaptureExtension,
@@ -97,6 +100,15 @@ function databaseFailure(error: unknown) {
   }
   console.error("[replicas-api]", error);
   return problem("The replica request could not be completed.", "REPLICA_REQUEST_FAILED", 500);
+}
+
+function storageFailure(error: unknown) {
+  console.error("[replica-capture-upload]", error);
+  return problem(
+    "Private storage could not accept this capture. Verify the production S3 endpoint, bucket and credentials, then retry.",
+    "OBJECT_STORAGE_UPLOAD_FAILED",
+    502,
+  );
 }
 
 type ProcessorClip = {
@@ -262,6 +274,68 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
+export async function PUT(request: NextRequest, context: RouteContext) {
+  if (!databaseConfigured) return problem("PostgreSQL is not configured.", "DATABASE_NOT_CONFIGURED", 503);
+  const user = await authenticated(request);
+  if (!user) return problem("Sign in to manage photoreal replicas.", "UNAUTHORISED", 401);
+  const { path = [] } = await context.params;
+  if (path.length !== 4 || path[1] !== "segments" || path[3] !== "content") {
+    return problem("Replica route not found.", "NOT_FOUND", 404);
+  }
+
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_GUIDED_CAPTURE_BYTES) {
+    return problem("This guided capture is too large. Record a clip of 12 seconds or less and retry.", "CAPTURE_TOO_LARGE", 413);
+  }
+
+  const profileId = path[0];
+  const segmentId = path[2];
+  try {
+    const profile = await findProfile(user.organisationId, profileId);
+    if (!profile) return problem("Replica profile not found.", "NOT_FOUND", 404);
+    if (profile.status === "revoked") return problem("This replica has been revoked.", "REPLICA_REVOKED", 409);
+    const rows = await sql<{ object_key: string; byte_size: number; sha256: string; media_type: string }[]>`
+      SELECT rseg.object_key, rseg.byte_size, rseg.sha256, rseg.media_type
+      FROM replica_capture_segments rseg JOIN replica_capture_sessions rcs ON rcs.id=rseg.capture_session_id
+      WHERE rseg.id=${segmentId} AND rseg.organisation_id=${user.organisationId}
+        AND rcs.replica_profile_id=${profileId} AND rseg.state='upload_pending' LIMIT 1
+    `;
+    const segment = rows[0];
+    if (!segment) return problem("Pending segment not found.", "NOT_FOUND", 404);
+    if (Number(segment.byte_size) > MAX_GUIDED_CAPTURE_BYTES) {
+      return problem("This endpoint accepts guided capture clips only.", "CAPTURE_TOO_LARGE", 413);
+    }
+
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength !== Number(segment.byte_size)) {
+      return problem("Capture size changed during upload. Record the clip again.", "UPLOAD_SIZE_MISMATCH", 409);
+    }
+    const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+    const declaredSha256 = request.headers.get("x-vowhumans-sha256")?.toLowerCase();
+    if (actualSha256 !== segment.sha256 || (declaredSha256 && declaredSha256 !== segment.sha256)) {
+      return problem("Capture integrity verification failed. Record the clip again.", "UPLOAD_INTEGRITY_FAILED", 409);
+    }
+    const contentType = request.headers.get("content-type")?.split(";")[0] ?? "";
+    if (contentType !== segment.media_type || !VIDEO_TYPES.has(contentType)) {
+      return problem("Capture media type did not match the upload intent.", "UPLOAD_MEDIA_MISMATCH", 409);
+    }
+
+    try {
+      await storePrivateReplicaCapture({
+        objectKey: segment.object_key,
+        contentType,
+        sha256: segment.sha256,
+        body: bytes,
+      });
+    } catch (error) {
+      return storageFailure(error);
+    }
+    return ok({ id: segmentId, state: "stored", integrity_verified: true });
+  } catch (error) {
+    return databaseFailure(error);
+  }
+}
+
 export async function POST(request: NextRequest, context: RouteContext) {
   if (!databaseConfigured) return problem("PostgreSQL is not configured.", "DATABASE_NOT_CONFIGURED", 503);
   const user = await authenticated(request);
@@ -318,8 +392,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return problem("A supported video type, SHA-256 hash and valid file size are required.", "VALIDATION_ERROR", 422);
       }
       if (segmentType === "gesture" && (!gestureKey || !GESTURES.has(gestureKey))) return problem("A supported gesture key is required.", "VALIDATION_ERROR", 422);
+      const sameOriginUpload = body.transport === "same-origin";
+      if (sameOriginUpload && byteSize > MAX_GUIDED_CAPTURE_BYTES) {
+        return problem("Guided captures must be 12 seconds or less. Use the complete-video uploader for larger files.", "CAPTURE_TOO_LARGE", 413);
+      }
       const segmentId = randomUUID();
-      const upload = await createPrivateReplicaUpload({ organisationId: user.organisationId, profileId, captureSessionId: profile.capture_session_id, segmentId, extension: safeCaptureExtension(fileName, contentType), contentType, sha256 });
+      const extension = safeCaptureExtension(fileName, contentType);
+      const upload = sameOriginUpload
+        ? {
+            objectKey: privateReplicaObjectKey({ organisationId: user.organisationId, profileId, captureSessionId: profile.capture_session_id, segmentId, extension }),
+            uploadUrl: `/api/v1/replicas/${profileId}/segments/${segmentId}/content`,
+            requiredHeaders: { "content-type": contentType, "x-vowhumans-sha256": sha256 },
+            expiresInSeconds: 15 * 60,
+          }
+        : await createPrivateReplicaUpload({ organisationId: user.organisationId, profileId, captureSessionId: profile.capture_session_id, segmentId, extension, contentType, sha256 });
       await sql`
         INSERT INTO replica_capture_segments (
           id, organisation_id, capture_session_id, segment_type, gesture_key,
@@ -329,7 +415,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
           ${upload.objectKey}, ${sha256}, ${contentType}, ${byteSize}, 'upload_pending'
         )
       `;
-      return ok({ segment_id: segmentId, upload_url: upload.uploadUrl, required_headers: upload.requiredHeaders, expires_in_seconds: upload.expiresInSeconds }, 201);
+      return ok({
+        segment_id: segmentId,
+        upload_url: upload.uploadUrl,
+        required_headers: upload.requiredHeaders,
+        expires_in_seconds: upload.expiresInSeconds,
+        upload_transport: sameOriginUpload ? "same-origin" : "presigned-put",
+      }, 201);
     }
 
     if (action === "segments" && path.length === 4 && path[3] === "complete") {

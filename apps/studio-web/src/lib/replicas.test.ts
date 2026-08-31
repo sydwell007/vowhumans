@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { replicaCaptureReadiness, safeCaptureExtension, validateCompletePerformanceChapters } from "./replicas";
+import {
+  MAX_GUIDED_CAPTURE_BYTES,
+  MAX_GUIDED_CAPTURE_MS,
+  replicaCaptureReadiness,
+  safeCaptureExtension,
+  validateCompletePerformanceChapters,
+} from "./replicas";
 
 describe("replica capture readiness", () => {
+  it("keeps same-origin guided captures below the serverless request ceiling", () => {
+    expect(MAX_GUIDED_CAPTURE_BYTES).toBe(3 * 1024 * 1024);
+    expect(MAX_GUIDED_CAPTURE_MS).toBe(12_000);
+  });
+
   it("requires real neutral-boundary motion clips", () => {
     const result = replicaCaptureReadiness([
       { segment_type: "idle", state: "uploaded", starts_neutral: true, ends_neutral: true },

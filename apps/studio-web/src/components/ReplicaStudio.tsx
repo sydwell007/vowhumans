@@ -20,6 +20,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusPill } from "./StatusPill";
 import {
+  MAX_GUIDED_CAPTURE_BYTES,
+  MAX_GUIDED_CAPTURE_MS,
   REPLICA_CAPTURE_STEPS,
   REQUIRED_CAPTURE_SEGMENTS,
   validateCompletePerformanceChapters,
@@ -418,44 +420,77 @@ function CaptureCard({ profileId, capture, uploaded, disabled, onUploaded }: { p
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const settingsRef = useRef<MediaTrackSettings>({});
+  const recordingElapsedMsRef = useRef(0);
+  const recordingTickRef = useRef<number | null>(null);
+  const stopTimerRef = useRef<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function toggleRecording() {
-    if (recorderRef.current && recording) { recorderRef.current.stop(); return; }
+    if (recorderRef.current?.state === "recording") {
+      if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
+      recorderRef.current.stop();
+      return;
+    }
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 25, max: 30 } }, audio: true });
       streamRef.current = stream;
+      settingsRef.current = stream.getVideoTracks()[0]?.getSettings() ?? {};
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
       chunksRef.current = [];
       const preferredType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
-      const recorder = new MediaRecorder(stream, { mimeType: preferredType });
+      const recorder = new MediaRecorder(stream, { mimeType: preferredType, videoBitsPerSecond: 1_100_000, audioBitsPerSecond: 64_000 });
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
-      recorder.onstop = () => { setRecording(false); stream.getTracks().forEach((track) => track.stop()); void upload(new Blob(chunksRef.current, { type: recorder.mimeType })); };
+      recorder.onstop = () => {
+        if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
+        if (recordingTickRef.current !== null) window.clearInterval(recordingTickRef.current);
+        stopTimerRef.current = null;
+        recordingTickRef.current = null;
+        recorderRef.current = null;
+        setRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        const durationMs = Math.max(500, recordingElapsedMsRef.current);
+        void upload(new Blob(chunksRef.current, { type: recorder.mimeType }), durationMs);
+      };
       recorder.start(500);
+      recordingElapsedMsRef.current = 0;
+      recordingTickRef.current = window.setInterval(() => { recordingElapsedMsRef.current += 250; }, 250);
+      stopTimerRef.current = window.setTimeout(() => {
+        if (recorder.state === "recording") recorder.stop();
+      }, MAX_GUIDED_CAPTURE_MS);
       setRecording(true);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Camera or microphone access was unavailable."); }
+    } catch (caught) {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      setError(caught instanceof Error ? caught.message : "Camera or microphone access was unavailable.");
+    }
   }
 
-  async function upload(blob: Blob) {
+  async function upload(blob: Blob, durationMs: number) {
     setBusy(true); setError(null);
     try {
+      if (blob.size < 1 || blob.size > MAX_GUIDED_CAPTURE_BYTES) {
+        throw new Error("This capture was too large to upload safely. Record a shorter clip of 12 seconds or less.");
+      }
       const contentType = blob.type.split(";")[0] || "video/webm";
       const sha256 = await sha256Hex(blob);
-      const intent = await api<{ segment_id: string; upload_url: string; required_headers: Record<string, string> }>(`/api/v1/replicas/${profileId}/upload-intents`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ segment_type: capture.type, gesture_key: capture.gesture, content_type: contentType, file_name: `capture.${contentType === "video/mp4" ? "mp4" : "webm"}`, byte_size: blob.size, sha256 }) });
-      const uploadResponse = await fetch(intent.upload_url, { method: "PUT", headers: intent.required_headers, body: blob });
-      if (!uploadResponse.ok) throw new Error("The private capture upload failed.");
-      const settings = streamRef.current?.getVideoTracks()[0]?.getSettings();
-      await api(`/api/v1/replicas/${profileId}/segments/${intent.segment_id}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ width: settings?.width, height: settings?.height, fps: settings?.frameRate, starts_neutral: true, ends_neutral: true }) });
+      const intent = await api<{ segment_id: string; upload_url: string; required_headers: Record<string, string> }>(`/api/v1/replicas/${profileId}/upload-intents`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ segment_type: capture.type, gesture_key: capture.gesture, content_type: contentType, file_name: `capture.${contentType === "video/mp4" ? "mp4" : "webm"}`, byte_size: blob.size, sha256, transport: "same-origin" }) });
+      await api(intent.upload_url, { method: "PUT", headers: intent.required_headers, body: blob });
+      const settings = settingsRef.current;
+      await api(`/api/v1/replicas/${profileId}/segments/${intent.segment_id}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duration_ms: durationMs, width: settings.width, height: settings.height, fps: settings.frameRate, starts_neutral: true, ends_neutral: true }) });
       await onUploaded();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save this capture."); }
     finally { setBusy(false); }
   }
 
-  useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
+  useEffect(() => () => {
+    if (stopTimerRef.current !== null) window.clearTimeout(stopTimerRef.current);
+    if (recordingTickRef.current !== null) window.clearInterval(recordingTickRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
-  return <article className={`replica-capture-card${uploaded ? " complete" : ""}`}><div className="capture-preview"><video ref={videoRef} muted playsInline /><span>{recording ? "Recording" : uploaded ? "Captured" : "Camera preview"}</span></div><div><StatusPill tone={uploaded ? "good" : disabled ? "warn" : "muted"}>{uploaded ? "Uploaded" : disabled ? "Storage required" : "Required"}</StatusPill><h3>{capture.label}</h3><p>{capture.instruction}</p>{error && <small className="capture-error">{error}</small>}<button className={recording ? "secondary-button" : "primary-button"} type="button" disabled={disabled || busy || uploaded} onClick={toggleRecording}>{busy ? <RefreshCw className="spin" size={16} /> : recording ? <CircleCheck size={16} /> : <Camera size={16} />}{busy ? "Encrypting & uploading…" : recording ? "Stop capture" : uploaded ? "Capture complete" : "Start capture"}</button></div></article>;
+  return <article className={`replica-capture-card${uploaded ? " complete" : ""}`}><div className="capture-preview"><video ref={videoRef} muted playsInline /><span>{recording ? "Recording — stops at 12s" : uploaded ? "Captured" : "Camera preview"}</span></div><div><StatusPill tone={uploaded ? "good" : disabled ? "warn" : "muted"}>{uploaded ? "Uploaded" : disabled ? "Storage required" : "Required"}</StatusPill><h3>{capture.label}</h3><p>{capture.instruction}</p>{error && <small className="capture-error">{error}</small>}<button className={recording ? "secondary-button" : "primary-button"} type="button" disabled={disabled || busy || uploaded} onClick={toggleRecording}>{busy ? <RefreshCw className="spin" size={16} /> : recording ? <CircleCheck size={16} /> : <Camera size={16} />}{busy ? "Encrypting & uploading…" : recording ? "Stop capture" : uploaded ? "Capture complete" : "Start capture"}</button></div></article>;
 }

@@ -35,6 +35,11 @@ export type ReplicaVideoChapter = {
 
 export const MIN_REPLICA_CHAPTER_MS = 1_500;
 export const MAX_REPLICA_CHAPTER_MS = 30_000;
+// Guided clips are relayed through the authenticated same-origin API so capture
+// does not depend on a browser-facing bucket CORS policy. Keep the body well
+// below the serverless request ceiling and stop the recorder before it grows.
+export const MAX_GUIDED_CAPTURE_BYTES = 3 * 1024 * 1024;
+export const MAX_GUIDED_CAPTURE_MS = 12_000;
 
 export const REQUIRED_CAPTURE_SEGMENTS: ReadonlyArray<{
   type: ReplicaSegmentType;
