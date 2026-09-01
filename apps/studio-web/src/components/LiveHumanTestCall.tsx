@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Room } from "livekit-client";
 import { Check, CircleAlert, Mic, MicOff, PhoneOff, RefreshCw, Sparkles } from "lucide-react";
 import { StatusPill } from "./StatusPill";
 import { LanguageSelect } from "./LanguageSelect";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
+import { DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, publishLiveLanguageSwitch, type DigitalHumanLanguageChangedDetail } from "@/lib/liveLanguage";
 
 // A real disclosed LiveKit call — the same session type, API calls and
 // LiveVoiceRoom component the Live Sessions page uses for its own test
@@ -67,21 +68,50 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
     await fetch(`/api/v1/live-sessions/${sessionId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_type: eventType, payload }) }).catch(() => {});
   }
 
-  async function switchLanguage(target: string) {
-    if (!activeSessionId) return;
-    setSwitchingLanguage(true);
-    setLanguageSwitchNote(null);
-    const res = await fetch(`/api/v1/live-sessions/${activeSessionId}/switch-language`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target_language: target }) }).then((r) => r.json()).catch(() => null);
-    setSwitchingLanguage(false);
-    if (!res?.success) { setLanguageSwitchNote(res?.message || "Could not switch language."); return; }
-    setSelectedLanguage(target);
-    if (res.data.status === "unsupported" || !res.data.resolved_language) {
-      setLanguageSwitchNote(`${target} isn't usable yet — staying in the current language.`);
+  const switchLanguage = useCallback(async (target: string) => {
+    if (!activeSessionId) {
+      setSelectedLanguage(target);
       return;
     }
-    liveRoomRef.current?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({ type: "vhm_language_switch_request", language_code: res.data.resolved_language })), { reliable: true });
-    setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — using ${res.data.resolved_language} instead.` : `Switched to ${res.data.resolved_language}.`);
-  }
+    setSwitchingLanguage(true);
+    setLanguageSwitchNote(null);
+    try {
+      const response = await fetch(`/api/v1/live-sessions/${activeSessionId}/switch-language`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target_language: target }) });
+      const res = await response.json().catch(() => null);
+      if (!response.ok || !res?.success) throw new Error(res?.message || "Could not switch language.");
+      if (res.data.status === "unsupported" || !res.data.resolved_language) {
+        setLanguageSwitchNote(`${target} isn't usable yet — staying in the current language.`);
+        return;
+      }
+      const room = liveRoomRef.current;
+      if (!room) throw new Error("The call is still connecting. Try the language again when Listening appears.");
+      await publishLiveLanguageSwitch(room, res.data.resolved_language);
+      setSelectedLanguage(res.data.resolved_language);
+      setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — using ${res.data.resolved_language} instead.` : `Language changed to ${res.data.resolved_language}. The avatar will confirm it aloud.`);
+    } catch (err) {
+      setLanguageSwitchNote(err instanceof Error ? err.message : "Could not switch language.");
+    } finally {
+      setSwitchingLanguage(false);
+    }
+  }, [activeSessionId]);
+
+  // A change made in the Languages panel is the same user intent as changing
+  // the selector on the portrait. Subscribe to that user action rather than
+  // deriving local state in an effect from props; this also lets an already-open
+  // call receive the change before the parent profile refresh completes.
+  useEffect(() => {
+    function handleDefaultLanguageChange(event: Event) {
+      const detail = (event as CustomEvent<DigitalHumanLanguageChangedDetail>).detail;
+      if (!detail || detail.humanId !== human.id) return;
+      if (callStage === "live" && activeSessionId) {
+        void switchLanguage(detail.languageCode);
+      } else {
+        setSelectedLanguage(detail.languageCode);
+      }
+    }
+    window.addEventListener(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, handleDefaultLanguageChange);
+    return () => window.removeEventListener(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, handleDefaultLanguageChange);
+  }, [activeSessionId, callStage, human.id, switchLanguage]);
 
   async function clearStuckSessions() {
     setClearingStuckSessions(true);
@@ -210,7 +240,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
           </div>
           <div className="live-call-controls">
             <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
-            <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage} />
+            <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage || liveStatus !== "connected" || !agentJoined} />
             <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
           </div>
           {languageSwitchNote && <p className="panel-note">{languageSwitchNote}</p>}

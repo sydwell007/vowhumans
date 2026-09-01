@@ -32,6 +32,7 @@ FALLBACK_OPENING_INSTRUCTION = "Disclose that you are AI, then deliver the appro
 FALLBACK_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
 AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
 AVATAR_VIDEO_TRACK = "vhm-avatar-video"
+LANGUAGE_SWITCH_TOPIC = "vhm_language_switch_request"
 
 LANGUAGE_NAMES = {
     "en-ZA": "English (South Africa)",
@@ -258,6 +259,43 @@ async def entrypoint(ctx: JobContext):
     session.on("agent_state_changed", _on_agent_state_changed)
     await session.start(room=ctx.room, agent=VowHumansAgent(persona_instructions, tools))
 
+    # Install the switch listener as soon as the session is live, before waiting
+    # for the avatar track or generating the opening turn. The browser disables
+    # its selector until first audio, but this early registration also prevents a
+    # reconnecting/embedded client from losing a valid packet during startup.
+    # Serialise requests so two quick dropdown changes cannot finish out of order.
+    if organisation_id and human_slug:
+        language_switch_lock = asyncio.Lock()
+
+        async def _apply_language_switch(target_language: str) -> None:
+            async with language_switch_lock:
+                await _switch_language(
+                    client,
+                    organisation_id,
+                    human_slug,
+                    persona_version_id,
+                    target_language,
+                    session,
+                    lesson_context,
+                )
+
+        def _on_language_data_received(data_packet) -> None:
+            try:
+                message = json.loads(data_packet.data.decode("utf-8"))
+            except (AttributeError, UnicodeDecodeError, ValueError):
+                return
+
+            # Current clients use the LiveKit packet topic. Accepting the same
+            # identifier in the JSON body as a compatibility fallback lets calls
+            # opened on the previous web deployment keep working during rollout.
+            if data_packet.topic != LANGUAGE_SWITCH_TOPIC and message.get("type") != LANGUAGE_SWITCH_TOPIC:
+                return
+            target_language = message.get("language_code")
+            if isinstance(target_language, str) and target_language in LANGUAGE_NAMES:
+                asyncio.create_task(_apply_language_switch(target_language))
+
+        ctx.room.on("data_received", _on_language_data_received)
+
     # Prepare the synchronized audio/video path before the first reply. If the
     # avatar service is unavailable, continue in voice-only mode after a bounded
     # wait instead of making the lesson fail.
@@ -267,31 +305,6 @@ async def entrypoint(ctx: JobContext):
         except asyncio.TimeoutError:
             print("[realtime-agent] avatar readiness timed out; continuing voice-only", flush=True)
     await session.generate_reply(instructions=opening_instruction)
-
-    # Mid-call language switching. Both calls below were verified against the
-    # actual installed livekit-agents~=1.6 / livekit-plugins-openai~=1.6 source
-    # (not assumed from docs) before writing this:
-    #   - AgentSession.update_agent(agent) hot-swaps the active Agent (and so its
-    #     instructions) on a running session without a reconnect.
-    #   - RealtimeModel.update_options(voice=...) updates the live OpenAI Realtime
-    #     session's voice in place.
-    # room.on() callbacks are synchronous (same convention avatar-participant's
-    # _on_track_subscribed already uses) — the actual persona re-fetch and swap
-    # runs as a background task.
-    if organisation_id and human_slug:
-        def _on_data_received(data_packet) -> None:
-            if data_packet.topic != "vhm_language_switch_request":
-                return
-            try:
-                message = json.loads(data_packet.data.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                return
-            target_language = message.get("language_code")
-            if isinstance(target_language, str) and target_language:
-                asyncio.create_task(_switch_language(client, organisation_id, human_slug, persona_version_id, target_language, session, lesson_context))
-
-        ctx.room.on("data_received", _on_data_received)
-
 
 async def _switch_language(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, target_language: str, session: AgentSession, lesson_context: dict | None = None) -> None:
     persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, target_language)
@@ -307,7 +320,24 @@ async def _switch_language(client: httpx.AsyncClient, organisation_id: str, huma
     instructions, _opening = _ground_in_lesson(instructions, _opening, lesson_context)
     session.update_agent(VowHumansAgent(instructions, tools))
     if isinstance(session.llm, openai.realtime.RealtimeModel):
-        session.llm.update_options(voice=voice)
+        # OpenAI may retain a voice after audio has already been emitted in the
+        # session. A voice-timbre update must never undo the more important live
+        # language/instruction update, so keep the current voice if that optional
+        # update is rejected and continue in the selected language.
+        try:
+            session.llm.update_options(voice=voice)
+        except Exception as exc:  # noqa: BLE001 - provider capability varies by voice/session
+            print(f"[realtime-agent] retained current voice during language switch: {exc}", flush=True)
+
+    language_name = LANGUAGE_NAMES.get(target_language, target_language)
+    await session.generate_reply(
+        instructions=(
+            f"The user selected {language_name} ({target_language}) from the conversation language control. "
+            f"Immediately confirm the change in one short sentence spoken only in {language_name}. "
+            f"After that confirmation, continue every response only in {language_name} until another explicit language change."
+        )
+    )
+    print(f"[realtime-agent] active conversation language changed to {target_language}", flush=True)
 
 
 if __name__ == "__main__":
