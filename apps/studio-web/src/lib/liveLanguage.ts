@@ -1,7 +1,13 @@
 import type { Room } from "livekit-client";
 
 export const LIVE_LANGUAGE_SWITCH_TOPIC = "vhm_language_switch_request";
+export const LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC = "vhm_language_switch_applied";
 export const DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT = "studio:digital-human-language-changed";
+
+export type LiveLanguageApplied = {
+  languageCode: string;
+  phase: "initial" | "switch";
+};
 
 export type DigitalHumanLanguageChangedDetail = {
   humanId: string;

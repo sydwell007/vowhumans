@@ -20,7 +20,7 @@ from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, RunContext, WorkerOptions, cli, function_tool
 from livekit.plugins import openai
 
-STUDIO_WEB_URL = os.getenv("STUDIO_WEB_URL", "")
+STUDIO_WEB_URL = (os.getenv("STUDIO_WEB_URL") or "https://vowhumans.com").strip()
 INTERNAL_KEY = os.getenv("VOWHUMANS_INTERNAL_KEY", "")
 
 # Exactly what this module hardcoded before real persona/voice/knowledge existed —
@@ -33,6 +33,7 @@ FALLBACK_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
 AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
 AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 LANGUAGE_SWITCH_TOPIC = "vhm_language_switch_request"
+LANGUAGE_SWITCH_APPLIED_TOPIC = "vhm_language_switch_applied"
 
 LANGUAGE_NAMES = {
     "en-ZA": "English (South Africa)",
@@ -47,6 +48,43 @@ LANGUAGE_NAMES = {
     "ve-ZA": "Tshivenda",
     "nr-ZA": "isiNdebele",
 }
+
+# A literal first sentence makes the selected language audible and places real
+# text in that language into the Realtime conversation context. This is more
+# deterministic than asking the model to translate an English confirmation on
+# every call. The agent policy below still governs all later turns.
+LANGUAGE_CONFIRMATIONS = {
+    "en-ZA": "Hello. I will continue speaking English from now on.",
+    "zu-ZA": "Sawubona. Ngizokhuluma isiZulu kusukela manje.",
+    "xh-ZA": "Molo. Ndiza kuthetha isiXhosa ukususela ngoku.",
+    "af-ZA": "Hallo. Ek sal van nou af Afrikaans praat.",
+    "nso-ZA": "Dumela. Go tloga bjale ke tla bolela Sepedi.",
+    "tn-ZA": "Dumela. Go tloga jaanong ke tla bua Setswana.",
+    "st-ZA": "Dumela. Ho tloha jwale ke tla bua Sesotho.",
+    "ts-ZA": "Avuxeni. Ku sukela sweswi ndzi ta vula Xitsonga.",
+    "ss-ZA": "Sawubona. Kusukela nyalo ngitawukhuluma siSwati.",
+    "ve-ZA": "Ndaa. U bva zwino ndi do amba Tshivenda.",
+    "nr-ZA": "Lotjhani. Kusukela nje ngizokukhuluma isiNdebele.",
+}
+
+
+def _enforce_language(instructions: str, opening_instruction: str, language_code: str | None) -> tuple[str, str]:
+    """Apply the UI-selected language independently of persona API availability."""
+    if language_code not in LANGUAGE_NAMES:
+        return instructions, opening_instruction
+
+    language_name = LANGUAGE_NAMES[language_code]
+    policy = (
+        f"HIGHEST-PRIORITY ACTIVE LANGUAGE POLICY: Speak only {language_name} ({language_code}) in every substantive response. "
+        "This explicit user selection overrides any earlier default-language wording in the Persona, lesson, opening message, or conversation history. "
+        "Do not answer in English, mirror another input language, or code-switch unless the user explicitly asks to change the active language. "
+        f"If source material is in another language, explain its meaning in {language_name} instead of reading that source language aloud."
+    )
+    enforced_opening = (
+        f"Speak this entire response only in {language_name} ({language_code}). Do not speak any English wording aloud. "
+        f"Translate all source wording before speaking. {opening_instruction}"
+    )
+    return f"{instructions}\n\n{policy}", enforced_opening
 
 
 class VowHumansAgent(Agent):
@@ -73,8 +111,27 @@ async def _publish_voice_state(ctx: JobContext, state: str) -> None:
         print(f"[realtime-agent] voice state publish skipped: {exc}", flush=True)
 
 
+async def _publish_language_applied(ctx: JobContext, language_code: str, phase: str) -> None:
+    try:
+        await ctx.room.local_participant.publish_data(
+            json.dumps({
+                "type": LANGUAGE_SWITCH_APPLIED_TOPIC,
+                "language_code": language_code,
+                "phase": phase,
+            }),
+            reliable=True,
+            topic=LANGUAGE_SWITCH_APPLIED_TOPIC,
+        )
+    except Exception as exc:  # noqa: BLE001 - room teardown can race acknowledgement
+        print(f"[realtime-agent] language acknowledgement skipped: {exc}", flush=True)
+
+
 async def _fetch_persona(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, language: str | None = None) -> dict | None:
     if not (STUDIO_WEB_URL and INTERNAL_KEY):
+        print(
+            f"[realtime-agent] persona lookup unavailable studio_url={bool(STUDIO_WEB_URL)} internal_key={bool(INTERNAL_KEY)} language={language or 'default'}",
+            flush=True,
+        )
         return None
     try:
         params = {"human_slug": human_slug}
@@ -88,9 +145,23 @@ async def _fetch_persona(client: httpx.AsyncClient, organisation_id: str, human_
             params=params,
         )
         if resp.status_code != 200:
+            print(
+                f"[realtime-agent] persona lookup failed status={resp.status_code} human={human_slug} language={language or 'default'}",
+                flush=True,
+            )
             return None
-        return resp.json().get("data")
-    except httpx.HTTPError:
+        data = resp.json().get("data")
+        if language and isinstance(data, dict) and data.get("resolved_language") != language:
+            print(
+                f"[realtime-agent] persona language mismatch requested={language} resolved={data.get('resolved_language') or 'none'}; enforcing requested language locally",
+                flush=True,
+            )
+        return data
+    except (httpx.HTTPError, ValueError) as exc:
+        print(
+            f"[realtime-agent] persona lookup error type={type(exc).__name__} human={human_slug} language={language or 'default'}",
+            flush=True,
+        )
         return None
 
 
@@ -170,11 +241,11 @@ def _make_knowledge_tool(client: httpx.AsyncClient, organisation_id: str, knowle
     return search_knowledge_base
 
 
-def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None) -> tuple[str, str, str, list] | None:
+def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None, required_language: str | None = None) -> tuple[str, str, str, list] | None:
     persona = persona_data.get("persona") if persona_data else None
     if not persona:
         return None
-    configured_language = str(persona["language"])
+    configured_language = required_language if required_language in LANGUAGE_NAMES else str(persona["language"])
     language_name = LANGUAGE_NAMES.get(configured_language, configured_language)
     instructions = (
         f"{persona['system_instructions']}\n\n"
@@ -207,6 +278,7 @@ async def entrypoint(ctx: JobContext):
     human_slug = metadata.get("human_slug")
     persona_version_id = metadata.get("persona_version_id")
     requested_language = metadata.get("requested_language")
+    active_language = requested_language if isinstance(requested_language, str) and requested_language in LANGUAGE_NAMES else None
     session_id = metadata.get("session_id")
 
     persona_instructions = FALLBACK_INSTRUCTIONS
@@ -222,8 +294,8 @@ async def entrypoint(ctx: JobContext):
     ctx.add_shutdown_callback(client.aclose)
 
     if organisation_id and human_slug:
-        persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, requested_language)
-        config = _persona_to_config(client, organisation_id, persona_data)
+        persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, active_language)
+        config = _persona_to_config(client, organisation_id, persona_data, active_language)
         if config:
             persona_instructions, opening_instruction, voice, tools = config
 
@@ -232,6 +304,15 @@ async def entrypoint(ctx: JobContext):
         persona_instructions,
         opening_instruction,
         lesson_context,
+    )
+    persona_instructions, opening_instruction = _enforce_language(
+        persona_instructions,
+        opening_instruction,
+        active_language,
+    )
+    print(
+        f"[realtime-agent] session language requested={requested_language or 'none'} active={active_language or 'persona-default'} persona_loaded={bool(config) if organisation_id and human_slug else False}",
+        flush=True,
     )
     if lesson_context:
         print(
@@ -270,6 +351,7 @@ async def entrypoint(ctx: JobContext):
         async def _apply_language_switch(target_language: str) -> None:
             async with language_switch_lock:
                 await _switch_language(
+                    ctx,
                     client,
                     organisation_id,
                     human_slug,
@@ -304,22 +386,41 @@ async def entrypoint(ctx: JobContext):
             await asyncio.wait_for(avatar_ready.wait(), timeout=AVATAR_READY_WAIT_SECONDS)
         except asyncio.TimeoutError:
             print("[realtime-agent] avatar readiness timed out; continuing voice-only", flush=True)
+    if active_language and active_language != "en-ZA":
+        # A literal sentence provides immediate audible proof and primes the
+        # Realtime conversation with real text in the selected language.
+        await session.say(LANGUAGE_CONFIRMATIONS[active_language])
+        await _publish_language_applied(ctx, active_language, "initial")
+        opening_instruction = (
+            "The selected-language confirmation has already been spoken. Do not repeat that confirmation. "
+            f"{opening_instruction}"
+        )
     await session.generate_reply(instructions=opening_instruction)
+    if active_language == "en-ZA":
+        await _publish_language_applied(ctx, active_language, "initial")
 
-async def _switch_language(client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, target_language: str, session: AgentSession, lesson_context: dict | None = None) -> None:
+async def _switch_language(ctx: JobContext, client: httpx.AsyncClient, organisation_id: str, human_slug: str, persona_version_id: str | None, target_language: str, session: AgentSession, lesson_context: dict | None = None) -> None:
     persona_data = await _fetch_persona(client, organisation_id, human_slug, persona_version_id, target_language)
-    config = _persona_to_config(client, organisation_id, persona_data)
+    config = _persona_to_config(client, organisation_id, persona_data, target_language)
     if not config:
-        # Honest no-op: the requested language couldn't be resolved to a usable
-        # persona/voice — leave the session exactly as it was rather than
-        # switching to some other language without disclosure. studio-web's own
-        # switch-language endpoint is what tells the user this happened; this
-        # worker only ever acts on a language it could actually resolve.
-        return
-    instructions, _opening, voice, tools = config
+        # Do not silently ignore a valid selector change when the internal
+        # language-specific lookup is temporarily unavailable. Try the base
+        # Persona, then use the bounded fallback while still enforcing the
+        # selected language.
+        base_persona = await _fetch_persona(client, organisation_id, human_slug, persona_version_id)
+        config = _persona_to_config(client, organisation_id, base_persona, target_language)
+
+    if config:
+        instructions, _opening, voice, tools = config
+        persona_loaded = True
+    else:
+        instructions, _opening, voice, tools = FALLBACK_INSTRUCTIONS, FALLBACK_OPENING_INSTRUCTION, None, []
+        persona_loaded = False
+
     instructions, _opening = _ground_in_lesson(instructions, _opening, lesson_context)
+    instructions, _opening = _enforce_language(instructions, _opening, target_language)
     session.update_agent(VowHumansAgent(instructions, tools))
-    if isinstance(session.llm, openai.realtime.RealtimeModel):
+    if voice and isinstance(session.llm, openai.realtime.RealtimeModel):
         # OpenAI may retain a voice after audio has already been emitted in the
         # session. A voice-timbre update must never undo the more important live
         # language/instruction update, so keep the current voice if that optional
@@ -329,15 +430,12 @@ async def _switch_language(client: httpx.AsyncClient, organisation_id: str, huma
         except Exception as exc:  # noqa: BLE001 - provider capability varies by voice/session
             print(f"[realtime-agent] retained current voice during language switch: {exc}", flush=True)
 
-    language_name = LANGUAGE_NAMES.get(target_language, target_language)
-    await session.generate_reply(
-        instructions=(
-            f"The user selected {language_name} ({target_language}) from the conversation language control. "
-            f"Immediately confirm the change in one short sentence spoken only in {language_name}. "
-            f"After that confirmation, continue every response only in {language_name} until another explicit language change."
-        )
+    await session.say(LANGUAGE_CONFIRMATIONS[target_language])
+    await _publish_language_applied(ctx, target_language, "switch")
+    print(
+        f"[realtime-agent] active conversation language changed to {target_language} persona_loaded={persona_loaded}",
+        flush=True,
     )
-    print(f"[realtime-agent] active conversation language changed to {target_language}", flush=True)
 
 
 if __name__ == "__main__":

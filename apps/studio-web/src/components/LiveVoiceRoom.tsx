@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RemoteTrackPublication, Room, RoomEvent, Track } from "livekit-client";
+import { LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC, type LiveLanguageApplied } from "@/lib/liveLanguage";
 
 export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "disconnected";
 
@@ -12,7 +13,7 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void }) {
+export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady, onLanguageApplied }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void; onLanguageApplied?: (event: LiveLanguageApplied) => void }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [hasAvatarVideo, setHasAvatarVideo] = useState(false);
@@ -22,6 +23,7 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   const onFirstAudioRef = useRef(onFirstAudio);
   const onReconnectedRef = useRef(onReconnected);
   const onRoomReadyRef = useRef(onRoomReady);
+  const onLanguageAppliedRef = useRef(onLanguageApplied);
   const firstAudioFiredRef = useRef(false);
   // The voice and avatar agents publish the same speech on separate tracks. Keep
   // every raw publication so avatar mode can be exclusive even across reconnects
@@ -49,6 +51,10 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   useEffect(() => {
     onRoomReadyRef.current = onRoomReady;
   }, [onRoomReady]);
+
+  useEffect(() => {
+    onLanguageAppliedRef.current = onLanguageApplied;
+  }, [onLanguageApplied]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,9 +141,15 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
 
     room.on(RoomEvent.DataReceived, (payload) => {
       try {
-        const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string };
+        const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string; language_code?: string; phase?: string };
         if (message?.type === "vhm_avatar_ready") {
           setAvatarMode(true);
+        } else if (
+          message?.type === LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC
+          && typeof message.language_code === "string"
+          && (message.phase === "initial" || message.phase === "switch")
+        ) {
+          onLanguageAppliedRef.current?.({ languageCode: message.language_code, phase: message.phase });
         }
       } catch {
         // Not a message this component cares about.

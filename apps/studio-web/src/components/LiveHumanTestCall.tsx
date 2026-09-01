@@ -87,7 +87,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
       if (!room) throw new Error("The call is still connecting. Try the language again when Listening appears.");
       await publishLiveLanguageSwitch(room, res.data.resolved_language);
       setSelectedLanguage(res.data.resolved_language);
-      setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — using ${res.data.resolved_language} instead.` : `Language changed to ${res.data.resolved_language}. The avatar will confirm it aloud.`);
+      setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — applying ${res.data.resolved_language} instead.` : `Applying ${res.data.resolved_language} to the avatar…`);
     } catch (err) {
       setLanguageSwitchNote(err instanceof Error ? err.message : "Could not switch language.");
     } finally {
@@ -135,6 +135,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
     setCallSummary(null);
     setAgentJoined(false);
     setNoAgentTimeout(false);
+    setLanguageSwitchNote(null);
     try {
       const sessionRes = await fetch("/api/v1/live-sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ digital_human_id: human.id, requested_language: selectedLanguage }) });
       const sessionBody = await sessionRes.json().catch(() => ({}));
@@ -227,6 +228,11 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
               if (activeSessionId) reportEvent(activeSessionId, "reconnected", {});
             }}
             onRoomReady={(room) => { liveRoomRef.current = room; }}
+            onLanguageApplied={({ languageCode, phase }) => {
+              setSelectedLanguage(languageCode);
+              setLanguageSwitchNote(`${languageCode} is active in the avatar${phase === "initial" ? " for this call" : ""}.`);
+              if (activeSessionId) reportEvent(activeSessionId, "language_applied", { language_code: languageCode, phase });
+            }}
           />
           {noAgentTimeout && (
             <div className="live-call-diagnostic">
