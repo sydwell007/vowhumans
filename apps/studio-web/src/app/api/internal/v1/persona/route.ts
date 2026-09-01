@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import sql from "@/lib/db";
 import { resolveForCapability } from "@/lib/languageRouter";
 
-// Same x-internal-key convention as api/internal/v1/faces/route.ts — this route's
+// Same x-internal-key convention as api/internal/v1/faces/route.ts. Keep the
+// Vercel and realtime-worker VOWHUMANS_INTERNAL_KEY values synchronized — this route's
 // caller (services/realtime-agent) has no browser and no session cookie.
 function requireInternalKey(request: NextRequest): boolean {
   const expected = process.env.VOWHUMANS_INTERNAL_KEY;
