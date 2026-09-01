@@ -10,6 +10,11 @@ Upload this `php` folder and the sibling `sql` migrations to the relevant Afriho
 4. Set the approved CORS origins exactly; wildcards are not accepted.
 5. Verify `GET /api/v1/health`, then test identity revocation, tenant isolation, HMAC replay tolerance and session deletion on staging.
 
+For Photoreal Replica media on Afrihost Shared Hosting, follow
+`AFRIHOST-PRIVATE-STORAGE.md`. The private-storage endpoint is server-to-server,
+uses encrypted 2 MB parts for large capture videos, and never places plaintext
+biometric media in `public_html`.
+
 Example key scopes: `applications:read`, `digital-humans:read`, `personas:read`, `identities:read`, `sessions:create`, `sessions:read-own`, `sessions:delete-own`, `renders:create`, `renders:read`, `usage:read-own`. Administrative write scopes should use a separate key.
 
 Digital Workforce scopes are deliberately separated: `workforce:read`, `workforce:create`, `workforce:configure`, `workforce:test`, `workforce:approve`, `workforce:deploy`, `workforce:assign`, `workforce:review`, and `workforce:analytics`. Use separate creation, review, and deployment keys. The endpoint is `/api/v1/workforce/` with a `resource` query value such as `templates`, `colleagues`, `colleague`, `steps`, `tests`, `approvals`, `deployments`, `tasks`, `review-brief`, `reviews`, or `analytics`.

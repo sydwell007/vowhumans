@@ -3,10 +3,11 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PUT } from "./route";
 
-const { readSessionMock, sqlMock, storeCaptureMock } = vi.hoisted(() => ({
+const { readSessionMock, sqlMock, storeCaptureMock, storeCapturePartMock } = vi.hoisted(() => ({
   readSessionMock: vi.fn(),
   sqlMock: vi.fn(),
   storeCaptureMock: vi.fn(),
+  storeCapturePartMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -22,9 +23,13 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/objectStorage", () => ({
   createPrivateReplicaDownload: vi.fn(),
   createPrivateReplicaUpload: vi.fn(),
+  completePrivateReplicaCapture: vi.fn(),
   privateObjectStorageConfigured: vi.fn(() => true),
+  privateObjectStorageProvider: vi.fn(() => "afrihost"),
+  PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES: 2 * 1024 * 1024,
   privateReplicaObjectKey: vi.fn(),
   storePrivateReplicaCapture: storeCaptureMock,
+  storePrivateReplicaCapturePart: storeCapturePartMock,
   storePrivateReplicaManifest: vi.fn(),
   verifyPrivateReplicaObject: vi.fn(),
 }));
@@ -116,5 +121,33 @@ describe("Photoreal Replica capture upload boundary", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toMatchObject({ success: false, code: "UPLOAD_INTEGRITY_FAILED" });
     expect(storeCaptureMock).not.toHaveBeenCalled();
+  });
+
+  it("stores a validated complete-video part without accepting the whole video in one request", async () => {
+    const response = await PUT(
+      new NextRequest(`http://localhost/api/v1/replicas/${profileId}/segments/${segmentId}/content/parts/1`, {
+        method: "PUT",
+        headers: {
+          cookie: "vh_session=test-session",
+          "content-type": "video/webm",
+          "x-vowhumans-total-parts": "1",
+          "x-vowhumans-part-sha256": sha256,
+        },
+        body: bytes,
+      }),
+      context([profileId, "segments", segmentId, "content", "parts", "1"]),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: { id: segmentId, state: "part-stored", part_number: 1, total_parts: 1 },
+    });
+    expect(storeCapturePartMock).toHaveBeenCalledWith(expect.objectContaining({
+      objectKey: "private/capture.webm",
+      partNumber: 1,
+      totalParts: 1,
+      partSha256: sha256,
+    }));
   });
 });

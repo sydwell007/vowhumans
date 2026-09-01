@@ -2,6 +2,15 @@ import "server-only";
 
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+  AFRIHOST_UPLOAD_CHUNK_BYTES,
+  afrihostStorageConfiguration,
+  completeAfrihostObject,
+  createAfrihostDownload,
+  headAfrihostObject,
+  putAfrihostObject,
+  putAfrihostObjectPart,
+} from "./afrihostStorage";
 import { objectStorageEndpointUsable } from "./storageConfiguration";
 
 type StorageConfiguration = {
@@ -20,7 +29,11 @@ type ReplicaObjectInput = {
   extension: string;
 };
 
-function configuration(): StorageConfiguration | null {
+type PrivateStorageConfiguration =
+  | { provider: "s3"; value: StorageConfiguration }
+  | { provider: "afrihost"; value: NonNullable<ReturnType<typeof afrihostStorageConfiguration>> };
+
+function s3Configuration(): StorageConfiguration | null {
   const bucket = process.env.S3_BUCKET?.trim();
   const accessKeyId = process.env.S3_ACCESS_KEY?.trim();
   const secretAccessKey = process.env.S3_SECRET_KEY?.trim();
@@ -35,6 +48,17 @@ function configuration(): StorageConfiguration | null {
   };
 }
 
+function configuration(): PrivateStorageConfiguration | null {
+  const provider = process.env.PRIVATE_STORAGE_PROVIDER?.trim().toLowerCase() || "s3";
+  if (provider === "afrihost") {
+    const value = afrihostStorageConfiguration();
+    return value ? { provider, value } : null;
+  }
+  if (provider !== "s3") return null;
+  const value = s3Configuration();
+  return value ? { provider, value } : null;
+}
+
 function client(config: StorageConfiguration) {
   return new S3Client({
     region: config.region,
@@ -46,6 +70,12 @@ function client(config: StorageConfiguration) {
 
 export function privateObjectStorageConfigured(): boolean {
   return configuration() !== null;
+}
+
+export const PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES = AFRIHOST_UPLOAD_CHUNK_BYTES;
+
+export function privateObjectStorageProvider(): "s3" | "afrihost" | null {
+  return configuration()?.provider ?? null;
 }
 
 export function privateReplicaObjectKey(input: ReplicaObjectInput): string {
@@ -66,16 +96,17 @@ export async function createPrivateReplicaUpload(input: {
 }) {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
+  if (config.provider !== "s3") throw new Error("Afrihost private storage uses authenticated same-origin uploads.");
   const objectKey = privateReplicaObjectKey(input);
   const command = new PutObjectCommand({
-    Bucket: config.bucket,
+    Bucket: config.value.bucket,
     Key: objectKey,
     ContentType: input.contentType,
     Metadata: { sha256: input.sha256, classification: "biometric-capture" },
   });
   return {
     objectKey,
-    uploadUrl: await getSignedUrl(client(config), command, { expiresIn: 15 * 60 }),
+    uploadUrl: await getSignedUrl(client(config.value), command, { expiresIn: 15 * 60 }),
     requiredHeaders: {
       "content-type": input.contentType,
       "x-amz-meta-sha256": input.sha256,
@@ -93,8 +124,12 @@ export async function storePrivateReplicaCapture(input: {
 }) {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
-  await client(config).send(new PutObjectCommand({
-    Bucket: config.bucket,
+  if (config.provider === "afrihost") {
+    await putAfrihostObject({ ...input, classification: "biometric-capture" });
+    return;
+  }
+  await client(config.value).send(new PutObjectCommand({
+    Bucket: config.value.bucket,
     Key: input.objectKey,
     Body: input.body,
     ContentLength: input.body.byteLength,
@@ -103,10 +138,45 @@ export async function storePrivateReplicaCapture(input: {
   }));
 }
 
+export async function storePrivateReplicaCapturePart(input: {
+  objectKey: string;
+  contentType: string;
+  partNumber: number;
+  totalParts: number;
+  partSha256: string;
+  body: Uint8Array;
+}) {
+  const config = configuration();
+  if (!config) throw new Error("Private object storage is not configured.");
+  if (config.provider !== "afrihost") throw new Error("Chunked uploads are only used by Afrihost private storage.");
+  await putAfrihostObjectPart({ ...input, classification: "biometric-capture" });
+}
+
+export async function completePrivateReplicaCapture(input: {
+  objectKey: string;
+  contentType: string;
+  totalParts: number;
+  byteSize: number;
+  sha256: string;
+}) {
+  const config = configuration();
+  if (!config) throw new Error("Private object storage is not configured.");
+  if (config.provider !== "afrihost") return;
+  await completeAfrihostObject({ ...input, classification: "biometric-capture" });
+}
+
 export async function verifyPrivateReplicaObject(objectKey: string, expectedBytes: number, expectedSha256: string) {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
-  const result = await client(config).send(new HeadObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+  if (config.provider === "afrihost") {
+    const result = await headAfrihostObject(objectKey);
+    return {
+      byteSizeMatches: result.byte_size === expectedBytes,
+      sha256Matches: result.sha256 === expectedSha256,
+      contentType: result.content_type,
+    };
+  }
+  const result = await client(config.value).send(new HeadObjectCommand({ Bucket: config.value.bucket, Key: objectKey }));
   return {
     byteSizeMatches: result.ContentLength === expectedBytes,
     sha256Matches: result.Metadata?.sha256 === expectedSha256,
@@ -117,7 +187,8 @@ export async function verifyPrivateReplicaObject(objectKey: string, expectedByte
 export async function createPrivateReplicaDownload(objectKey: string) {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
-  return getSignedUrl(client(config), new GetObjectCommand({ Bucket: config.bucket, Key: objectKey }), { expiresIn: 15 * 60 });
+  if (config.provider === "afrihost") return createAfrihostDownload(objectKey);
+  return getSignedUrl(client(config.value), new GetObjectCommand({ Bucket: config.value.bucket, Key: objectKey }), { expiresIn: 15 * 60 });
 }
 
 export async function storePrivateReplicaManifest(input: {
@@ -130,10 +201,15 @@ export async function storePrivateReplicaManifest(input: {
   const config = configuration();
   if (!config) throw new Error("Private object storage is not configured.");
   const objectKey = `organisations/${input.organisationId}/replicas/${input.profileId}/versions/${input.version}/manifest.json`;
-  await client(config).send(new PutObjectCommand({
-    Bucket: config.bucket,
+  const body = new TextEncoder().encode(JSON.stringify(input.manifest));
+  if (config.provider === "afrihost") {
+    await putAfrihostObject({ objectKey, body, contentType: "application/json", sha256: input.sha256, classification: "biometric-derived" });
+    return objectKey;
+  }
+  await client(config.value).send(new PutObjectCommand({
+    Bucket: config.value.bucket,
     Key: objectKey,
-    Body: JSON.stringify(input.manifest),
+    Body: body,
     ContentType: "application/json",
     Metadata: { sha256: input.sha256, classification: "biometric-derived" },
   }));

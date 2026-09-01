@@ -4,8 +4,8 @@
 
 1. Back up Neon and apply `packages/database/migrations/021_photoreal_replicas.sql` on staging first. Production builds run `scripts/migrate-replicas.mjs` under an advisory lock and verify all eight tables plus the no-`bytea` media boundary.
 2. For the Afrihost adapter, upload the new PHP endpoint and import `public/sql/007_photoreal_replicas.sql`. Never upload SQL into a publicly accessible document path after import.
-3. Configure a private S3-compatible bucket. Block public access; allow signed browser PUT from `https://vowhumans.com`; enable encryption, lifecycle retention and access logs.
-4. Set `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` and `S3_REGION` in the Vercel server environment.
+3. Configure one private-media provider. For managed S3, block public access, allow signed browser PUT from `https://vowhumans.com`, and enable encryption, lifecycle retention and access logs. For the current Afrihost Shared Hosting account, follow `public/php/AFRIHOST-PRIVATE-STORAGE.md`; it uses private AES-256-GCM files outside `public_html` and authenticated 2 MB chunks.
+4. Set `PRIVATE_STORAGE_PROVIDER=s3` plus the five `S3_*` values, or set `PRIVATE_STORAGE_PROVIDER=afrihost`, `AFRIHOST_PRIVATE_STORAGE_URL` and `AFRIHOST_PRIVATE_STORAGE_SECRET` in the Vercel server environment. Never configure both providers as active.
 5. Deploy `services/replica-processor` from `render.yaml`, set the same `VOWHUMANS_INTERNAL_KEY`, and verify `/health` reports `stores_raw_media: false`.
 6. Set `REPLICA_PROCESSOR_URL` in Vercel. Keep every replica feature flag false.
 7. Build a new RunPod image from `services/avatar-worker/Dockerfile`. The COPY line must include `video_replica_engine.py`, `renderer_contract.py`, `motion_director.py` and `stream_buffer.py` as well as the existing gesture/blink files.

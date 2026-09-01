@@ -374,12 +374,32 @@ function CompletePerformanceUpload({ profileId, storageConfigured, mapped, onMap
       const contentType = file.type.split(";")[0] || (file.name.toLowerCase().endsWith(".mov") ? "video/quicktime" : file.name.toLowerCase().endsWith(".webm") ? "video/webm" : "video/mp4");
       const sha256 = await sha256Hex(file);
       setBusyLabel("Creating secure upload…");
-      const intent = await api<{ segment_id: string; upload_url: string; required_headers: Record<string, string> }>(`/api/v1/replicas/${profileId}/upload-intents`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ segment_type: "calibration", content_type: contentType, file_name: file.name, byte_size: file.size, sha256 }) });
-      setBusyLabel("Uploading encrypted source…");
-      const uploadResponse = await fetch(intent.upload_url, { method: "PUT", headers: intent.required_headers, body: file });
-      if (!uploadResponse.ok) throw new Error("The private complete-video upload failed.");
+      const intent = await api<{ segment_id: string; upload_url: string; required_headers: Record<string, string>; upload_transport: "presigned-put" | "same-origin-chunked"; chunk_size_bytes?: number; total_parts?: number }>(`/api/v1/replicas/${profileId}/upload-intents`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ segment_type: "calibration", content_type: contentType, file_name: file.name, byte_size: file.size, sha256, transport: "same-origin-chunked" }) });
+      const chunked = intent.upload_transport === "same-origin-chunked";
+      if (chunked) {
+        const chunkSize = intent.chunk_size_bytes ?? 2 * 1024 * 1024;
+        const totalParts = intent.total_parts ?? Math.ceil(file.size / chunkSize);
+        for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+          setBusyLabel(`Encrypting private source · part ${partNumber} of ${totalParts}`);
+          const part = file.slice((partNumber - 1) * chunkSize, Math.min(file.size, partNumber * chunkSize), contentType);
+          const partSha256 = await sha256Hex(part);
+          const uploadResponse = await fetch(`${intent.upload_url}/parts/${partNumber}`, {
+            method: "PUT",
+            headers: { ...intent.required_headers, "x-vowhumans-total-parts": String(totalParts), "x-vowhumans-part-sha256": partSha256 },
+            body: part,
+          });
+          if (!uploadResponse.ok) {
+            const payload = await uploadResponse.json().catch(() => null) as { message?: string } | null;
+            throw new Error(payload?.message || `The private upload failed at part ${partNumber} of ${totalParts}.`);
+          }
+        }
+      } else {
+        setBusyLabel("Uploading encrypted source…");
+        const uploadResponse = await fetch(intent.upload_url, { method: "PUT", headers: intent.required_headers, body: file });
+        if (!uploadResponse.ok) throw new Error("The private complete-video upload failed.");
+      }
       setBusyLabel("Verifying upload integrity…");
-      await api(`/api/v1/replicas/${profileId}/segments/${intent.segment_id}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duration_ms: durationMs, width: dimensions.width, height: dimensions.height, starts_neutral: false, ends_neutral: false }) });
+      await api(`/api/v1/replicas/${profileId}/segments/${intent.segment_id}/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ duration_ms: durationMs, width: dimensions.width, height: dimensions.height, starts_neutral: false, ends_neutral: false, chunked_upload: chunked, total_parts: intent.total_parts }) });
       setBusyLabel("Mapping performance chapters…");
       await api(`/api/v1/replicas/${profileId}/complete-video`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source_segment_id: intent.segment_id, source_duration_ms: durationMs, chapters: validation.chapters, authorised_capture_confirmed: authorised, neutral_boundaries_confirmed: neutral }) });
       await onMapped();

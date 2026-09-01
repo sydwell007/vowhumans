@@ -5,9 +5,13 @@ import sql, { databaseConfigured } from "@/lib/db";
 import {
   createPrivateReplicaUpload,
   createPrivateReplicaDownload,
+  completePrivateReplicaCapture,
   privateReplicaObjectKey,
   privateObjectStorageConfigured,
+  privateObjectStorageProvider,
+  PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES,
   storePrivateReplicaCapture,
+  storePrivateReplicaCapturePart,
   storePrivateReplicaManifest,
   verifyPrivateReplicaObject,
 } from "@/lib/objectStorage";
@@ -105,7 +109,7 @@ function databaseFailure(error: unknown) {
 function storageFailure(error: unknown) {
   console.error("[replica-capture-upload]", error);
   return problem(
-    "Private storage could not accept this capture. Verify the production S3 endpoint, bucket and credentials, then retry.",
+    "Private storage could not accept this capture. Verify the active Afrihost or S3 storage configuration, then retry.",
     "OBJECT_STORAGE_UPLOAD_FAILED",
     502,
   );
@@ -279,13 +283,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const user = await authenticated(request);
   if (!user) return problem("Sign in to manage photoreal replicas.", "UNAUTHORISED", 401);
   const { path = [] } = await context.params;
-  if (path.length !== 4 || path[1] !== "segments" || path[3] !== "content") {
+  const guidedUpload = path.length === 4 && path[1] === "segments" && path[3] === "content";
+  const chunkedUpload = path.length === 6 && path[1] === "segments" && path[3] === "content" && path[4] === "parts";
+  if (!guidedUpload && !chunkedUpload) {
     return problem("Replica route not found.", "NOT_FOUND", 404);
   }
 
   const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_GUIDED_CAPTURE_BYTES) {
-    return problem("This guided capture is too large. Record a clip of 12 seconds or less and retry.", "CAPTURE_TOO_LARGE", 413);
+  const requestLimit = chunkedUpload ? PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES : MAX_GUIDED_CAPTURE_BYTES;
+  if (Number.isFinite(declaredLength) && declaredLength > requestLimit) {
+    return problem(chunkedUpload ? "This private upload part is too large." : "This guided capture is too large. Record a clip of 12 seconds or less and retry.", "CAPTURE_TOO_LARGE", 413);
   }
 
   const profileId = path[0];
@@ -302,17 +309,20 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     `;
     const segment = rows[0];
     if (!segment) return problem("Pending segment not found.", "NOT_FOUND", 404);
-    if (Number(segment.byte_size) > MAX_GUIDED_CAPTURE_BYTES) {
+    if (guidedUpload && Number(segment.byte_size) > MAX_GUIDED_CAPTURE_BYTES) {
       return problem("This endpoint accepts guided capture clips only.", "CAPTURE_TOO_LARGE", 413);
     }
 
     const bytes = new Uint8Array(await request.arrayBuffer());
-    if (bytes.byteLength !== Number(segment.byte_size)) {
+    if (bytes.byteLength < 1 || bytes.byteLength > requestLimit) {
+      return problem("This private upload part has an invalid size.", "CAPTURE_TOO_LARGE", 413);
+    }
+    if (guidedUpload && bytes.byteLength !== Number(segment.byte_size)) {
       return problem("Capture size changed during upload. Record the clip again.", "UPLOAD_SIZE_MISMATCH", 409);
     }
     const actualSha256 = createHash("sha256").update(bytes).digest("hex");
     const declaredSha256 = request.headers.get("x-vowhumans-sha256")?.toLowerCase();
-    if (actualSha256 !== segment.sha256 || (declaredSha256 && declaredSha256 !== segment.sha256)) {
+    if (guidedUpload && (actualSha256 !== segment.sha256 || (declaredSha256 && declaredSha256 !== segment.sha256))) {
       return problem("Capture integrity verification failed. Record the clip again.", "UPLOAD_INTEGRITY_FAILED", 409);
     }
     const contentType = request.headers.get("content-type")?.split(";")[0] ?? "";
@@ -321,12 +331,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     try {
-      await storePrivateReplicaCapture({
-        objectKey: segment.object_key,
-        contentType,
-        sha256: segment.sha256,
-        body: bytes,
-      });
+      if (chunkedUpload) {
+        const partNumber = Number(path[5]);
+        const totalParts = Number(request.headers.get("x-vowhumans-total-parts"));
+        const partSha256 = request.headers.get("x-vowhumans-part-sha256")?.toLowerCase() ?? "";
+        const expectedTotalParts = Math.ceil(Number(segment.byte_size) / PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES);
+        const expectedPartBytes = Math.min(PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES, Number(segment.byte_size) - (partNumber - 1) * PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES);
+        if (!Number.isSafeInteger(partNumber) || partNumber < 1 || totalParts !== expectedTotalParts || partNumber > totalParts || bytes.byteLength !== expectedPartBytes) {
+          return problem("Private upload part order or size did not match the upload intent.", "UPLOAD_PART_MISMATCH", 409);
+        }
+        if (!/^[a-f0-9]{64}$/.test(partSha256) || actualSha256 !== partSha256) {
+          return problem("Private upload part integrity verification failed.", "UPLOAD_INTEGRITY_FAILED", 409);
+        }
+        await storePrivateReplicaCapturePart({ objectKey: segment.object_key, contentType, partNumber, totalParts, partSha256, body: bytes });
+        return ok({ id: segmentId, state: "part-stored", part_number: partNumber, total_parts: totalParts, integrity_verified: true });
+      }
+      await storePrivateReplicaCapture({ objectKey: segment.object_key, contentType, sha256: segment.sha256, body: bytes });
     } catch (error) {
       return storageFailure(error);
     }
@@ -393,12 +413,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
       if (segmentType === "gesture" && (!gestureKey || !GESTURES.has(gestureKey))) return problem("A supported gesture key is required.", "VALIDATION_ERROR", 422);
       const sameOriginUpload = body.transport === "same-origin";
+      const chunkedUpload = body.transport === "same-origin-chunked" && privateObjectStorageProvider() === "afrihost";
       if (sameOriginUpload && byteSize > MAX_GUIDED_CAPTURE_BYTES) {
         return problem("Guided captures must be 12 seconds or less. Use the complete-video uploader for larger files.", "CAPTURE_TOO_LARGE", 413);
       }
       const segmentId = randomUUID();
       const extension = safeCaptureExtension(fileName, contentType);
-      const upload = sameOriginUpload
+      const upload = sameOriginUpload || chunkedUpload
         ? {
             objectKey: privateReplicaObjectKey({ organisationId: user.organisationId, profileId, captureSessionId: profile.capture_session_id, segmentId, extension }),
             uploadUrl: `/api/v1/replicas/${profileId}/segments/${segmentId}/content`,
@@ -420,21 +441,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
         upload_url: upload.uploadUrl,
         required_headers: upload.requiredHeaders,
         expires_in_seconds: upload.expiresInSeconds,
-        upload_transport: sameOriginUpload ? "same-origin" : "presigned-put",
+        upload_transport: sameOriginUpload ? "same-origin" : chunkedUpload ? "same-origin-chunked" : "presigned-put",
+        ...(chunkedUpload ? { chunk_size_bytes: PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES, total_parts: Math.ceil(byteSize / PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES) } : {}),
       }, 201);
     }
 
     if (action === "segments" && path.length === 4 && path[3] === "complete") {
       const segmentId = path[2];
-      const rows = await sql<{ object_key: string; byte_size: number; sha256: string }[]>`
-        SELECT rseg.object_key, rseg.byte_size, rseg.sha256
+      const rows = await sql<{ object_key: string; byte_size: number; sha256: string; media_type: string }[]>`
+        SELECT rseg.object_key, rseg.byte_size, rseg.sha256, rseg.media_type
         FROM replica_capture_segments rseg JOIN replica_capture_sessions rcs ON rcs.id=rseg.capture_session_id
         WHERE rseg.id=${segmentId} AND rseg.organisation_id=${user.organisationId} AND rcs.replica_profile_id=${profileId}
           AND rseg.state='upload_pending' LIMIT 1
       `;
       const segment = rows[0];
       if (!segment) return problem("Pending segment not found.", "NOT_FOUND", 404);
-      const verified = await verifyPrivateReplicaObject(segment.object_key, Number(segment.byte_size), segment.sha256);
+      let verified;
+      try {
+        if (body.chunked_upload === true) {
+          const totalParts = Number(body.total_parts);
+          const expectedTotalParts = Math.ceil(Number(segment.byte_size) / PRIVATE_REPLICA_UPLOAD_CHUNK_BYTES);
+          if (!Number.isSafeInteger(totalParts) || totalParts !== expectedTotalParts) return problem("Private upload part count did not match the upload intent.", "UPLOAD_PART_MISMATCH", 409);
+          await completePrivateReplicaCapture({ objectKey: segment.object_key, contentType: segment.media_type, totalParts, byteSize: Number(segment.byte_size), sha256: segment.sha256 });
+        }
+        verified = await verifyPrivateReplicaObject(segment.object_key, Number(segment.byte_size), segment.sha256);
+      } catch (error) {
+        return storageFailure(error);
+      }
       if (!verified.byteSizeMatches || !verified.sha256Matches) return problem("Uploaded object did not match its declared size or SHA-256 metadata.", "UPLOAD_INTEGRITY_FAILED", 409);
       const durationMs = Number(body.duration_ms);
       const width = Number(body.width);
