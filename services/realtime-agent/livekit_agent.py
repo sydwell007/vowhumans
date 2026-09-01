@@ -34,6 +34,7 @@ AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
 AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 LANGUAGE_SWITCH_TOPIC = "vhm_language_switch_request"
 LANGUAGE_SWITCH_APPLIED_TOPIC = "vhm_language_switch_applied"
+VOICE_ERROR_TOPIC = "vhm_voice_error"
 
 LANGUAGE_NAMES = {
     "en-ZA": "English (South Africa)",
@@ -129,6 +130,39 @@ async def _publish_voice_state(ctx: JobContext, state: str) -> None:
         )
     except Exception as exc:  # noqa: BLE001 - room teardown can race the final state event
         print(f"[realtime-agent] voice state publish skipped: {exc}", flush=True)
+
+
+def _safe_voice_error(error_event) -> tuple[str, str]:
+    """Return a browser-safe error code and message without leaking provider data."""
+    error = getattr(error_event, "error", error_event)
+    nested = getattr(error, "error", None)
+    detail = f"{error} {nested or ''}".lower()
+    if any(marker in detail for marker in ("credit_balance_exhausted", "insufficient_quota", "no credits remaining", "billing_hard_limit")):
+        return (
+            "provider_quota_exhausted",
+            "Live voice is temporarily unavailable because the speech provider has no available API credit.",
+        )
+    if any(marker in detail for marker in ("invalid_api_key", "authentication", "unauthorized", "401")):
+        return (
+            "provider_authentication_failed",
+            "Live voice is unavailable because the speech provider credentials were rejected.",
+        )
+    return (
+        "provider_unavailable",
+        "Live voice stopped because the speech provider became unavailable. Please end the call and try again.",
+    )
+
+
+async def _publish_voice_error(ctx: JobContext, error_event) -> None:
+    code, message = _safe_voice_error(error_event)
+    try:
+        await ctx.room.local_participant.publish_data(
+            json.dumps({"type": VOICE_ERROR_TOPIC, "code": code, "message": message}),
+            reliable=True,
+            topic=VOICE_ERROR_TOPIC,
+        )
+    except Exception as exc:  # noqa: BLE001 - the provider can fail during room teardown
+        print(f"[realtime-agent] voice error publish skipped: {exc}", flush=True)
 
 
 async def _publish_language_applied(ctx: JobContext, language_code: str, phase: str) -> None:
@@ -357,7 +391,11 @@ async def entrypoint(ctx: JobContext):
     def _on_agent_state_changed(event) -> None:
         asyncio.create_task(_publish_voice_state(ctx, event.new_state))
 
+    def _on_session_error(event) -> None:
+        asyncio.create_task(_publish_voice_error(ctx, event))
+
     session.on("agent_state_changed", _on_agent_state_changed)
+    session.on("error", _on_session_error)
     await session.start(room=ctx.room, agent=VowHumansAgent(persona_instructions, tools))
 
     # Install the switch listener as soon as the session is live, before waiting

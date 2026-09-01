@@ -2361,6 +2361,7 @@ function LiveSessions() {
   const [callSummary, setCallSummary] = useState<{ duration: string; reconnected: boolean } | null>(null);
   const [agentJoined, setAgentJoined] = useState(false);
   const [noAgentTimeout, setNoAgentTimeout] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
 
   async function refresh() {
     const [sessionsRes, humansRes, assignRes, faceAssignRes] = await Promise.all([
@@ -2409,10 +2410,10 @@ function LiveSessions() {
   // sign of that; the call just sits on "Listening" forever. Surface it instead
   // of leaving that indistinguishable from a real, working, quiet room.
   useEffect(() => {
-    if (callStage !== "live" || liveStatus !== "connected" || agentJoined) return;
+    if (callStage !== "live" || liveStatus !== "connected" || agentJoined || providerError) return;
     const timeout = window.setTimeout(() => setNoAgentTimeout(true), 12000);
     return () => window.clearTimeout(timeout);
-  }, [callStage, liveStatus, agentJoined]);
+  }, [callStage, liveStatus, agentJoined, providerError]);
 
   async function reportEvent(sessionId: string, eventType: string, payload: Record<string, unknown>) {
     await fetch(`/api/v1/live-sessions/${sessionId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_type: eventType, payload }) }).catch(() => {});
@@ -2457,6 +2458,7 @@ function LiveSessions() {
     setCallSummary(null);
     setAgentJoined(false);
     setNoAgentTimeout(false);
+    setProviderError(null);
     setLanguageSwitchNote(null);
     const callLanguage = languageOverridden && selectedLanguage ? selectedLanguage : human.defaultLanguageCode;
     setSelectedLanguage(callLanguage);
@@ -2508,6 +2510,7 @@ function LiveSessions() {
     setLiveStatus(null);
     setSpeaking(false);
     setCallSummary(null);
+    setProviderError(null);
     setSelectedLanguage("");
     setLanguageOverridden(false);
   }
@@ -2515,6 +2518,7 @@ function LiveSessions() {
   const stateChip = callStage !== "live" ? null
     : liveStatus === "error" ? { label: "Connection failed", tone: "danger" }
     : liveStatus !== "connected" ? { label: "Connecting…", tone: "warn" }
+    : providerError ? { label: "Voice unavailable", tone: "danger" }
     : noAgentTimeout ? { label: "No agent joined", tone: "danger" }
     : speaking ? { label: "Speaking", tone: "good" }
     : { label: "Listening", tone: "good" };
@@ -2598,7 +2602,19 @@ function LiveSessions() {
                   setLanguageSwitchNote(`${languageCode} is active in the avatar${phase === "initial" ? " for this call" : ""}.`);
                   if (activeSessionId) reportEvent(activeSessionId, "language_applied", { language_code: languageCode, phase });
                 }}
+                onVoiceError={(message) => {
+                  setProviderError(message);
+                  setSpeaking(false);
+                  setLanguageSwitchNote(null);
+                  if (activeSessionId) reportEvent(activeSessionId, "voice_provider_error", { message });
+                }}
               />
+              {providerError && (
+                <div className="live-call-diagnostic">
+                  <CircleAlert size={15} />
+                  <span>{providerError} End this call and try again after the provider is restored.</span>
+                </div>
+              )}
               {noAgentTimeout && (
                 <div className="live-call-diagnostic">
                   <CircleAlert size={15} />
@@ -2611,7 +2627,7 @@ function LiveSessions() {
               </div>
               <div className="live-call-controls">
                 <button aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} className={muted ? "muted" : ""} onClick={() => setMuted((v) => !v)}>{muted ? <MicOff size={18} /> : <Mic size={18} />}</button>
-                <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage || liveStatus !== "connected" || !agentJoined} />
+                <LanguageSelect value={selectedLanguage} onChange={switchLanguage} capability="realtime" scope="usable-only" disabled={switchingLanguage || liveStatus !== "connected" || !agentJoined || Boolean(providerError)} />
                 <button className="end-call" onClick={endTestCall}><PhoneOff size={16} />End call</button>
               </div>
               {languageSwitchNote && <p className="panel-note">{languageSwitchNote}</p>}

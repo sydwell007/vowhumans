@@ -13,7 +13,7 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady, onLanguageApplied }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void; onLanguageApplied?: (event: LiveLanguageApplied) => void }) {
+export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onFirstAudio, onReconnected, onRoomReady, onLanguageApplied, onVoiceError }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void; onLanguageApplied?: (event: LiveLanguageApplied) => void; onVoiceError?: (message: string, code?: string) => void }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [hasAvatarVideo, setHasAvatarVideo] = useState(false);
@@ -24,6 +24,7 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   const onReconnectedRef = useRef(onReconnected);
   const onRoomReadyRef = useRef(onRoomReady);
   const onLanguageAppliedRef = useRef(onLanguageApplied);
+  const onVoiceErrorRef = useRef(onVoiceError);
   const firstAudioFiredRef = useRef(false);
   // The voice and avatar agents publish the same speech on separate tracks. Keep
   // every raw publication so avatar mode can be exclusive even across reconnects
@@ -55,6 +56,10 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   useEffect(() => {
     onLanguageAppliedRef.current = onLanguageApplied;
   }, [onLanguageApplied]);
+
+  useEffect(() => {
+    onVoiceErrorRef.current = onVoiceError;
+  }, [onVoiceError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,13 +101,6 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
             return;
           }
         }
-        // First remote audio actually attached — a more accurate "time to first
-        // audio" than the room's own "connected" status, which only means the
-        // WebRTC handshake finished, not that the agent's voice has arrived yet.
-        if (!firstAudioFiredRef.current) {
-          firstAudioFiredRef.current = true;
-          onFirstAudioRef.current?.();
-        }
         const element = track.attach() as HTMLMediaElement;
         element.autoplay = true;
         if (!isAvatarTrack) {
@@ -141,7 +139,7 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
 
     room.on(RoomEvent.DataReceived, (payload) => {
       try {
-        const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string; language_code?: string; phase?: string };
+        const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string; language_code?: string; phase?: string; code?: string; message?: string };
         if (message?.type === "vhm_avatar_ready") {
           setAvatarMode(true);
         } else if (
@@ -150,6 +148,8 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
           && (message.phase === "initial" || message.phase === "switch")
         ) {
           onLanguageAppliedRef.current?.({ languageCode: message.language_code, phase: message.phase });
+        } else if (message?.type === "vhm_voice_error" && typeof message.message === "string") {
+          onVoiceErrorRef.current?.(message.message, message.code);
         }
       } catch {
         // Not a message this component cares about.
@@ -168,6 +168,12 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
       if (cancelled) return;
       const agentSpeaking = speakers.some((speaker) => speaker.sid !== room.localParticipant.sid);
       onSpeakingChangeRef.current?.(agentSpeaking);
+      // A subscribed track can remain completely silent when the provider
+      // fails. Count first audio only after LiveKit detects remote speech.
+      if (agentSpeaking && !firstAudioFiredRef.current) {
+        firstAudioFiredRef.current = true;
+        onFirstAudioRef.current?.();
+      }
     });
 
     notify("connecting");
