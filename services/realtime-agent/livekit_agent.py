@@ -87,6 +87,26 @@ def _enforce_language(instructions: str, opening_instruction: str, language_code
     return f"{instructions}\n\n{policy}", enforced_opening
 
 
+async def _confirm_language(session: AgentSession, language_code: str) -> None:
+    """Generate the acknowledgement through the active Realtime model.
+
+    OpenAI's Realtime session used by this worker does not expose LiveKit's
+    ``say`` capability unless a separate TTS model is configured. Keeping this
+    on ``generate_reply`` uses the same supported speech path as every normal
+    avatar turn while the exact-language text and agent policy constrain the
+    result.
+    """
+    language_name = LANGUAGE_NAMES[language_code]
+    confirmation = LANGUAGE_CONFIRMATIONS[language_code]
+    await session.generate_reply(
+        instructions=(
+            f"Speak exactly the text between <confirmation> tags in {language_name} ({language_code}) and say nothing else. "
+            "Do not translate, paraphrase, introduce, or explain it. "
+            f"<confirmation>{confirmation}</confirmation>"
+        )
+    )
+
+
 class VowHumansAgent(Agent):
     def __init__(self, instructions: str, tools: list | None = None):
         disclosure = "You are an AI-generated digital human. Never imply that you are a real person. "
@@ -389,7 +409,7 @@ async def entrypoint(ctx: JobContext):
     if active_language and active_language != "en-ZA":
         # A literal sentence provides immediate audible proof and primes the
         # Realtime conversation with real text in the selected language.
-        await session.say(LANGUAGE_CONFIRMATIONS[active_language])
+        await _confirm_language(session, active_language)
         await _publish_language_applied(ctx, active_language, "initial")
         opening_instruction = (
             "The selected-language confirmation has already been spoken. Do not repeat that confirmation. "
@@ -430,7 +450,7 @@ async def _switch_language(ctx: JobContext, client: httpx.AsyncClient, organisat
         except Exception as exc:  # noqa: BLE001 - provider capability varies by voice/session
             print(f"[realtime-agent] retained current voice during language switch: {exc}", flush=True)
 
-    await session.say(LANGUAGE_CONFIRMATIONS[target_language])
+    await _confirm_language(session, target_language)
     await _publish_language_applied(ctx, target_language, "switch")
     print(
         f"[realtime-agent] active conversation language changed to {target_language} persona_loaded={persona_loaded}",
