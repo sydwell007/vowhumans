@@ -38,6 +38,13 @@ store, not as an S3-compatible service and not as a GPU processor.
 
    Use the first output as `secret` and the second as `encryption_key`. Never
    paste either value into source control or support messages.
+
+   Existing VowHumans installations whose `config.php` predates this block are
+   also supported: `storage-bootstrap.php` uses the existing 32+ character
+   `platform.service_api_key` as the authenticated shared secret and derives a
+   stable, purpose-separated 32-byte encryption key. This compatibility path
+   creates `$HOME/vowhumans-private` outside the web root. An explicit
+   `private_storage` block remains preferred and always takes precedence.
 7. Keep `max_chunk_bytes` at `3145728`. The application sends 2 MB chunks, so
    the PHP `post_max_size` and the hosting request-body limit must allow at
    least 3 MB. A value of 8 MB leaves safe overhead.

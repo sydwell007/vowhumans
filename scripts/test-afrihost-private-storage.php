@@ -24,6 +24,24 @@ function test_remove_directory(string $path): void {
 
 $requestId = 'private-storage-test';
 $root = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'vhm-storage-test-' . bin2hex(random_bytes(8));
+$legacySecret = str_repeat('l', 48);
+$legacySettings = vhm_private_storage_settings([
+    'platform'=>[
+        'base_url'=>'https://api.vowhumans.com',
+        'service_api_key'=>$legacySecret,
+    ],
+]);
+test_assert($legacySettings['secret'] === $legacySecret, 'Legacy configuration did not reuse the existing shared server secret.');
+test_assert(
+    is_string(base64_decode((string)$legacySettings['encryption_key'], true))
+        && strlen((string)base64_decode((string)$legacySettings['encryption_key'], true)) === 32,
+    'Legacy configuration did not derive a valid 32-byte encryption key.',
+);
+test_assert(str_ends_with((string)$legacySettings['root'], '/vowhumans-private'), 'Legacy configuration did not resolve a private storage root.');
+
+$explicitSettings = ['root'=>$root, 'secret'=>str_repeat('e', 48)];
+test_assert(vhm_private_storage_settings(['private_storage'=>$explicitSettings]) === $explicitSettings, 'Explicit private storage configuration was not preserved.');
+
 $storage = vhm_private_storage_config([
     'root'=>$root,
     'secret'=>str_repeat('s', 48),

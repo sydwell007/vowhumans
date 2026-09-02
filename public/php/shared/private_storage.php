@@ -7,6 +7,41 @@ function vhm_storage_header(string $name): string {
     return is_string($value) ? trim($value) : '';
 }
 
+/**
+ * Resolve the storage block from the live configuration.
+ *
+ * Older VowHumans Afrihost installations predate `private_storage` but already
+ * share a strong platform service key with Vercel. Keep those installations
+ * deployable by deriving a purpose-separated encryption key from that existing
+ * secret. An explicit private_storage block always wins.
+ */
+function vhm_private_storage_settings(array $config): array {
+    $configured = $config['private_storage'] ?? null;
+    if (is_array($configured) && $configured !== []) return $configured;
+
+    $platform = $config['platform'] ?? null;
+    $sharedSecret = is_array($platform) && is_string($platform['service_api_key'] ?? null)
+        ? trim((string)$platform['service_api_key'])
+        : '';
+    if (strlen($sharedSecret) < 32) return [];
+
+    $baseUrl = is_array($platform) && is_string($platform['base_url'] ?? null)
+        ? rtrim((string)$platform['base_url'], '/')
+        : 'https://api.vowhumans.com';
+    $home = getenv('HOME');
+    $storageHome = is_string($home) && str_starts_with($home, '/')
+        ? rtrim($home, '/\\')
+        : '/home/vowhumg0z5c9';
+
+    return [
+        'root' => $storageHome . '/vowhumans-private',
+        'public_url' => $baseUrl . '/api/v1/replica-storage/',
+        'secret' => $sharedSecret,
+        'encryption_key' => base64_encode(hash_hmac('sha256', 'vowhumans-private-storage-encryption-v1', $sharedSecret, true)),
+        'max_chunk_bytes' => 3145728,
+    ];
+}
+
 function vhm_private_storage_config(array $input, string $requestId): array {
     $root = isset($input['root']) && is_string($input['root']) ? rtrim($input['root'], '/\\') : '';
     $secret = isset($input['secret']) && is_string($input['secret']) ? $input['secret'] : '';

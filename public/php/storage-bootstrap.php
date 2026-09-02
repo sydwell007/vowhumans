@@ -33,4 +33,4 @@ set_exception_handler(static function (Throwable $error) use ($requestId): never
     vhm_error('Private storage temporarily unavailable', 'STORAGE_INTERNAL_ERROR', 500, $requestId);
 });
 
-$storage = vhm_private_storage_config($config['private_storage'] ?? [], $requestId);
+$storage = vhm_private_storage_config(vhm_private_storage_settings($config), $requestId);
