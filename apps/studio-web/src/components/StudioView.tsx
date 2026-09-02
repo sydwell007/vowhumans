@@ -2610,6 +2610,11 @@ function LiveSessions() {
                 }}
                 onRoomReady={(room) => { liveRoomRef.current = room; }}
                 onLanguageApplied={({ languageCode, phase }) => {
+                  // The worker emits this only after selected-language speech
+                  // completes, so it is a stronger readiness signal than
+                  // LiveKit's optional active-speaker classification.
+                  setAgentJoined(true);
+                  setNoAgentTimeout(false);
                   setSelectedLanguage(languageCode);
                   setLanguageSwitchNote(`${languageCode} is active in the avatar${phase === "initial" ? " for this call" : ""}.`);
                   if (activeSessionId) reportEvent(activeSessionId, "language_applied", { language_code: languageCode, phase });

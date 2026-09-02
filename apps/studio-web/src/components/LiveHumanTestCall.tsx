@@ -240,6 +240,11 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
             }}
             onRoomReady={(room) => { liveRoomRef.current = room; }}
             onLanguageApplied={({ languageCode, phase }) => {
+              // The worker emits this only after the selected-language speech
+              // has completed. Treat it as authoritative readiness even when
+              // LiveKit does not classify bot audio as an active speaker.
+              setAgentJoined(true);
+              setNoAgentTimeout(false);
               setSelectedLanguage(languageCode);
               setLanguageSwitchNote(`${languageCode} is active in the avatar${phase === "initial" ? " for this call" : ""}.`);
               if (activeSessionId) reportEvent(activeSessionId, "language_applied", { language_code: languageCode, phase });
