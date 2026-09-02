@@ -33,4 +33,32 @@ set_exception_handler(static function (Throwable $error) use ($requestId): never
     vhm_error('Private storage temporarily unavailable', 'STORAGE_INTERNAL_ERROR', 500, $requestId);
 });
 
-$storage = vhm_private_storage_config(vhm_private_storage_settings($config), $requestId);
+// Keep storage bootstrapping compatible with a rolling cPanel upload. The
+// shared helper and this bootstrap can briefly be at different revisions when
+// files are uploaded one at a time; do not turn that harmless deployment
+// window into a generic 500 response.
+if (function_exists('vhm_private_storage_settings')) {
+    $storageSettings = vhm_private_storage_settings($config);
+} else {
+    $storageSettings = $config['private_storage'] ?? [];
+    if (!is_array($storageSettings) || $storageSettings === []) {
+        $platform = $config['platform'] ?? [];
+        $sharedSecret = is_array($platform) && is_string($platform['service_api_key'] ?? null)
+            ? trim((string)$platform['service_api_key'])
+            : '';
+        $baseUrl = is_array($platform) && is_string($platform['base_url'] ?? null)
+            ? rtrim((string)$platform['base_url'], '/')
+            : 'https://api.vowhumans.com';
+        if (strlen($sharedSecret) >= 32) {
+            $storageSettings = [
+                'root' => '/home/vowhumg0z5c9/vowhumans-private',
+                'public_url' => $baseUrl . '/api/v1/replica-storage/',
+                'secret' => $sharedSecret,
+                'encryption_key' => base64_encode(hash_hmac('sha256', 'vowhumans-private-storage-encryption-v1', $sharedSecret, true)),
+                'max_chunk_bytes' => 3145728,
+            ];
+        }
+    }
+}
+
+$storage = vhm_private_storage_config(is_array($storageSettings) ? $storageSettings : [], $requestId);
