@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_GUIDED_CAPTURE_BYTES,
   MAX_GUIDED_CAPTURE_MS,
+  replicaApprovalReadiness,
   replicaCaptureReadiness,
   safeCaptureExtension,
   validateCompletePerformanceChapters,
@@ -28,6 +29,24 @@ describe("replica capture readiness", () => {
   it("never trusts an arbitrary upload extension", () => {
     expect(safeCaptureExtension("capture.exe", "video/mp4")).toBe("mp4");
     expect(safeCaptureExtension("capture.WEBM", "video/webm")).toBe("webm");
+  });
+
+  it("keeps approval locked until processing and every quality gate are ready", () => {
+    const checks = [
+      "capture_resolution",
+      "capture_frame_rate",
+      "single_face_continuity",
+      "clip_duration",
+      "lip_sync_visual_review",
+      "livekit_latency",
+    ].map((check_code) => ({ check_code, status: "passed" }));
+
+    expect(replicaApprovalReadiness("capturing", checks).ready).toBe(false);
+    expect(replicaApprovalReadiness("quality_review", checks.slice(0, -1))).toMatchObject({
+      ready: false,
+      missing: ["livekit_latency"],
+    });
+    expect(replicaApprovalReadiness("quality_review", checks).ready).toBe(true);
   });
 
   it("accepts one non-overlapping chapter for every required performance", () => {

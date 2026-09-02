@@ -41,6 +41,15 @@ export const MAX_REPLICA_CHAPTER_MS = 30_000;
 export const MAX_GUIDED_CAPTURE_BYTES = 3 * 1024 * 1024;
 export const MAX_GUIDED_CAPTURE_MS = 12_000;
 
+export const REQUIRED_REPLICA_APPROVAL_CHECKS = [
+  "capture_resolution",
+  "capture_frame_rate",
+  "single_face_continuity",
+  "clip_duration",
+  "lip_sync_visual_review",
+  "livekit_latency",
+] as const;
+
 export const REQUIRED_CAPTURE_SEGMENTS: ReadonlyArray<{
   type: ReplicaSegmentType;
   gesture?: ReplicaGesture;
@@ -77,6 +86,21 @@ export function replicaCaptureReadiness(
     && segment.ends_neutral === true,
   )).map((requirement) => requirement.label);
   return { ready: missing.length === 0, missing };
+}
+
+export function replicaApprovalReadiness(
+  profileStatus: string,
+  checks: ReadonlyArray<{ check_code: string; status: string }>,
+) {
+  const missing = REQUIRED_REPLICA_APPROVAL_CHECKS.filter((code) => {
+    const latest = checks.find((check) => check.check_code === code)?.status;
+    return latest !== "passed" && latest !== "warning";
+  });
+  return {
+    ready: profileStatus === "quality_review" && missing.length === 0,
+    processingReady: profileStatus === "quality_review" || profileStatus === "approved",
+    missing,
+  };
 }
 
 export function validateCompletePerformanceChapters(value: unknown, sourceDurationMs: number) {
