@@ -1,6 +1,11 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "globalDependencies": [".env", ".env.local"],
+  "globalDependencies": [
+    ".env",
+    ".env.local",
+    "scripts/migrate-*.mjs",
+    "packages/database/migrations/*.sql"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
