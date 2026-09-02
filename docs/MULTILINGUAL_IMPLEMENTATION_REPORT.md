@@ -15,13 +15,14 @@ All 11 official South African languages are represented in the registry, selecta
 | English (en-ZA) | beta | production | production | production | beta |
 | Afrikaans (af-ZA) | experimental | experimental | experimental | experimental | experimental |
 | isiZulu, isiXhosa | unsupported | experimental | unsupported | experimental | unsupported |
-| Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | unsupported | unsupported | unsupported | unsupported |
+| Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | experimental | unsupported | experimental | unsupported |
 
 - **Observed preview capability**: isiZulu and isiXhosa reasoning/realtime speech were reported working in a live Digital Human conversation on 31 August 2026. They are therefore selectable as `experimental`, not production; formal repeatable native-speaker QA remains outstanding.
+- **Controlled experimental capability**: Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda and isiNdebele are selectable for OpenAI Realtime machine testing. A successful audio response proves transport and model execution only; each remains experimental until native/fluent reviewers assess pronunciation, comprehension, naturalness, interruption handling and sustained conversation quality.
 - **Requiring native-speaker testing before any status can move**: all 11 languages, all 5 capabilities — see `docs/SOUTH_AFRICAN_LANGUAGE_QA.md`, currently 0 completed reviews.
 - **Production-ready**: English only (reasoning, TTS, realtime). English STT and translation are real code paths but seeded `beta` since they're new this pass and untested against real audio/text in this environment.
 - **Beta**: none besides the English exceptions above.
-- **Experimental**: Afrikaans, all capabilities.
+- **Experimental**: Afrikaans (all capabilities); isiZulu, isiXhosa and the remaining seven official languages (reasoning/realtime only).
 
 ## Providers, by language
 
@@ -48,7 +49,7 @@ Not separately estimated in this pass — no new provider account exists to pric
 
 ## Known quality limitations
 
-- Whisper's transcription quality for the 9 unsupported languages is untested here and, per its own documented training coverage, likely poor — this is exactly why they're seeded `unsupported` rather than `experimental`.
+- Whisper's standalone transcription quality for the 9 non-English/non-Afrikaans languages is untested here and likely uneven. Their STT capability therefore remains `unsupported` even where the end-to-end OpenAI Realtime experiment can listen and respond.
 - OpenAI's TTS/Realtime voices' pronunciation quality for any non-English language has not been human-verified in this pass.
 - A Digital Human now persists `default_language_code`. Studio tests and embedded applications start in that language, and the realtime prompt keeps it active until an explicit UI or verbal language-change request. A verbal change persists in the model's live conversation context; a Studio UI change is additionally written to session context so reconnection preserves it.
 - Cross-lingual knowledge retrieval (an isiZulu query against English source documents) is architecturally supported by the existing embedding pipeline but its real-world relevance quality has not been tested — flagged as Phase 2 work, not asserted here.

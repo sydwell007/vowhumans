@@ -54,6 +54,10 @@ const migration023 = await readFile(
   new URL("../packages/database/migrations/023_digital_human_default_language.sql", import.meta.url),
   "utf8",
 );
+const migration024 = await readFile(
+  new URL("../packages/database/migrations/024_remaining_official_languages_experimental.sql", import.meta.url),
+  "utf8",
+);
 
 const sql = postgres(connectionString, {
   max: 1,
@@ -113,6 +117,9 @@ try {
 
   console.log("[schema-fixes] enforcing Digital Human default conversation language");
   await connection.unsafe(migration023);
+
+  console.log("[schema-fixes] exposing remaining official languages as controlled experiments");
+  await connection.unsafe(migration024);
 
   console.log("[schema-fixes] done");
 } finally {
