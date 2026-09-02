@@ -12,6 +12,7 @@ export type LiveLanguageApplied = {
 export type DigitalHumanLanguageChangedDetail = {
   humanId: string;
   languageCode: string;
+  origin?: "profile" | "portrait";
 };
 
 /**

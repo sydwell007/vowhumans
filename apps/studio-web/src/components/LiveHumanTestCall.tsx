@@ -61,7 +61,10 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
   // from a real, working, quiet room.
   useEffect(() => {
     if (callStage !== "live" || liveStatus !== "connected" || agentJoined || providerError) return;
-    const timeout = window.setTimeout(() => setNoAgentTimeout(true), 12000);
+    // Normal avatar startup can spend up to 15 seconds waiting for its video
+    // participant before voice-only fallback. Avoid a warning that flashes for
+    // only a few seconds immediately before healthy first audio arrives.
+    const timeout = window.setTimeout(() => setNoAgentTimeout(true), 20000);
     return () => window.clearTimeout(timeout);
   }, [callStage, liveStatus, agentJoined, providerError]);
 
@@ -88,13 +91,16 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
       if (!room) throw new Error("The call is still connecting. Try the language again when Listening appears.");
       await publishLiveLanguageSwitch(room, res.data.resolved_language);
       setSelectedLanguage(res.data.resolved_language);
+      window.dispatchEvent(new CustomEvent<DigitalHumanLanguageChangedDetail>(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, {
+        detail: { humanId: human.id, languageCode: res.data.resolved_language, origin: "portrait" },
+      }));
       setLanguageSwitchNote(res.data.used_fallback ? `${target} isn't directly usable — applying ${res.data.resolved_language} instead.` : `Applying ${res.data.resolved_language} to the avatar…`);
     } catch (err) {
       setLanguageSwitchNote(err instanceof Error ? err.message : "Could not switch language.");
     } finally {
       setSwitchingLanguage(false);
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, human.id]);
 
   // A change made in the Languages panel is the same user intent as changing
   // the selector on the portrait. Subscribe to that user action rather than
@@ -104,6 +110,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
     function handleDefaultLanguageChange(event: Event) {
       const detail = (event as CustomEvent<DigitalHumanLanguageChangedDetail>).detail;
       if (!detail || detail.humanId !== human.id) return;
+      if (detail.origin === "portrait") return;
       if (callStage === "live" && activeSessionId) {
         void switchLanguage(detail.languageCode);
       } else {

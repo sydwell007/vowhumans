@@ -493,6 +493,15 @@ function DigitalHumanLanguageRow({ humanId, defaultLanguageCode, languages, onCh
     }).catch((err) => setError(err instanceof Error ? err.message : 'Could not load voices.'));
   }, []);
 
+  useEffect(() => {
+    function handleLanguageChange(event: Event) {
+      const detail = (event as CustomEvent<DigitalHumanLanguageChangedDetail>).detail;
+      if (detail?.humanId === humanId) setSelectedCode(detail.languageCode);
+    }
+    window.addEventListener(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, handleLanguageChange);
+    return () => window.removeEventListener(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, handleLanguageChange);
+  }, [humanId]);
+
   async function assignVoice(code: string, voiceId: string) {
     setBusyCode(code);
     setError(null);
@@ -514,7 +523,7 @@ function DigitalHumanLanguageRow({ humanId, defaultLanguageCode, languages, onCh
       const response = await fetch(`/api/v1/digital-humans/${humanId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ default_language_code: code }) });
       await requireSuccessfulResponse(response, 'Could not save the conversation language.');
       setSelectedCode(code);
-      window.dispatchEvent(new CustomEvent<DigitalHumanLanguageChangedDetail>(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, { detail: { humanId, languageCode: code } }));
+      window.dispatchEvent(new CustomEvent<DigitalHumanLanguageChangedDetail>(DIGITAL_HUMAN_LANGUAGE_CHANGED_EVENT, { detail: { humanId, languageCode: code, origin: "profile" } }));
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the conversation language.');
@@ -2411,7 +2420,10 @@ function LiveSessions() {
   // of leaving that indistinguishable from a real, working, quiet room.
   useEffect(() => {
     if (callStage !== "live" || liveStatus !== "connected" || agentJoined || providerError) return;
-    const timeout = window.setTimeout(() => setNoAgentTimeout(true), 12000);
+    // Normal avatar startup can spend up to 15 seconds waiting for its video
+    // participant before voice-only fallback. Give that healthy path room to
+    // speak so this diagnostic does not flash briefly just before first audio.
+    const timeout = window.setTimeout(() => setNoAgentTimeout(true), 20000);
     return () => window.clearTimeout(timeout);
   }, [callStage, liveStatus, agentJoined, providerError]);
 

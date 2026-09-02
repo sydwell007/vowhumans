@@ -1854,11 +1854,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     `;
     if (realtimeResolution) await recordLanguageUsage({ organisationId, sessionId: route[1], languageCode: targetLanguage, capability: "realtime", provider: realtimeResolution.provider });
     if (realtimeResolution?.resolvedLanguageCode) {
-      await sql`
-        UPDATE sessions
-        SET context = jsonb_set(COALESCE(context, '{}'::jsonb), '{requested_language}', to_jsonb(${realtimeResolution.resolvedLanguageCode}::text), true)
-        WHERE id = ${route[1]} AND organisation_id = ${organisationId}
-      `;
+      // A portrait-menu change is user intent for both this live call and the
+      // Digital Human's next conversation. Persist both together so the active
+      // language card and portrait selector cannot contradict each other.
+      await sql.begin(async (tx) => {
+        await tx`
+          UPDATE sessions
+          SET context = jsonb_set(COALESCE(context, '{}'::jsonb), '{requested_language}', to_jsonb(${realtimeResolution.resolvedLanguageCode}::text), true)
+          WHERE id = ${route[1]} AND organisation_id = ${organisationId}
+        `;
+        await tx`
+          UPDATE digital_humans
+          SET default_language_code = ${realtimeResolution.resolvedLanguageCode}, updated_at = now()
+          WHERE id = ${owned.digital_human_id} AND organisation_id = ${organisationId}
+        `;
+      });
     }
     return response({
       target_language: targetLanguage,
