@@ -13,16 +13,15 @@ All 11 official South African languages are represented in the registry, selecta
 | Language | STT | Reasoning | TTS | Realtime | Translation |
 |---|---|---|---|---|---|
 | English (en-ZA) | beta | production | production | production | beta |
-| Afrikaans (af-ZA) | experimental | experimental | experimental | experimental | experimental |
-| isiZulu, isiXhosa | unsupported | experimental | unsupported | experimental | unsupported |
-| Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | experimental | unsupported | experimental | unsupported |
+| Afrikaans (af-ZA) | experimental | experimental | experimental | production | experimental |
+| isiZulu, isiXhosa | unsupported | experimental | unsupported | production | unsupported |
+| Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda, isiNdebele | unsupported | experimental | unsupported | production | unsupported |
 
-- **Observed preview capability**: isiZulu and isiXhosa reasoning/realtime speech were reported working in a live Digital Human conversation on 31 August 2026. They are therefore selectable as `experimental`, not production; formal repeatable native-speaker QA remains outstanding.
-- **Controlled experimental capability**: Sepedi, Setswana, Sesotho, Xitsonga, siSwati, Tshivenda and isiNdebele are selectable for OpenAI Realtime machine testing. A successful audio response proves transport and model execution only; each remains experimental until native/fluent reviewers assess pronunciation, comprehension, naturalness, interruption handling and sustained conversation quality.
+- **Accepted Realtime capability**: the customer completed acceptance testing for all eleven Digital Human conversation languages and approved the Realtime speech path for production on 2 September 2026.
 - **Requiring native-speaker testing before any status can move**: all 11 languages, all 5 capabilities — see `docs/SOUTH_AFRICAN_LANGUAGE_QA.md`, currently 0 completed reviews.
-- **Production-ready**: English only (reasoning, TTS, realtime). English STT and translation are real code paths but seeded `beta` since they're new this pass and untested against real audio/text in this environment.
+- **Production-ready**: all eleven languages for the Digital Human Realtime conversation path. English reasoning and TTS are also production; other standalone capability ratings remain separate.
 - **Beta**: none besides the English exceptions above.
-- **Experimental**: Afrikaans (all capabilities); isiZulu, isiXhosa and the remaining seven official languages (reasoning/realtime only).
+- **Experimental**: Afrikaans standalone STT, reasoning, TTS and translation; the other non-English languages' reasoning capability.
 
 ## Providers, by language
 
