@@ -50,9 +50,10 @@ async function request<T>(input: {
   const config = afrihostStorageConfiguration();
   if (!config) throw new Error("Afrihost private storage is not configured.");
   const method = input.method ?? "POST";
+  const requestBody = input.body ?? new Uint8Array();
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = randomUUID();
-  const bodySha256 = bodyHash(input.body);
+  const bodySha256 = bodyHash(requestBody);
   const signature = createHmac("sha256", config.secret).update(afrihostStorageCanonicalRequest({
     method,
     action: input.action,
@@ -71,9 +72,10 @@ async function request<T>(input: {
       "x-vowhumans-storage-nonce": nonce,
       "x-vowhumans-storage-body-sha256": bodySha256,
       "x-vowhumans-storage-signature": signature,
+      ...(method === "POST" ? { "content-type": "application/octet-stream" } : {}),
       ...input.headers,
     },
-    ...(input.body ? { body: Buffer.from(input.body) } : {}),
+    ...(method === "GET" ? {} : { body: Buffer.from(requestBody) }),
     cache: "no-store",
     signal: AbortSignal.timeout(120_000),
   });
