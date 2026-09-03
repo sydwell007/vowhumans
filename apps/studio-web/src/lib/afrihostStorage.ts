@@ -50,7 +50,10 @@ async function request<T>(input: {
   const config = afrihostStorageConfiguration();
   if (!config) throw new Error("Afrihost private storage is not configured.");
   const method = input.method ?? "POST";
-  const requestBody = input.body ?? new Uint8Array();
+  // Some shared-hosting proxy layers discard an explicit zero-byte POST body.
+  // Sign and send a real, ignored JSON object for metadata-only actions so the
+  // byte sequence observed by PHP cannot differ from the one used for HMAC.
+  const requestBody = input.body ?? (method === "POST" ? new TextEncoder().encode("{}") : new Uint8Array());
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = randomUUID();
   const bodySha256 = bodyHash(requestBody);
@@ -72,7 +75,7 @@ async function request<T>(input: {
       "x-vowhumans-storage-nonce": nonce,
       "x-vowhumans-storage-body-sha256": bodySha256,
       "x-vowhumans-storage-signature": signature,
-      ...(method === "POST" ? { "content-type": "application/octet-stream" } : {}),
+      ...(method === "POST" ? { "content-type": "application/json" } : {}),
       ...input.headers,
     },
     ...(method === "GET" ? {} : { body: Buffer.from(requestBody) }),

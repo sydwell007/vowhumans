@@ -33,7 +33,7 @@ describe("Afrihost private storage boundary", () => {
     expect(afrihostStorageConfiguration()).toBeNull();
   });
 
-  it("sends an explicit zero-byte body for signed POST requests", async () => {
+  it("sends a stable JSON body for metadata-only signed POST requests", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_URL", "https://api.vowhumans.com/api/v1/replica-storage/");
     vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_SECRET", "x".repeat(48));
@@ -48,9 +48,9 @@ describe("Afrihost private storage boundary", () => {
     const init = fetchMock.mock.calls[0]![1]!;
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
-      "content-type": "application/octet-stream",
-      "x-vowhumans-storage-body-sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "content-type": "application/json",
+      "x-vowhumans-storage-body-sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
     });
-    expect(Buffer.from(init.body as Uint8Array)).toHaveLength(0);
+    expect(Buffer.from(init.body as Uint8Array).toString("utf8")).toBe("{}");
   });
 });
