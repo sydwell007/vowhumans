@@ -25,12 +25,18 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Cache-Control: no-store');
+header('X-VowHumans-Storage-Version: 2026-09-03.1');
 
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(12));
 if (!preg_match('/^[A-Za-z0-9._:-]{8,80}$/', $requestId)) $requestId = bin2hex(random_bytes(12));
-set_exception_handler(static function (Throwable $error) use ($requestId): never {
+$storageStage = 'resolve_settings';
+set_exception_handler(static function (Throwable $error) use ($requestId, &$storageStage): never {
     error_log(sprintf('[VowHumans private storage:%s] %s: %s', $requestId, $error::class, $error->getMessage()));
-    vhm_error('Private storage temporarily unavailable', 'STORAGE_INTERNAL_ERROR', 500, $requestId);
+    vhm_error('Private storage temporarily unavailable', 'STORAGE_INTERNAL_ERROR', 500, $requestId, [
+        'stage' => $storageStage,
+        'error_type' => $error::class,
+        'storage_version' => '2026-09-03.1',
+    ]);
 });
 
 // Keep storage bootstrapping compatible with a rolling cPanel upload. The
@@ -61,4 +67,6 @@ if (function_exists('vhm_private_storage_settings')) {
     }
 }
 
+$storageStage = 'initialise_storage';
 $storage = vhm_private_storage_config(is_array($storageSettings) ? $storageSettings : [], $requestId);
+$storageStage = 'ready';
