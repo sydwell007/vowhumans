@@ -19,9 +19,12 @@ $config = is_array($externalConfig) ? $externalConfig : $localConfig;
 // override database credentials here.
 if (is_array($config) && is_array($localConfig) && $config !== $localConfig) {
     foreach (['platform', 'private_storage'] as $section) {
-        if ((!isset($config[$section]) || !is_array($config[$section]) || $config[$section] === [])
-            && isset($localConfig[$section]) && is_array($localConfig[$section]) && $localConfig[$section] !== []) {
-            $config[$section] = $localConfig[$section];
+        if (!isset($localConfig[$section]) || !is_array($localConfig[$section])) continue;
+        if (!isset($config[$section]) || !is_array($config[$section])) $config[$section] = [];
+        foreach ($localConfig[$section] as $key => $value) {
+            if (!array_key_exists($key, $config[$section]) || $config[$section][$key] === '' || $config[$section][$key] === null) {
+                $config[$section][$key] = $value;
+            }
         }
     }
 }
@@ -39,7 +42,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Cache-Control: no-store');
-header('X-VowHumans-Storage-Version: 2026-09-03.2');
+header('X-VowHumans-Storage-Version: 2026-09-03.3');
 
 $requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(12));
 if (!preg_match('/^[A-Za-z0-9._:-]{8,80}$/', $requestId)) $requestId = bin2hex(random_bytes(12));
@@ -49,7 +52,7 @@ set_exception_handler(static function (Throwable $error) use ($requestId, &$stor
     vhm_error('Private storage temporarily unavailable', 'STORAGE_INTERNAL_ERROR', 500, $requestId, [
         'stage' => $storageStage,
         'error_type' => $error::class,
-        'storage_version' => '2026-09-03.2',
+        'storage_version' => '2026-09-03.3',
     ]);
 });
 
@@ -61,25 +64,26 @@ if (function_exists('vhm_private_storage_settings')) {
     $storageSettings = vhm_private_storage_settings($config);
 } else {
     $storageSettings = $config['private_storage'] ?? [];
-    if (!is_array($storageSettings) || $storageSettings === []) {
-        $platform = $config['platform'] ?? [];
-        $sharedSecret = is_array($platform) && is_string($platform['service_api_key'] ?? null)
-            ? trim((string)$platform['service_api_key'])
-            : '';
-        $baseUrl = is_array($platform) && is_string($platform['base_url'] ?? null)
-            ? rtrim((string)$platform['base_url'], '/')
-            : 'https://api.vowhumans.com';
-        if (strlen($sharedSecret) >= 32) {
-            $storageSettings = [
-                'root' => '/home/vowhumg0z5c9/vowhumans-private',
-                'public_url' => $baseUrl . '/api/v1/replica-storage/',
-                'secret' => $sharedSecret,
-                'encryption_key' => base64_encode(hash_hmac('sha256', 'vowhumans-private-storage-encryption-v1', $sharedSecret, true)),
-                'max_chunk_bytes' => 3145728,
-            ];
-        }
-    }
 }
+
+if (!is_array($storageSettings)) $storageSettings = [];
+$platform = $config['platform'] ?? [];
+$sharedSecret = is_array($platform) && is_string($platform['service_api_key'] ?? null)
+    ? trim((string)$platform['service_api_key'])
+    : '';
+$baseUrl = is_array($platform) && is_string($platform['base_url'] ?? null)
+    ? rtrim((string)$platform['base_url'], '/')
+    : 'https://api.vowhumans.com';
+if ((!is_string($storageSettings['secret'] ?? null) || strlen(trim((string)$storageSettings['secret'])) < 32) && strlen($sharedSecret) >= 32) {
+    $storageSettings['secret'] = $sharedSecret;
+}
+$resolvedSecret = is_string($storageSettings['secret'] ?? null) ? trim((string)$storageSettings['secret']) : '';
+if ((!is_string($storageSettings['encryption_key'] ?? null) || $storageSettings['encryption_key'] === '') && strlen($resolvedSecret) >= 32) {
+    $storageSettings['encryption_key'] = base64_encode(hash_hmac('sha256', 'vowhumans-private-storage-encryption-v1', $resolvedSecret, true));
+}
+if (!is_string($storageSettings['root'] ?? null) || $storageSettings['root'] === '') $storageSettings['root'] = '/home/vowhumg0z5c9/vowhumans-private';
+if (!is_string($storageSettings['public_url'] ?? null) || $storageSettings['public_url'] === '') $storageSettings['public_url'] = $baseUrl . '/api/v1/replica-storage/';
+if (!isset($storageSettings['max_chunk_bytes'])) $storageSettings['max_chunk_bytes'] = 3145728;
 
 $storageStage = 'initialise_storage';
 $storage = vhm_private_storage_config(is_array($storageSettings) ? $storageSettings : [], $requestId);
