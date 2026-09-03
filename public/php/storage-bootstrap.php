@@ -78,7 +78,9 @@ if ((!is_string($storageSettings['secret'] ?? null) || strlen(trim((string)$stor
     $storageSettings['secret'] = $sharedSecret;
 }
 $resolvedSecret = is_string($storageSettings['secret'] ?? null) ? trim((string)$storageSettings['secret']) : '';
-if ((!is_string($storageSettings['encryption_key'] ?? null) || $storageSettings['encryption_key'] === '') && strlen($resolvedSecret) >= 32) {
+$encodedEncryptionKey = is_string($storageSettings['encryption_key'] ?? null) ? trim((string)$storageSettings['encryption_key']) : '';
+$decodedEncryptionKey = $encodedEncryptionKey !== '' ? base64_decode($encodedEncryptionKey, true) : false;
+if ((!is_string($decodedEncryptionKey) || strlen($decodedEncryptionKey) !== 32) && strlen($resolvedSecret) >= 32) {
     $storageSettings['encryption_key'] = base64_encode(hash_hmac('sha256', 'vowhumans-private-storage-encryption-v1', $resolvedSecret, true));
 }
 if (!is_string($storageSettings['root'] ?? null) || $storageSettings['root'] === '') $storageSettings['root'] = '/home/vowhumg0z5c9/vowhumans-private';
