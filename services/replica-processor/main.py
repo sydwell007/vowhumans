@@ -94,6 +94,7 @@ def _analyse(
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
+    sequential_sampling = False
     if fps <= 0 or source_frame_count <= 0 or source_duration_ms <= 0:
         try:
             probed = probe_video(path)
@@ -120,6 +121,7 @@ def _analyse(
                 decoded_frames += 1
                 if width <= 0 or height <= 0:
                     height, width = frame.shape[:2]
+            sequential_sampling = decoded_frames > 0
             if decoded_frames > 0 and duration_hint_ms and duration_hint_ms > 0:
                 source_frame_count = decoded_frames
                 source_duration_ms = duration_hint_ms
@@ -154,11 +156,26 @@ def _analyse(
     sampled = 0
     luminance: list[float] = []
     try:
-        for index in sorted(sample_indexes):
-            capture.set(cv2.CAP_PROP_POS_FRAMES, index)
-            ok, frame = capture.read()
-            if not ok:
-                continue
+        frames: list[object] = []
+        if sequential_sampling:
+            capture.release()
+            capture = cv2.VideoCapture(path)
+            if not capture.isOpened():
+                raise ValueError("CAPTURE_UNREADABLE")
+            last_sample = max(sample_indexes)
+            for index in range(last_sample + 1):
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                if index in sample_indexes:
+                    frames.append(frame)
+        else:
+            for index in sorted(sample_indexes):
+                capture.set(cv2.CAP_PROP_POS_FRAMES, index)
+                ok, frame = capture.read()
+                if ok:
+                    frames.append(frame)
+        for frame in frames:
             sampled += 1
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             luminance.append(float(gray.mean()))
