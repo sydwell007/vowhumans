@@ -18,7 +18,7 @@ import cv2
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
-from timeline import normalise_chapter_range
+from timeline import infer_declared_source_duration, normalise_chapter_range
 
 app = FastAPI(title="VowHumans Replica Processor", version="1.0.0")
 MAX_CAPTURE_BYTES = int(os.getenv("REPLICA_MAX_CAPTURE_BYTES", str(300 * 1024 * 1024)))
@@ -164,6 +164,10 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
     started = time.perf_counter()
     analysed: list[dict[str, object]] = []
     downloaded: dict[tuple[str, str], str] = {}
+    chapter_ends_by_source: dict[tuple[str, str], list[int]] = {}
+    for clip in payload.clips:
+        if clip.trim_end_ms is not None:
+            chapter_ends_by_source.setdefault((clip.object_key, clip.sha256), []).append(clip.trim_end_ms)
     try:
         for clip in payload.clips:
             source_key = (clip.object_key, clip.sha256)
@@ -171,7 +175,11 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
             if path is None:
                 path = _download(str(clip.object_url), clip.sha256)
                 downloaded[source_key] = path
-            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms, clip.source_duration_ms)
+            declared_source_duration_ms = infer_declared_source_duration(
+                clip.source_duration_ms,
+                chapter_ends_by_source.get(source_key, []),
+            )
+            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms, declared_source_duration_ms)
             analysed.append({
                 "segment_id": clip.segment_id,
                 "key": f"{clip.segment_type}-{clip.gesture_key or clip.segment_id[:8]}",

@@ -19,3 +19,16 @@ def normalise_chapter_range(
     if start_ms < 0 or end_ms <= start_ms or start_ms >= source_duration_ms:
         raise ValueError("CAPTURE_CHAPTER_RANGE_INVALID")
     return start_ms, end_ms
+
+
+def infer_declared_source_duration(explicit_duration_ms: int | None, chapter_end_times_ms: list[int]) -> int | None:
+    """Recover the browser timeline for legacy mapped captures.
+
+    Early complete-video records did not persist ``source_duration_ms`` on
+    every virtual chapter. Their largest chapter end is the only durable copy
+    of that browser timeline and is safe to use for proportional conversion.
+    """
+    if explicit_duration_ms is not None and explicit_duration_ms > 0:
+        return explicit_duration_ms
+    valid_end_times = [value for value in chapter_end_times_ms if value > 0]
+    return max(valid_end_times, default=None)
