@@ -577,7 +577,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
           VALUES (${jobId}, ${user.organisationId}, ${profileId}, ${profile.capture_session_id}, 'queued')
         `;
       });
-      const providerExecution = process.env.ENABLE_VIDEO_REPLICA === "true" && Boolean(process.env.REPLICA_PROCESSOR_URL && process.env.VOWHUMANS_INTERNAL_KEY);
+      // Capture validation is an offline, private quality-gate operation. It
+      // must be available before the live Video Replica runtime is enabled so
+      // an authorised POC can generate the evidence required for approval.
+      // ENABLE_VIDEO_REPLICA continues to gate runtime assignment/rendering.
+      const providerExecution = Boolean(process.env.REPLICA_PROCESSOR_URL && process.env.VOWHUMANS_INTERNAL_KEY);
       if (providerExecution) after(() => dispatchReplicaProcessing({ jobId, organisationId: user.organisationId, profileId, clips }));
       return ok({ job_id: jobId, status: "queued", provider_execution: providerExecution }, 202);
     }
