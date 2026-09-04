@@ -28,7 +28,12 @@ def infer_declared_source_duration(explicit_duration_ms: int | None, chapter_end
     every virtual chapter. Their largest chapter end is the only durable copy
     of that browser timeline and is safe to use for proportional conversion.
     """
-    if explicit_duration_ms is not None and explicit_duration_ms > 0:
-        return explicit_duration_ms
     valid_end_times = [value for value in chapter_end_times_ms if value > 0]
-    return max(valid_end_times, default=None)
+    latest_chapter_end = max(valid_end_times, default=None)
+    if explicit_duration_ms is not None and explicit_duration_ms > 0:
+        # Some legacy source rows contain a short per-chapter duration rather
+        # than the complete browser timeline. Trust it only when it can
+        # actually contain every mapped chapter (allowing normal rounding).
+        if latest_chapter_end is None or latest_chapter_end <= explicit_duration_ms + 1000:
+            return explicit_duration_ms
+    return latest_chapter_end

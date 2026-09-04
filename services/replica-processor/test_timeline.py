@@ -23,6 +23,12 @@ class TimelineTests(unittest.TestCase):
     def test_explicit_source_duration_wins_over_legacy_inference(self):
         self.assertEqual(infer_declared_source_duration(15000, [12000]), 15000)
 
+    def test_inconsistent_legacy_source_duration_is_reconstructed(self):
+        self.assertEqual(
+            infer_declared_source_duration(6000, [2000, 4500, 7000, 9500, 12000]),
+            12000,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
