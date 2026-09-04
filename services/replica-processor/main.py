@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -18,6 +20,7 @@ import cv2
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
+from media_probe import probe_video
 from timeline import infer_declared_source_duration, normalise_chapter_range
 
 app = FastAPI(title="VowHumans Replica Processor", version="1.0.0")
@@ -87,9 +90,22 @@ def _analyse(
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
-    if fps <= 0 or source_duration_ms <= 0:
+    if fps <= 0 or source_frame_count <= 0 or source_duration_ms <= 0:
+        try:
+            probed = probe_video(path)
+            fps = float(probed["fps"])
+            source_frame_count = int(probed["frame_count"])
+            width = width or int(probed["width"])
+            height = height or int(probed["height"])
+            source_duration_ms = int(probed["duration_ms"])
+            if source_frame_count <= 0 and fps > 0 and source_duration_ms > 0:
+                source_frame_count = round((source_duration_ms / 1000) * fps)
+        except (OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
+            capture.release()
+            raise ValueError("CAPTURE_METADATA_UNREADABLE")
+    if fps <= 0 or source_frame_count <= 0 or source_duration_ms <= 0:
         capture.release()
-        raise ValueError("CAPTURE_CHAPTER_RANGE_INVALID")
+        raise ValueError("CAPTURE_METADATA_UNREADABLE")
     try:
         # Browsers derive MP4 duration from the container timeline while OpenCV
         # derives it from decodable frames. Map the authorised browser chapter
