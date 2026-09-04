@@ -18,9 +18,20 @@ type AfrihostResponse<T> = {
 };
 
 export function afrihostStorageConfiguration(): AfrihostStorageConfiguration | null {
-  const endpoint = process.env.AFRIHOST_PRIVATE_STORAGE_URL?.trim().replace(/\/$/, "");
+  const configuredEndpoint = process.env.AFRIHOST_PRIVATE_STORAGE_URL?.trim();
   const secret = process.env.AFRIHOST_PRIVATE_STORAGE_SECRET?.trim();
-  if (!endpoint || !secret || secret.length < 32) return null;
+  if (!configuredEndpoint || !secret || secret.length < 32) return null;
+  let endpointUrl: URL;
+  try {
+    endpointUrl = new URL(configuredEndpoint);
+  } catch {
+    return null;
+  }
+  // cPanel exposes this PHP handler as a directory. Avoid Apache's automatic
+  // no-slash -> slash redirect: a 301/302 can turn a signed POST into GET,
+  // which invalidates the canonical request even though PUT uploads survive.
+  if (!endpointUrl.pathname.endsWith("/")) endpointUrl.pathname += "/";
+  const endpoint = endpointUrl.toString();
   if (!objectStorageEndpointUsable(endpoint, process.env.NODE_ENV === "production")) return null;
   return { endpoint, secret };
 }

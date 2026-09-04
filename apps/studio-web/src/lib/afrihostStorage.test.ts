@@ -26,7 +26,7 @@ describe("Afrihost private storage boundary", () => {
     vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_URL", "https://api.vowhumans.com/api/v1/replica-storage/");
     vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_SECRET", "x".repeat(48));
     expect(afrihostStorageConfiguration()).toEqual({
-      endpoint: "https://api.vowhumans.com/api/v1/replica-storage",
+      endpoint: "https://api.vowhumans.com/api/v1/replica-storage/",
       secret: "x".repeat(48),
     });
     vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_URL", "http://api.vowhumans.com/api/v1/replica-storage/");
@@ -45,6 +45,7 @@ describe("Afrihost private storage boundary", () => {
 
     await headAfrihostObject("organisations/a/replicas/b/captures/c/video.webm");
 
+    expect(fetchMock.mock.calls[0]![0].toString()).toBe("https://api.vowhumans.com/api/v1/replica-storage/?action=head&object_key=organisations%2Fa%2Freplicas%2Fb%2Fcaptures%2Fc%2Fvideo.webm");
     const init = fetchMock.mock.calls[0]![1]!;
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({
