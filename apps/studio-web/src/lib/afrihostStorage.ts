@@ -180,5 +180,9 @@ export async function createAfrihostDownload(objectKey: string) {
   if (downloadUrl.protocol !== "https:" || downloadUrl.origin !== endpointUrl.origin) {
     throw new Error("Afrihost private storage returned an invalid download URL.");
   }
+  // The processor deliberately refuses redirects for private media. Point the
+  // token URL at the final cPanel directory path so Apache cannot answer with
+  // a POST/GET redirect before the encrypted object is streamed.
+  if (!downloadUrl.pathname.endsWith("/")) downloadUrl.pathname += "/";
   return downloadUrl.toString();
 }

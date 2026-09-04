@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { afrihostStorageCanonicalRequest, afrihostStorageConfiguration, headAfrihostObject } from "./afrihostStorage";
+import { afrihostStorageCanonicalRequest, afrihostStorageConfiguration, createAfrihostDownload, headAfrihostObject } from "./afrihostStorage";
 
 describe("Afrihost private storage boundary", () => {
   afterEach(() => {
@@ -53,5 +53,18 @@ describe("Afrihost private storage boundary", () => {
       "x-vowhumans-storage-body-sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
     });
     expect(Buffer.from(init.body as Uint8Array).toString("utf8")).toBe("{}");
+  });
+
+  it("returns the final cPanel directory URL for private downloads", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_URL", "https://api.vowhumans.com/api/v1/replica-storage/");
+    vi.stubEnv("AFRIHOST_PRIVATE_STORAGE_SECRET", "x".repeat(48));
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      success: true,
+      data: { url: "https://api.vowhumans.com/api/v1/replica-storage?action=download&token=signed" },
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+
+    await expect(createAfrihostDownload("organisations/a/replicas/b/captures/c/video.webm"))
+      .resolves.toBe("https://api.vowhumans.com/api/v1/replica-storage/?action=download&token=signed");
   });
 });

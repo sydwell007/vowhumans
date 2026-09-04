@@ -46,7 +46,7 @@ function vhm_private_storage_config(array $input, string $requestId): array {
     $root = isset($input['root']) && is_string($input['root']) ? rtrim($input['root'], '/\\') : '';
     $secret = isset($input['secret']) && is_string($input['secret']) ? $input['secret'] : '';
     $encodedKey = isset($input['encryption_key']) && is_string($input['encryption_key']) ? $input['encryption_key'] : '';
-    $publicUrl = isset($input['public_url']) && is_string($input['public_url']) ? rtrim($input['public_url'], '/') : '';
+    $publicUrl = isset($input['public_url']) && is_string($input['public_url']) ? rtrim($input['public_url'], '/') . '/' : '';
     $maxChunkBytes = isset($input['max_chunk_bytes']) ? (int)$input['max_chunk_bytes'] : 3145728;
     $encryptionKey = base64_decode($encodedKey, true);
     $absolutePath = $root !== '' && ($root[0] === '/' || preg_match('/^[A-Za-z]:[\\\\\/]/', $root) === 1);
