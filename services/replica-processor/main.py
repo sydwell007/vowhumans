@@ -40,6 +40,8 @@ class ClipInput(BaseModel):
     trim_start_ms: int | None = Field(default=None, ge=0)
     trim_end_ms: int | None = Field(default=None, gt=0)
     source_duration_ms: int | None = Field(default=None, gt=0)
+    duration_ms: int | None = Field(default=None, gt=0)
+    fps: float | None = Field(default=None, gt=0)
 
 
 class ProcessRequest(BaseModel):
@@ -81,6 +83,8 @@ def _analyse(
     trim_start_ms: int | None = None,
     trim_end_ms: int | None = None,
     declared_source_duration_ms: int | None = None,
+    duration_hint_ms: int | None = None,
+    fps_hint: float | None = None,
 ) -> dict[str, object]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
@@ -101,8 +105,29 @@ def _analyse(
             if source_frame_count <= 0 and fps > 0 and source_duration_ms > 0:
                 source_frame_count = round((source_duration_ms / 1000) * fps)
         except (OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
-            capture.release()
-            raise ValueError("CAPTURE_METADATA_UNREADABLE")
+            pass
+        if fps <= 0 or source_frame_count <= 0 or source_duration_ms <= 0:
+            # MediaRecorder WebM files can be fully decodable while exposing
+            # neither a seekable frame count nor container duration. Count the
+            # real decoded frames and use the browser-measured duration to
+            # derive effective fps rather than trusting the fps hint itself.
+            capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            decoded_frames = 0
+            while True:
+                ok, frame = capture.read()
+                if not ok:
+                    break
+                decoded_frames += 1
+                if width <= 0 or height <= 0:
+                    height, width = frame.shape[:2]
+            if decoded_frames > 0 and duration_hint_ms and duration_hint_ms > 0:
+                source_frame_count = decoded_frames
+                source_duration_ms = duration_hint_ms
+                fps = decoded_frames / (duration_hint_ms / 1000)
+            elif decoded_frames > 0 and fps_hint and fps_hint > 0:
+                source_frame_count = decoded_frames
+                fps = fps_hint
+                source_duration_ms = round((decoded_frames / fps_hint) * 1000)
     if fps <= 0 or source_frame_count <= 0 or source_duration_ms <= 0:
         capture.release()
         raise ValueError("CAPTURE_METADATA_UNREADABLE")
@@ -195,7 +220,14 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
                 clip.source_duration_ms,
                 chapter_ends_by_source.get(source_key, []),
             )
-            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms, declared_source_duration_ms)
+            metrics = _analyse(
+                path,
+                clip.trim_start_ms,
+                clip.trim_end_ms,
+                declared_source_duration_ms,
+                clip.duration_ms,
+                clip.fps,
+            )
             analysed.append({
                 "segment_id": clip.segment_id,
                 "key": f"{clip.segment_type}-{clip.gesture_key or clip.segment_id[:8]}",

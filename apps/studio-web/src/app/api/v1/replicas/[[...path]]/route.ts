@@ -126,6 +126,8 @@ type ProcessorClip = {
   trim_start_ms?: number;
   trim_end_ms?: number;
   source_duration_ms?: number;
+  duration_ms?: number;
+  fps?: number;
 };
 
 type StoredCaptureSegment = ProcessorClip & {
@@ -141,6 +143,8 @@ function processingClip(segment: StoredCaptureSegment): ProcessorClip {
   const trimStart = Number(metadata.trim_start_ms);
   const trimEnd = Number(metadata.trim_end_ms);
   const sourceDuration = Number(segment.source_duration_ms ?? metadata.source_duration_ms);
+  const duration = Number(segment.duration_ms);
+  const fps = Number(segment.fps);
   return {
     segment_id: segment.segment_id,
     segment_type: segment.segment_type,
@@ -155,6 +159,8 @@ function processingClip(segment: StoredCaptureSegment): ProcessorClip {
     ...(Number.isSafeInteger(sourceDuration) && sourceDuration > 0
       ? { source_duration_ms: sourceDuration }
       : {}),
+    ...(Number.isSafeInteger(duration) && duration > 0 ? { duration_ms: duration } : {}),
+    ...(Number.isFinite(fps) && fps > 0 ? { fps } : {}),
   };
 }
 
@@ -571,6 +577,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const segments = await sql<StoredCaptureSegment[]>`
         SELECT rseg.id AS segment_id, rseg.segment_type, rseg.gesture_key, rseg.object_key,
           rseg.sha256, rseg.state, rseg.starts_neutral, rseg.ends_neutral, rseg.metadata, rseg.created_at,
+          rseg.duration_ms, rseg.fps,
           COALESCE(
             CASE WHEN rseg.metadata->>'source_duration_ms' ~ '^[0-9]+$' THEN (rseg.metadata->>'source_duration_ms')::integer END,
             source.duration_ms
