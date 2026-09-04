@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgl1 l
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py ./
+COPY main.py timeline.py ./
 RUN useradd --system --uid 10001 --create-home replica && chown -R replica:replica /app
 USER replica
 EXPOSE 8000

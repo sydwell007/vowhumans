@@ -18,6 +18,7 @@ import cv2
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
+from timeline import normalise_chapter_range
 
 app = FastAPI(title="VowHumans Replica Processor", version="1.0.0")
 MAX_CAPTURE_BYTES = int(os.getenv("REPLICA_MAX_CAPTURE_BYTES", str(300 * 1024 * 1024)))
@@ -35,6 +36,7 @@ class ClipInput(BaseModel):
     ends_neutral: bool = False
     trim_start_ms: int | None = Field(default=None, ge=0)
     trim_end_ms: int | None = Field(default=None, gt=0)
+    source_duration_ms: int | None = Field(default=None, gt=0)
 
 
 class ProcessRequest(BaseModel):
@@ -71,7 +73,12 @@ def _download(url: str, expected_sha256: str) -> str:
         raise
 
 
-def _analyse(path: str, trim_start_ms: int | None = None, trim_end_ms: int | None = None) -> dict[str, object]:
+def _analyse(
+    path: str,
+    trim_start_ms: int | None = None,
+    trim_end_ms: int | None = None,
+    declared_source_duration_ms: int | None = None,
+) -> dict[str, object]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
         raise ValueError("CAPTURE_UNREADABLE")
@@ -80,12 +87,19 @@ def _analyse(path: str, trim_start_ms: int | None = None, trim_end_ms: int | Non
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
-    start_ms = trim_start_ms or 0
-    end_ms = trim_end_ms or source_duration_ms
-    if fps <= 0 or start_ms < 0 or end_ms <= start_ms or end_ms > source_duration_ms + 1000:
+    if fps <= 0 or source_duration_ms <= 0:
         capture.release()
         raise ValueError("CAPTURE_CHAPTER_RANGE_INVALID")
-    end_ms = min(end_ms, source_duration_ms)
+    try:
+        # Browsers derive MP4 duration from the container timeline while OpenCV
+        # derives it from decodable frames. Map the authorised browser chapter
+        # onto the decoded timeline before validating its frames.
+        start_ms, end_ms = normalise_chapter_range(
+            source_duration_ms, trim_start_ms, trim_end_ms, declared_source_duration_ms,
+        )
+    except ValueError:
+        capture.release()
+        raise
     start_frame = max(0, round((start_ms / 1000) * fps))
     end_frame = min(source_frame_count, round((end_ms / 1000) * fps))
     frame_count = end_frame - start_frame
@@ -157,7 +171,7 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
             if path is None:
                 path = _download(str(clip.object_url), clip.sha256)
                 downloaded[source_key] = path
-            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms)
+            metrics = _analyse(path, clip.trim_start_ms, clip.trim_end_ms, clip.source_duration_ms)
             analysed.append({
                 "segment_id": clip.segment_id,
                 "key": f"{clip.segment_type}-{clip.gesture_key or clip.segment_id[:8]}",

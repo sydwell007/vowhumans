@@ -125,6 +125,7 @@ type ProcessorClip = {
   ends_neutral: boolean;
   trim_start_ms?: number;
   trim_end_ms?: number;
+  source_duration_ms?: number;
 };
 
 type StoredCaptureSegment = ProcessorClip & {
@@ -139,6 +140,7 @@ function processingClip(segment: StoredCaptureSegment): ProcessorClip {
     : {};
   const trimStart = Number(metadata.trim_start_ms);
   const trimEnd = Number(metadata.trim_end_ms);
+  const sourceDuration = Number(segment.source_duration_ms ?? metadata.source_duration_ms);
   return {
     segment_id: segment.segment_id,
     segment_type: segment.segment_type,
@@ -149,6 +151,9 @@ function processingClip(segment: StoredCaptureSegment): ProcessorClip {
     ends_neutral: segment.ends_neutral,
     ...(Number.isSafeInteger(trimStart) && Number.isSafeInteger(trimEnd) && trimEnd > trimStart
       ? { trim_start_ms: trimStart, trim_end_ms: trimEnd }
+      : {}),
+    ...(Number.isSafeInteger(sourceDuration) && sourceDuration > 0
+      ? { source_duration_ms: sourceDuration }
       : {}),
   };
 }
@@ -545,6 +550,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               ${transaction.json({
                 source_mode: "complete_performance",
                 source_segment_id: sourceSegmentId,
+                source_duration_ms: sourceDurationMs,
                 trim_start_ms: chapter.start_ms,
                 trim_end_ms: chapter.end_ms,
               })}
@@ -564,8 +570,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!consent.ready) return problem("Consent is no longer valid; processing is blocked.", "CONSENT_REQUIRED", 409, { missing: consent.missing });
       const segments = await sql<StoredCaptureSegment[]>`
         SELECT rseg.id AS segment_id, rseg.segment_type, rseg.gesture_key, rseg.object_key,
-          rseg.sha256, rseg.state, rseg.starts_neutral, rseg.ends_neutral, rseg.metadata, rseg.created_at
+          rseg.sha256, rseg.state, rseg.starts_neutral, rseg.ends_neutral, rseg.metadata, rseg.created_at,
+          COALESCE(
+            CASE WHEN rseg.metadata->>'source_duration_ms' ~ '^[0-9]+$' THEN (rseg.metadata->>'source_duration_ms')::integer END,
+            source.duration_ms
+          ) AS source_duration_ms
         FROM replica_capture_segments rseg JOIN replica_capture_sessions rcs ON rcs.id=rseg.capture_session_id
+        LEFT JOIN replica_capture_segments source
+          ON source.id::text=rseg.metadata->>'source_segment_id'
+          AND source.organisation_id=rseg.organisation_id
         WHERE rseg.organisation_id=${user.organisationId} AND rcs.replica_profile_id=${profileId}
         ORDER BY rseg.created_at DESC
       `;
