@@ -169,8 +169,14 @@ def process_capture(payload: ProcessRequest, x_internal_key: str | None = Header
                 "ends_neutral": clip.ends_neutral,
                 **metrics,
             })
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(422, str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(422, f"CAPTURE_DOWNLOAD_HTTP_{exc.response.status_code}") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(422, "CAPTURE_DOWNLOAD_FAILED") from exc
+    except ValueError as exc:
+        detail = str(exc)
+        safe_detail = detail if detail.startswith("CAPTURE_") and detail.replace("_", "").isalnum() else "CAPTURE_VALIDATION_FAILED"
+        raise HTTPException(422, safe_detail) from exc
     finally:
         for path in downloaded.values():
             Path(path).unlink(missing_ok=True)

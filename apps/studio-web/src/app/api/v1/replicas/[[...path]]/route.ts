@@ -164,6 +164,7 @@ function latestRequiredProcessingClips(segments: StoredCaptureSegment[]) {
 type ProcessorResult = {
   manifest: Record<string, unknown> & { clips?: Array<Record<string, unknown>> };
   checks: Array<{ code: string; status: "passed" | "warning" | "failed" | "blocked" | "not_tested"; measured_value?: number; threshold_value?: number; unit?: string; detail?: Record<string, unknown> }>;
+  detail?: unknown;
 };
 
 async function dispatchReplicaProcessing(input: { jobId: string; organisationId: string; profileId: string; clips: ProcessorClip[] }) {
@@ -180,7 +181,11 @@ async function dispatchReplicaProcessing(input: { jobId: string; organisationId:
       signal: AbortSignal.timeout(240_000),
     });
     const result = await processorResponse.json().catch(() => null) as ProcessorResult | null;
-    if (!processorResponse.ok || !result?.manifest || !Array.isArray(result.checks)) throw new Error(`PROCESSOR_${processorResponse.status}`);
+    if (!processorResponse.ok) {
+      const detail = typeof result?.detail === "string" && /^CAPTURE_[A-Z0-9_]{3,64}$/.test(result.detail) ? result.detail : null;
+      throw new Error(detail ?? `PROCESSOR_${processorResponse.status}`);
+    }
+    if (!result?.manifest || !Array.isArray(result.checks)) throw new Error("PROCESSOR_INVALID_RESPONSE");
     const failed = result.checks.some((check) => check.status === "failed" || check.status === "blocked");
     const versions = await sql<{ version: number }[]>`SELECT COALESCE(max(version),0)::int + 1 AS version FROM replica_versions WHERE replica_profile_id=${input.profileId}`;
     const version = Number(versions[0]?.version ?? 1);
@@ -211,7 +216,7 @@ async function dispatchReplicaProcessing(input: { jobId: string; organisationId:
       await transaction`UPDATE replica_profiles SET status=${failed ? "failed" : "quality_review"}, updated_at=now() WHERE id=${input.profileId} AND organisation_id=${input.organisationId}`;
     });
   } catch (error) {
-    const safeCode = error instanceof Error && /^PROCESSOR_\d+$/.test(error.message) ? error.message : "PROCESSOR_FAILED";
+    const safeCode = error instanceof Error && /^(?:PROCESSOR_(?:\d+|INVALID_RESPONSE)|CAPTURE_[A-Z0-9_]{3,64})$/.test(error.message) ? error.message : "PROCESSOR_FAILED";
     console.error("[replica-processor-dispatch]", error);
     await sql`UPDATE replica_processing_jobs SET status='failed', safe_error_code=${safeCode}, completed_at=now() WHERE id=${input.jobId} AND organisation_id=${input.organisationId}`.catch(() => undefined);
     await sql`UPDATE replica_profiles SET status='failed', updated_at=now() WHERE id=${input.profileId} AND organisation_id=${input.organisationId}`.catch(() => undefined);
