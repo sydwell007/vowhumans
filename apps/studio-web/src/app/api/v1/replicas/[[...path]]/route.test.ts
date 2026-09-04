@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PUT } from "./route";
+import { POST, PUT } from "./route";
 
 const { readSessionMock, sqlMock, storeCaptureMock, storeCapturePartMock } = vi.hoisted(() => ({
   readSessionMock: vi.fn(),
@@ -62,6 +62,9 @@ describe("Photoreal Replica capture upload boundary", () => {
       }
       if (query.includes("SELECT rseg.object_key, rseg.byte_size")) {
         return [{ object_key: "private/capture.webm", byte_size: bytes.byteLength, sha256, media_type: "video/webm" }];
+      }
+      if (query.includes("FROM replica_versions")) {
+        return [{ id: "version-1", state: "failed" }];
       }
       return [];
     });
@@ -149,5 +152,19 @@ describe("Photoreal Replica capture upload boundary", () => {
       totalParts: 1,
       partSha256: sha256,
     }));
+  });
+
+  it("blocks manual preview evidence when automated capture checks failed", async () => {
+    const response = await POST(
+      new NextRequest(`http://localhost/api/v1/replicas/${profileId}/quality-checks`, {
+        method: "POST",
+        headers: { cookie: "vh_session=test-session", "content-type": "application/json" },
+        body: JSON.stringify({ code: "lip_sync_visual_review", status: "passed", notes: "Attempted bypass evidence" }),
+      }),
+      context([profileId, "quality-checks"]),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ success: false, code: "AUTOMATED_QUALITY_GATE_FAILED" });
   });
 });

@@ -594,8 +594,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!new Set(["lip_sync_visual_review", "livekit_latency"]).has(code) || !status || notes.length < 10) {
         return problem("A supported check, pass/fail decision and evidence note are required.", "VALIDATION_ERROR", 422);
       }
-      const versions = await sql<{ id: string }[]>`SELECT id FROM replica_versions WHERE organisation_id=${user.organisationId} AND replica_profile_id=${profileId} ORDER BY version DESC LIMIT 1`;
+      const versions = await sql<{ id: string; state: string }[]>`SELECT id, state FROM replica_versions WHERE organisation_id=${user.organisationId} AND replica_profile_id=${profileId} ORDER BY version DESC LIMIT 1`;
       if (!versions[0]) return problem("Process a replica version before recording review evidence.", "PROCESSING_REQUIRED", 409);
+      if (versions[0].state !== "quality_review") return problem("Automated capture quality checks must pass before recording preview evidence.", "AUTOMATED_QUALITY_GATE_FAILED", 409);
       const measured = typeof body.measured_value === "number" && Number.isFinite(body.measured_value) ? body.measured_value : null;
       await sql`
         INSERT INTO replica_quality_checks (organisation_id, replica_profile_id, replica_version_id, check_code, status, measured_value, threshold_value, unit, safe_detail)
