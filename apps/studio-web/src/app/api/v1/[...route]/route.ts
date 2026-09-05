@@ -1091,12 +1091,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Record and upload the required voice-owner consent phrase." }, { status: 422 });
     }
     if (consentFile.size > 4 * 1024 * 1024) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Consent audio must be 4MB or smaller." }, { status: 422 });
-    const [voice] = await sql<{ id: string; name: string; provider_voice_id: string | null; settings: { audio_object_key?: string } | null }[]>`
+    const [voice] = await sql<{ id: string; name: string; provider_voice_id: string | null; settings: unknown }[]>`
       SELECT id, name, provider_voice_id, settings FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId} AND is_custom = true
     `;
     if (!voice) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "Uploaded voice not found." }, { status: 404 });
     if (voice.provider_voice_id) return NextResponse.json({ success: true, data: voice, meta: { mode: "live", request_id: randomUUID() } });
-    const objectKey = voice.settings?.audio_object_key;
+    const objectKey = audioObjectKeyFromSettings(voice.settings);
     const [sample] = objectKey ? await sql<{ data: Buffer; mime_type: string }[]>`
       SELECT data, mime_type FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}
     ` : [];
