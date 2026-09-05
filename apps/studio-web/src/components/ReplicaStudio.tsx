@@ -243,7 +243,10 @@ function ReplicaCaptureWorkflow({ detail, storageConfigured, onRefresh }: { deta
   const latestJob = detail.jobs[0];
   const processingInProgress = Boolean(latestJob && ["queued", "running"].includes(latestJob.status));
   const processingFailed = latestJob?.status === "failed" || (latestJob?.status === "completed" && latestJob.safe_metrics?.failed === true);
-  const automaticChecks = detail.quality_checks.filter((check) => !["lip_sync_visual_review", "livekit_latency"].includes(check.check_code));
+  const automaticChecks = detail.quality_checks.filter((check, index, checks) =>
+    !["lip_sync_visual_review", "livekit_latency"].includes(check.check_code)
+    && checks.findIndex((item) => item.check_code === check.check_code) === index,
+  );
   const requiredEvidencePassed = ["lip_sync_visual_review", "livekit_latency"].every((code) => detail.quality_checks.find((check) => check.check_code === code)?.status === "passed");
   const approvalReadiness = replicaApprovalReadiness(detail.profile.status, detail.quality_checks);
 
@@ -523,5 +526,5 @@ function CaptureCard({ profileId, capture, uploaded, disabled, onUploaded }: { p
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
-  return <article className={`replica-capture-card${uploaded ? " complete" : ""}`}><div className="capture-preview"><video ref={videoRef} muted playsInline /><span>{recording ? "Recording — stops at 12s" : uploaded ? "Captured" : "Camera preview"}</span></div><div><StatusPill tone={uploaded ? "good" : disabled ? "warn" : "muted"}>{uploaded ? "Uploaded" : disabled ? "Storage required" : "Required"}</StatusPill><h3>{capture.label}</h3><p>{capture.instruction}</p>{error && <small className="capture-error">{error}</small>}<button className={recording ? "secondary-button" : "primary-button"} type="button" disabled={disabled || busy || uploaded} onClick={toggleRecording}>{busy ? <RefreshCw className="spin" size={16} /> : recording ? <CircleCheck size={16} /> : <Camera size={16} />}{busy ? "Encrypting & uploading…" : recording ? "Stop capture" : uploaded ? "Capture complete" : "Start capture"}</button></div></article>;
+  return <article className={`replica-capture-card${uploaded ? " complete" : ""}`}><div className="capture-preview"><video ref={videoRef} muted playsInline /><span>{recording ? "Recording — stops at 12s" : uploaded ? "Captured" : "Camera preview"}</span></div><div><StatusPill tone={uploaded ? "good" : disabled ? "warn" : "muted"}>{uploaded ? "Uploaded" : disabled ? "Storage required" : "Required"}</StatusPill><h3>{capture.label}</h3><p>{capture.instruction}</p>{error && <small className="capture-error">{error}</small>}<button className={recording ? "secondary-button" : "primary-button"} type="button" disabled={disabled || busy} onClick={toggleRecording}>{busy ? <RefreshCw className="spin" size={16} /> : recording ? <CircleCheck size={16} /> : <Camera size={16} />}{busy ? "Encrypting & uploading…" : recording ? "Stop capture" : uploaded ? "Recapture" : "Start capture"}</button></div></article>;
 }
