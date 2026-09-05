@@ -316,7 +316,11 @@ def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_
         f"Translate it before speaking when its source wording is not already in {language_name}; do not read the English source wording aloud."
     )
     voice_info = persona_data.get("voice")
-    voice = voice_info["provider_voice_id"] if voice_info and voice_info.get("provider_voice_id") else FALLBACK_VOICE
+    if voice_info and not voice_info.get("provider_voice_id"):
+        raise RuntimeError("The selected voice is a sample only and has not been enrolled for live speech")
+    voice_id = voice_info.get("provider_voice_id") if voice_info else None
+    # OpenAI custom voices use an object reference; built-in voices use their name.
+    voice = {"id": voice_id} if voice_id and voice_id.startswith("voice_") else (voice_id or FALLBACK_VOICE)
     knowledge_base_ids = persona.get("knowledge_base_ids") or []
     tools: list = [_make_knowledge_tool(client, organisation_id, knowledge_base_ids)] if knowledge_base_ids else []
     return instructions, opening_instruction, voice, tools

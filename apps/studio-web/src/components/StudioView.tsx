@@ -480,7 +480,7 @@ function ProfileSlot({ icon: Icon, label, filled, meta, content, onSetup }: { ic
 }
 
 function DigitalHumanLanguageRow({ humanId, defaultLanguageCode, languages, onChanged }: { humanId: string; defaultLanguageCode: string; languages: DigitalHumanProfile['languages']; onChanged: () => void }) {
-  const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
+  const [voices, setVoices] = useState<{ id: string; name: string; provider_voice_id: string | null }[]>([]);
   const [selectedCode, setSelectedCode] = useState(defaultLanguageCode || 'en-ZA');
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const [savingDefault, setSavingDefault] = useState(false);
@@ -566,7 +566,7 @@ function DigitalHumanLanguageRow({ humanId, defaultLanguageCode, languages, onCh
             <span>Voice for {selectedLanguage.english_name}</span>
             <select value={selectedLanguage.voice_id ?? ''} onChange={(event) => assignVoice(selectedLanguage.code, event.target.value)} disabled={busyCode === selectedLanguage.code}>
               <option value="">Use organisation default</option>
-              {voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}
+              {voices.map((voice) => <option key={voice.id} value={voice.id} disabled={!voice.provider_voice_id}>{voice.name}{voice.provider_voice_id ? '' : ' (sample only — enrol first)'}</option>)}
             </select>
           </label>
           {busyCode === selectedLanguage.code && <RefreshCw className="spin language-save-indicator" size={17} aria-label="Saving language voice" />}
@@ -3611,6 +3611,7 @@ function VoiceLibrary() {
   const [addLanguage, setAddLanguage] = useState('en-ZA');
   const [addProviderVoice, setAddProviderVoice] = useState('');
   const [addFile, setAddFile] = useState<File | null>(null);
+  const [consentFiles, setConsentFiles] = useState<Record<string, File | null>>({});
   const [adding, setAdding] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -3681,6 +3682,25 @@ function VoiceLibrary() {
     }
   }
 
+  async function enrolVoice(voice: Voice) {
+    const consentFile = consentFiles[voice.id];
+    if (!consentFile) { setError('Choose the voice owner consent recording first.'); return; }
+    setBusyId(voice.id);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set('consent_file', consentFile);
+      const response = await fetch(`/api/v1/voices/${voice.id}/enrol`, { method: 'POST', body: form });
+      await requireSuccessfulResponse(response, 'Could not enable this voice for live speech.');
+      setConsentFiles((current) => ({ ...current, [voice.id]: null }));
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not enable this voice for live speech.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function submitAdd(event: React.FormEvent) {
     event.preventDefault();
     if (!addName.trim()) { setError('Give the voice a name.'); return; }
@@ -3723,7 +3743,7 @@ function VoiceLibrary() {
             <article className="panel asset-card" key={voice.id}>
               <div className="asset-card-top">
                 <span className="empty-icon"><AudioLines size={21} /></span>
-                <StatusPill tone={voice.is_custom ? 'muted' : 'good'}>{voice.is_custom ? 'Uploaded' : 'Provider voice'}</StatusPill>
+                <StatusPill tone={voice.provider_voice_id ? 'good' : 'muted'}>{voice.provider_voice_id ? 'Live speech ready' : 'Sample only'}</StatusPill>
               </div>
               <h2>{voice.name}</h2>
               <p>{voice.is_custom ? 'Your uploaded recording' : `OpenAI · ${voice.provider_voice_id}`}</p>
@@ -3734,10 +3754,15 @@ function VoiceLibrary() {
               <button className="secondary-button" onClick={() => playSample(voice)} disabled={playingId === voice.id}>
                 {playingId === voice.id ? <RefreshCw size={15} className="spin" /> : <Play size={15} />}{playingId === voice.id ? 'Playing…' : 'Play sample'}
               </button>
+              {voice.is_custom && !voice.provider_voice_id && <div className="content-stack compact">
+                <p>To use this recording for new speech, upload the owner reading: “I am the owner of this voice and I consent to OpenAI using this voice to create a synthetic voice model.”</p>
+                <label>Consent recording<input type="file" accept="audio/*" onChange={(event) => setConsentFiles((current) => ({ ...current, [voice.id]: event.target.files?.[0] ?? null }))} /></label>
+                <button className="secondary-button" type="button" onClick={() => enrolVoice(voice)} disabled={busyId === voice.id}>{busyId === voice.id ? <RefreshCw size={15} className="spin" /> : <AudioLines size={15} />}Enable for live speech</button>
+              </div>}
               <label className="full">Assign to digital human
                 <select value={assigned?.human_slug ?? ''} onChange={(event) => { const slug = event.target.value; if (slug) assignVoice(slug, voice.id); }} disabled={busyId === voice.id}>
                   <option value="">Not assigned</option>
-                  {realHumans.map((human) => <option key={human.id} value={human.id}>{human.name}{assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
+                  {realHumans.map((human) => <option key={human.id} value={human.id} disabled={!voice.provider_voice_id}>{human.name}{!voice.provider_voice_id ? ' — enrol voice first' : assignments.find((a) => a.human_slug === human.id && a.voice_id !== voice.id) ? ' (has a voice)' : ''}</option>)}
                 </select>
               </label>
             </article>

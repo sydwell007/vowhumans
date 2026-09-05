@@ -1080,6 +1080,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, data: voiceRow, meta: { mode: "live", request_id: randomUUID() } }, { status: 201 });
   }
 
+  if (resource === "voices" && route[1] && route[2] === "enrol" && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const organisationId = await requireOrganisation(request);
+    if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return NextResponse.json({ success: false, code: "PROVIDER_DISABLED", message: "OpenAI custom voice enrolment is not configured." }, { status: 503 });
+    const form = await request.formData();
+    const consentFile = form.get("consent_file");
+    if (!(consentFile instanceof Blob) || consentFile.size === 0 || !consentFile.type.startsWith("audio/")) {
+      return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Record and upload the required voice-owner consent phrase." }, { status: 422 });
+    }
+    if (consentFile.size > 4 * 1024 * 1024) return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "Consent audio must be 4MB or smaller." }, { status: 422 });
+    const [voice] = await sql<{ id: string; name: string; provider_voice_id: string | null; settings: { audio_object_key?: string } | null }[]>`
+      SELECT id, name, provider_voice_id, settings FROM voices WHERE id = ${route[1]} AND organisation_id = ${organisationId} AND is_custom = true
+    `;
+    if (!voice) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "Uploaded voice not found." }, { status: 404 });
+    if (voice.provider_voice_id) return NextResponse.json({ success: true, data: voice, meta: { mode: "live", request_id: randomUUID() } });
+    const objectKey = voice.settings?.audio_object_key;
+    const [sample] = objectKey ? await sql<{ data: Buffer; mime_type: string }[]>`
+      SELECT data, mime_type FROM media_blobs WHERE object_key = ${objectKey} AND organisation_id = ${organisationId}
+    ` : [];
+    if (!sample) return NextResponse.json({ success: false, code: "SAMPLE_MISSING", message: "The original voice sample could not be found. Upload the voice again." }, { status: 409 });
+
+    const consentBody = new FormData();
+    consentBody.set("name", `${voice.name} consent`);
+    consentBody.set("language", "en");
+    consentBody.set("recording", new Blob([Buffer.from(await consentFile.arrayBuffer())], { type: consentFile.type || "audio/webm" }), "consent.webm");
+    const consentResponse = await fetch("https://api.openai.com/v1/audio/voice_consents", { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: consentBody });
+    const consentResult = await consentResponse.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+    if (!consentResponse.ok || !consentResult.id) {
+      return NextResponse.json({ success: false, code: "VOICE_CONSENT_FAILED", message: consentResult.error?.message || "OpenAI did not accept the consent recording." }, { status: consentResponse.status || 502 });
+    }
+
+    const voiceBody = new FormData();
+    voiceBody.set("name", voice.name);
+    voiceBody.set("consent", consentResult.id);
+    voiceBody.set("audio_sample", new Blob([Uint8Array.from(sample.data).buffer], { type: sample.mime_type }), "sample.webm");
+    const voiceResponse = await fetch("https://api.openai.com/v1/audio/voices", { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: voiceBody });
+    const voiceResult = await voiceResponse.json().catch(() => ({})) as { id?: string; error?: { message?: string } };
+    if (!voiceResponse.ok || !voiceResult.id) {
+      return NextResponse.json({ success: false, code: "VOICE_ENROLMENT_FAILED", message: voiceResult.error?.message || "OpenAI did not create the custom synthesis voice." }, { status: voiceResponse.status || 502 });
+    }
+    const [updated] = await sql`
+      UPDATE voices SET provider = 'openai', provider_voice_id = ${voiceResult.id}, state = 'active', settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ consent_id: consentResult.id })}::jsonb
+      WHERE id = ${voice.id} AND organisation_id = ${organisationId}
+      RETURNING id, name, provider, provider_voice_id, language, is_custom, state, created_at
+    `;
+    return NextResponse.json({ success: true, data: updated, meta: { mode: "live", request_id: randomUUID() } });
+  }
+
   if (resource === "faces" && !route[1] && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const organisationId = await requireOrganisation(request);
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
@@ -1720,6 +1769,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const requestedLanguage = flagEnabled("ENABLE_MULTILINGUAL")
       ? (typeof body.requested_language === "string" && body.requested_language ? body.requested_language : human.default_language_code)
       : null;
+    const [selectedVoice] = requestedLanguage ? await sql<{ name: string; provider_voice_id: string | null }[]>`
+      SELECT v.name, v.provider_voice_id
+      FROM voices v
+      WHERE v.id = COALESCE(
+        (SELECT voice_id FROM digital_human_language_voices WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId} AND language_code = ${requestedLanguage}),
+        (SELECT default_voice_id FROM organisation_languages WHERE organisation_id = ${organisationId} AND language_code = ${requestedLanguage}),
+        (SELECT voice_id FROM human_voice_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId} LIMIT 1)
+      ) AND v.organisation_id = ${organisationId}
+    ` : await sql<{ name: string; provider_voice_id: string | null }[]>`
+      SELECT v.name, v.provider_voice_id FROM human_voice_assignments hva JOIN voices v ON v.id = hva.voice_id
+      WHERE hva.organisation_id = ${organisationId} AND hva.human_slug = ${digitalHumanId} LIMIT 1
+    `;
+    if (selectedVoice && !selectedVoice.provider_voice_id) {
+      return NextResponse.json({ success: false, code: "VOICE_NOT_ENROLLED", message: `${selectedVoice.name} is a playable sample, but it has not been enrolled for live speech. Open Voices and use Enable for live speech first.` }, { status: 409 });
+    }
     try {
       const [face] = await sql<{ face_asset_id: string }[]>`SELECT face_asset_id FROM human_face_assignments WHERE organisation_id = ${organisationId} AND human_slug = ${digitalHumanId}`;
       const avatarMode = face ? "live-avatar" : "audio-only";
