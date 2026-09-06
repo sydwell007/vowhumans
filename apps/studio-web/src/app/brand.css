@@ -3820,6 +3820,13 @@ body {
 .replica-quality-review { display: grid; gap: 17px; padding: 24px; border: 1px solid var(--vh-border); border-radius: 18px; background: var(--vh-midnight-2); }
 .replica-quality-review > div:first-child h3 { margin: 3px 0 5px; color: var(--vh-text); font-size: 21px; }
 .replica-quality-review > div:first-child p:not(.eyebrow) { margin: 0 !important; }
+.replica-preview-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.replica-preview-actions small { color: var(--vh-muted); }
+.replica-preview-comparison { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.replica-preview-comparison article { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--vh-border); border-radius: 14px; background: var(--vh-surface); }
+.replica-preview-comparison article h3 { margin: 0; }
+.replica-preview-comparison video { width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; background: #030712; object-fit: contain; }
+.replica-preview-placeholder { display: grid; place-items: center; gap: 9px; aspect-ratio: 16 / 9; padding: 20px; border: 1px dashed var(--vh-border); border-radius: 10px; background: #030712; color: var(--vh-muted); text-align: center; }
 .replica-evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .replica-evidence-grid article { display: grid; align-content: start; gap: 10px; padding: 16px; border: 1px solid var(--vh-border); border-radius: 14px; background: var(--vh-surface); }
 .replica-evidence-grid article h3,.replica-evidence-grid article p { margin: 0 !important; }
@@ -3852,6 +3859,7 @@ body {
   .replica-capture-card,.replica-workflow-card { grid-template-columns: 1fr; }
   .wizard-appearance-tiers { grid-template-columns: 1fr; }
   .replica-evidence-grid { grid-template-columns: 1fr; }
+  .replica-preview-comparison { grid-template-columns: 1fr; }
   .replica-method-tabs,.replica-attestations { grid-template-columns: 1fr; }
   .replica-chapter-row { grid-template-columns: auto minmax(0,1fr); }
   .replica-chapter-row > label,.replica-chapter-row > button { grid-column: 2; }

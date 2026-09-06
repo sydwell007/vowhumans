@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { after, NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, readSession, type SessionUser } from "@/lib/auth";
 import sql, { databaseConfigured } from "@/lib/db";
+import { synthesizeSpeech } from "@/lib/openai";
 import {
   createPrivateReplicaUpload,
   createPrivateReplicaDownload,
@@ -263,6 +264,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
         },
       });
     }
+    if (path.length === 2 && path[1] === "source-preview") {
+      const profile = await findProfile(user.organisationId, path[0]);
+      if (!profile) return problem("Replica profile not found.", "NOT_FOUND", 404);
+      const clips = await sql<{ object_key: string }[]>`
+        SELECT rmc.object_key FROM replica_motion_clips rmc
+        JOIN replica_versions rv ON rv.id=rmc.replica_version_id AND rv.organisation_id=rmc.organisation_id
+        WHERE rmc.organisation_id=${user.organisationId} AND rv.replica_profile_id=${profile.id}
+          AND rmc.conversation_state='idle' AND rv.state IN ('quality_review','published')
+        ORDER BY rv.version DESC, rmc.created_at LIMIT 1
+      `;
+      if (!clips[0]) return problem("No processed idle source is available for comparison.", "SOURCE_PREVIEW_NOT_FOUND", 404);
+      const source = await fetch(await createPrivateReplicaDownload(clips[0].object_key), { cache: "no-store", signal: AbortSignal.timeout(60_000) });
+      if (!source.ok) return problem("The private source preview could not be loaded.", "SOURCE_PREVIEW_FAILED", 502);
+      return new NextResponse(source.body, { status: 200, headers: { "content-type": source.headers.get("content-type") || "video/mp4", "cache-control": "private, no-store" } });
+    }
     if (path.length !== 1) return problem("Replica route not found.", "NOT_FOUND", 404);
     const profile = await findProfile(user.organisationId, path[0]);
     if (!profile) return problem("Replica profile not found.", "NOT_FOUND", 404);
@@ -414,6 +430,74 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const profile = await findProfile(user.organisationId, profileId);
     if (!profile) return problem("Replica profile not found.", "NOT_FOUND", 404);
     if (profile.status === "revoked") return problem("This replica has been revoked.", "REPLICA_REVOKED", 409);
+
+    if (action === "preview" && path.length === 2) {
+      if (!new Set(["owner", "admin", "reviewer"]).has(user.role)) return problem("A reviewer or administrator must generate a replica preview.", "FORBIDDEN", 403);
+      const workerUrl = (process.env.AVATAR_WORKER_URL || process.env.GPU_WORKER_URL || "").replace(/\/$/, "");
+      const internalKey = process.env.VOWHUMANS_INTERNAL_KEY || "";
+      if (!workerUrl || !internalKey) return problem("The staged GPU renderer is not configured. Configure AVATAR_WORKER_URL and its matching internal key before Step 11.", "REPLICA_RENDERER_NOT_CONFIGURED", 503);
+      const versions = await sql<{ id: string; state: string }[]>`
+        SELECT id, state FROM replica_versions WHERE organisation_id=${user.organisationId}
+          AND replica_profile_id=${profileId} AND state IN ('quality_review','published')
+        ORDER BY version DESC LIMIT 1
+      `;
+      const version = versions[0];
+      if (!version) return problem("A processed version in quality review is required before generating a preview.", "PROCESSING_REQUIRED", 409);
+      const clips = await sql<{
+        key: string; state: string; gesture_key: string | null; intensity: number; object_key: string; sha256: string;
+        starts_neutral: boolean; ends_neutral: boolean; trim_start_ms: number | null; trim_end_ms: number | null;
+      }[]>`
+        SELECT clip_key AS key, conversation_state AS state, gesture_key, intensity, object_key, sha256,
+          starts_neutral, ends_neutral,
+          CASE WHEN metadata->>'trim_start_ms' ~ '^[0-9]+$' THEN (metadata->>'trim_start_ms')::integer END AS trim_start_ms,
+          CASE WHEN metadata->>'trim_end_ms' ~ '^[0-9]+$' THEN (metadata->>'trim_end_ms')::integer END AS trim_end_ms
+        FROM replica_motion_clips WHERE organisation_id=${user.organisationId} AND replica_version_id=${version.id}
+        ORDER BY conversation_state, clip_key
+      `;
+      if (!clips.some((clip) => clip.state === "idle") || !clips.some((clip) => clip.state === "speaking")) {
+        return problem("The processed motion manifest is incomplete.", "REPLICA_MANIFEST_INCOMPLETE", 409);
+      }
+      const speech = await synthesizeSpeech("Hello, I am Thandi's staged photoreal replica preview. Please review my mouth movement and preserved natural motion.", process.env.REPLICA_PREVIEW_VOICE || "marin");
+      if (!speech.ok) return problem(speech.message, speech.code, speech.status);
+      let replicaId = "";
+      const startedAt = Date.now();
+      try {
+        const prepareForm = new FormData();
+        const manifestClips: Array<Record<string, unknown>> = [];
+        const sources = new Map<string, Blob>();
+        for (const clip of clips) {
+          const sourceKey = clip.sha256;
+          if (!sources.has(sourceKey)) {
+            const capture = await fetch(await createPrivateReplicaDownload(clip.object_key), { cache: "no-store", signal: AbortSignal.timeout(60_000) });
+            if (!capture.ok) throw new Error("PRIVATE_CAPTURE_DOWNLOAD_FAILED");
+            sources.set(sourceKey, await capture.blob());
+          }
+          manifestClips.push({ key: clip.key, state: clip.state, gesture_key: clip.gesture_key, intensity: clip.intensity, starts_neutral: clip.starts_neutral, ends_neutral: clip.ends_neutral, source_key: sourceKey, ...(clip.trim_start_ms !== null ? { trim_start_ms: clip.trim_start_ms } : {}), ...(clip.trim_end_ms !== null ? { trim_end_ms: clip.trim_end_ms } : {}) });
+        }
+        prepareForm.set("manifest_json", JSON.stringify({ clips: manifestClips }));
+        for (const [sourceKey, source] of sources) prepareForm.set(`source__${sourceKey}`, source, `${sourceKey}.mp4`);
+        const prepared = await fetch(`${workerUrl}/internal/v1/replicas`, { method: "POST", headers: { "x-internal-key": internalKey }, body: prepareForm, signal: AbortSignal.timeout(180_000) });
+        if (!prepared.ok) {
+          const detail = await prepared.text().catch(() => "");
+          return problem(detail.includes("Video Replica is disabled") ? "The GPU worker is reachable, but Video Replica rendering is disabled there. Enable ENABLE_VIDEO_REPLICA on the GPU worker, restart it, and retry Step 11." : "The staged GPU worker could not prepare this replica preview.", "REPLICA_PREVIEW_PREPARE_FAILED", 503);
+        }
+        replicaId = String(((await prepared.json()) as { replica_id?: string }).replica_id || "");
+        if (!replicaId) return problem("The GPU worker did not return a prepared replica.", "REPLICA_PREVIEW_PREPARE_FAILED", 502);
+        const renderForm = new FormData();
+        renderForm.set("replica_id", replicaId);
+        renderForm.set("conversation_state", "speaking");
+        renderForm.set("audio_file", new Blob([new Uint8Array(speech.data)], { type: "audio/wav" }), "preview.wav");
+        const rendered = await fetch(`${workerUrl}/internal/v1/replica-render`, { method: "POST", headers: { "x-internal-key": internalKey }, body: renderForm, signal: AbortSignal.timeout(240_000) });
+        if (!rendered.ok) return problem("The GPU worker could not render the staged replica preview.", "REPLICA_PREVIEW_RENDER_FAILED", 502);
+        const bytes = await rendered.arrayBuffer();
+        return new NextResponse(bytes, { status: 200, headers: { "content-type": rendered.headers.get("content-type") || "video/mp4", "cache-control": "private, no-store", "x-vowhumans-preview-latency-ms": String(Date.now() - startedAt), "x-vowhumans-render-ms": rendered.headers.get("x-vowhumans-render-ms") || "" } });
+      } catch (error) {
+        console.error("[replica-preview]", error);
+        return problem("The staged replica preview could not be generated. Check the private capture connection and GPU worker.", "REPLICA_PREVIEW_FAILED", 502);
+      } finally {
+        if (replicaId) void fetch(`${workerUrl}/internal/v1/replicas/${replicaId}`, { method: "DELETE", headers: { "x-internal-key": internalKey } }).catch(() => undefined);
+      }
+    }
 
     if (action === "upload-intents" && path.length === 2) {
       if (!privateObjectStorageConfigured()) return problem("Private object storage must be configured before biometric capture.", "OBJECT_STORAGE_NOT_CONFIGURED", 503);
