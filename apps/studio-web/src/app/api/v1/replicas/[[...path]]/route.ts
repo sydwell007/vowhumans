@@ -479,7 +479,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const prepared = await fetch(`${workerUrl}/internal/v1/replicas`, { method: "POST", headers: { "x-internal-key": internalKey }, body: prepareForm, signal: AbortSignal.timeout(180_000) });
         if (!prepared.ok) {
           const detail = await prepared.text().catch(() => "");
-          return problem(detail.includes("Video Replica is disabled") ? "The GPU worker is reachable, but Video Replica rendering is disabled there. Enable ENABLE_VIDEO_REPLICA on the GPU worker, restart it, and retry Step 11." : "The staged GPU worker could not prepare this replica preview.", "REPLICA_PREVIEW_PREPARE_FAILED", 503);
+          let workerMessage = "";
+          try {
+            const parsed = JSON.parse(detail) as { detail?: unknown };
+            if (typeof parsed.detail === "string") workerMessage = parsed.detail.replace(/[\r\n]+/g, " ").slice(0, 500);
+          } catch {
+            workerMessage = detail.replace(/[\r\n]+/g, " ").slice(0, 500);
+          }
+          console.error("[replica-preview] GPU preparation failed", { status: prepared.status, detail: workerMessage });
+          return problem(
+            detail.includes("Video Replica is disabled")
+              ? "The GPU worker is reachable, but Video Replica rendering is disabled there. Enable ENABLE_VIDEO_REPLICA on the GPU worker, restart it, and retry Step 11."
+              : `The staged GPU worker could not prepare this replica preview.${workerMessage ? ` ${workerMessage}` : ""}`,
+            "REPLICA_PREVIEW_PREPARE_FAILED",
+            503,
+          );
         }
         replicaId = String(((await prepared.json()) as { replica_id?: string }).replica_id || "");
         if (!replicaId) return problem("The GPU worker did not return a prepared replica.", "REPLICA_PREVIEW_PREPARE_FAILED", 502);
