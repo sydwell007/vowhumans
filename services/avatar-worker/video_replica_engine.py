@@ -48,6 +48,23 @@ class PreparedVideoReplica:
     provider: str = "musetalk-video-replica"
 
 
+def _resolve_trim_window(source_duration_ms: int, trim_start_ms: int | None, trim_end_ms: int | None) -> tuple[int, int]:
+    """Return a usable chapter range, or the complete clip for stale metadata.
+
+    Guided captures are stored as standalone video objects. Older processing
+    manifests can nevertheless contain offsets from a concatenated capture.
+    Those optional offsets must not make an otherwise valid standalone clip
+    impossible to preview.
+    """
+    start_ms = trim_start_ms or 0
+    end_ms = trim_end_ms or source_duration_ms
+    if source_duration_ms <= 0:
+        return max(0, start_ms), end_ms
+    if start_ms < 0 or start_ms >= source_duration_ms or end_ms <= start_ms or end_ms > source_duration_ms + 1000:
+        return 0, source_duration_ms
+    return start_ms, min(end_ms, source_duration_ms)
+
+
 def _decode_video(path: str, trim_start_ms: int | None = None, trim_end_ms: int | None = None) -> tuple[list[np.ndarray], float]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
@@ -55,12 +72,7 @@ def _decode_video(path: str, trim_start_ms: int | None = None, trim_end_ms: int 
     fps = float(capture.get(cv2.CAP_PROP_FPS) or FPS)
     source_frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     source_duration_ms = int((source_frame_count / fps) * 1000) if fps > 0 else 0
-    start_ms = trim_start_ms or 0
-    end_ms = trim_end_ms or source_duration_ms
-    if start_ms < 0 or end_ms <= start_ms or (source_duration_ms and end_ms > source_duration_ms + 1000):
-        capture.release()
-        raise ValueError("Replica clip chapter is outside the source video.")
-    end_ms = min(end_ms, source_duration_ms)
+    start_ms, end_ms = _resolve_trim_window(source_duration_ms, trim_start_ms, trim_end_ms)
     capture.set(cv2.CAP_PROP_POS_MSEC, start_ms)
     max_source_frames = min(MAX_FRAMES_PER_CLIP, max(1, round(((end_ms - start_ms) / 1000) * fps)))
     frames: list[np.ndarray] = []
