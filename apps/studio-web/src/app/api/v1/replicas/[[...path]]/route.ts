@@ -502,7 +502,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
         renderForm.set("conversation_state", "speaking");
         renderForm.set("audio_file", new Blob([new Uint8Array(speech.data)], { type: "audio/wav" }), "preview.wav");
         const rendered = await fetch(`${workerUrl}/internal/v1/replica-render`, { method: "POST", headers: { "x-internal-key": internalKey }, body: renderForm, signal: AbortSignal.timeout(240_000) });
-        if (!rendered.ok) return problem("The GPU worker could not render the staged replica preview.", "REPLICA_PREVIEW_RENDER_FAILED", 502);
+        if (!rendered.ok) {
+          const detail = await rendered.text().catch(() => "");
+          let workerMessage = "";
+          try {
+            const parsed = JSON.parse(detail) as { detail?: unknown };
+            if (typeof parsed.detail === "string") workerMessage = parsed.detail.replace(/[\r\n]+/g, " ").slice(0, 500);
+          } catch {
+            workerMessage = detail.replace(/[\r\n]+/g, " ").slice(0, 500);
+          }
+          console.error("[replica-preview] GPU render failed", { status: rendered.status, detail: workerMessage });
+          return problem(`The GPU worker could not render the staged replica preview.${workerMessage ? ` ${workerMessage}` : ""}`, "REPLICA_PREVIEW_RENDER_FAILED", 502);
+        }
         const bytes = await rendered.arrayBuffer();
         return new NextResponse(bytes, { status: 200, headers: { "content-type": rendered.headers.get("content-type") || "video/mp4", "cache-control": "private, no-store", "x-vowhumans-preview-latency-ms": String(Date.now() - startedAt), "x-vowhumans-render-ms": rendered.headers.get("x-vowhumans-render-ms") || "" } });
       } catch (error) {
