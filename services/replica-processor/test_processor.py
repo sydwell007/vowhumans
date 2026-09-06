@@ -33,6 +33,15 @@ class ProcessorTests(unittest.TestCase):
         self.assertEqual(statuses["lip_sync_visual_review"], "not_tested")
         self.assertEqual(statuses["livekit_latency"], "not_tested")
 
+    def test_face_continuity_keeps_per_clip_diagnostics(self):
+        checks = quality_checks([
+            {"key": "idle", "height": 720, "fps": 25, "face_detection_ratio": 1.0, "duration_ms": 2000},
+            {"key": "speaking", "height": 720, "fps": 25, "face_detection_ratio": .5, "duration_ms": 2000},
+        ])
+        continuity = next(check for check in checks if check["code"] == "single_face_continuity")
+        self.assertEqual(continuity["status"], "failed")
+        self.assertEqual(continuity["detail"]["clips"][1], {"key": "speaking", "ratio": .5})
+
     def test_complete_video_clip_accepts_a_bounded_chapter_range(self):
         clip = ClipInput(
             segment_id="segment-1", segment_type="gesture", gesture_key="explain",

@@ -26,6 +26,34 @@ from timeline import infer_declared_source_duration, normalise_chapter_range
 app = FastAPI(title="VowHumans Replica Processor", version="1.0.0")
 MAX_CAPTURE_BYTES = int(os.getenv("REPLICA_MAX_CAPTURE_BYTES", str(300 * 1024 * 1024)))
 FACE_SAMPLE_COUNT = int(os.getenv("REPLICA_FACE_SAMPLE_COUNT", "12"))
+YUNET_MODEL_PATH = os.getenv("REPLICA_FACE_MODEL_PATH", "/app/face_detection_yunet_2023mar.onnx")
+
+
+def _single_face_present(frame: object, haar_cascade: object, yunet_detector: object | None) -> bool:
+    """Detect exactly one face, using YuNet with contrast-normalised Haar fallback."""
+    height, width = frame.shape[:2]
+    scale = min(1.0, 640 / max(width, height))
+    detection_frame = cv2.resize(frame, None, fx=scale, fy=scale) if scale < 1 else frame
+    detector_height, detector_width = detection_frame.shape[:2]
+    if yunet_detector is not None:
+        try:
+            yunet_detector.setInputSize((detector_width, detector_height))
+            _, faces = yunet_detector.detect(detection_frame)
+            return faces is not None and len(faces) == 1
+        except cv2.error:
+            # A damaged or unsupported model must not take capture processing down.
+            # The fallback remains stricter than merely accepting a visible image.
+            pass
+    gray = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2GRAY)
+    equalised = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+    min_side = max(48, round(min(detector_width, detector_height) * 0.08))
+    for candidate in (gray, equalised):
+        faces = haar_cascade.detectMultiScale(candidate, scaleFactor=1.08, minNeighbors=4, minSize=(min_side, min_side))
+        if len(faces) == 1:
+            return True
+        if len(faces) > 1:
+            return False
+    return False
 
 
 class ClipInput(BaseModel):
@@ -151,6 +179,12 @@ def _analyse(
         raise ValueError("CAPTURE_CHAPTER_EMPTY")
     duration_ms = int((frame_count / fps) * 1000)
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    yunet_detector = None
+    if Path(YUNET_MODEL_PATH).is_file() and hasattr(cv2, "FaceDetectorYN_create"):
+        try:
+            yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, "", (320, 320), 0.65, 0.3, 5000)
+        except cv2.error:
+            pass
     sample_indexes = {start_frame + int(i * max(frame_count - 1, 0) / max(FACE_SAMPLE_COUNT - 1, 1)) for i in range(FACE_SAMPLE_COUNT)}
     detected = 0
     sampled = 0
@@ -179,8 +213,7 @@ def _analyse(
             sampled += 1
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             luminance.append(float(gray.mean()))
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.12, minNeighbors=5, minSize=(80, 80))
-            if len(faces) == 1:
+            if _single_face_present(frame, face_cascade, yunet_detector):
                 detected += 1
     finally:
         capture.release()
@@ -200,7 +233,7 @@ def quality_checks(clips: list[dict[str, object]]) -> list[dict[str, object]]:
     return [
         {"code": "capture_resolution", "status": "passed" if min_height >= 720 else "failed", "measured_value": min_height, "threshold_value": 720, "unit": "px", "detail": {"recommended": "1080p"}},
         {"code": "capture_frame_rate", "status": "passed" if min_fps >= 24 else "failed", "measured_value": min_fps, "threshold_value": 24, "unit": "fps"},
-        {"code": "single_face_continuity", "status": "passed" if min_face_ratio >= .75 else "failed", "measured_value": min_face_ratio, "threshold_value": .75, "unit": "ratio"},
+        {"code": "single_face_continuity", "status": "passed" if min_face_ratio >= .75 else "failed", "measured_value": min_face_ratio, "threshold_value": .75, "unit": "ratio", "detail": {"detector": "yunet-with-haar-fallback", "clips": [{"key": str(clip.get("key", "unknown")), "ratio": float(clip["face_detection_ratio"])} for clip in clips]}},
         {"code": "clip_duration", "status": "passed" if min_duration >= 1000 else "failed", "measured_value": min_duration, "threshold_value": 1000, "unit": "ms"},
         {"code": "lip_sync_visual_review", "status": "not_tested", "detail": {"required": "GPU render plus accountable human review"}},
         {"code": "livekit_latency", "status": "not_tested", "detail": {"required": "Measured end-to-end room test on deployed GPU"}},
