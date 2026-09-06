@@ -7,11 +7,11 @@ without loading MuseTalk or CUDA.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from typing import Protocol
 
 
-class RendererTier(StrEnum):
+class RendererTier(str, Enum):
     PORTRAIT = "portrait"
     VIDEO_REPLICA = "video_replica"
     RIGGED_3D = "rigged_3d"

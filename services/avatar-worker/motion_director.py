@@ -6,11 +6,11 @@ clips from a replica manifest and keeps transitions at neutral boundaries.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 import random
 
 
-class ConversationState(StrEnum):
+class ConversationState(str, Enum):
     IDLE = "idle"
     LISTENING = "listening"
     THINKING = "thinking"
