@@ -65,6 +65,11 @@ def _resolve_trim_window(source_duration_ms: int, trim_start_ms: int | None, tri
     return start_ms, min(end_ms, source_duration_ms)
 
 
+def _audio_chunks_empty(chunks) -> bool:
+    """MuseTalk may return either a sequence or a multi-value torch Tensor."""
+    return len(chunks) == 0
+
+
 def _decode_video(path: str, trim_start_ms: int | None = None, trim_end_ms: int | None = None) -> tuple[list[np.ndarray], float]:
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
@@ -188,7 +193,7 @@ def render_video_replica(
         features, engine.whisper.device, engine.weight_dtype, engine.whisper, audio_length,
         fps=FPS, audio_padding_length_left=2, audio_padding_length_right=2,
     )
-    if not chunks:
+    if _audio_chunks_empty(chunks):
         raise ValueError("No audio frames extracted from the replica render request.")
     sequence = [clip.frames[_loop_index(index, len(clip.frames))] for index in range(len(chunks))]
     generator = datagen(chunks, [frame.latent for frame in sequence], int(os.getenv("MUSETALK_BATCH_SIZE", "16")))
