@@ -151,14 +151,16 @@ export async function synthesizeSpeech(text: string, providerVoiceId: string): P
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return notConfigured();
   try {
-    const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      // OPENAI_TTS_MODEL was declared in .env.example but never actually read
-      // anywhere in this repo until now.
-      body: JSON.stringify({ model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts", voice: providerVoiceId, input: text, response_format: "wav" }),
-      signal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
+    const configuredModel = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
+    const request = (model: string) => fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, voice: providerVoiceId, input: text, response_format: "wav" }), signal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
     });
+    let upstream = await request(configuredModel);
+    if (!upstream.ok && configuredModel !== "gpt-4o-mini-tts") {
+      const detail = await upstream.clone().text().catch(() => "");
+      if (/model.*(does not exist|not found)|model_not_found/i.test(detail)) upstream = await request("gpt-4o-mini-tts");
+    }
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
       return { ok: false, status: 502, code: "TTS_FAILED", message: detail.slice(0, 300) || "Could not generate narration." };
