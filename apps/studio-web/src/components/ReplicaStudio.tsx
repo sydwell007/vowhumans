@@ -1737,6 +1737,7 @@ function QualityEvidenceReview({
 
   function startSpeakingRun() {
     setError(null);
+    setMuted(false);
     speechStartedRef.current = true;
     speechEndedAtRef.current = null;
     responseStartedRef.current = false;
@@ -1745,6 +1746,10 @@ function QualityEvidenceReview({
 
   function stopSpeakingRun() {
     if (!speechStartedRef.current) return;
+    // Closing the local LiveKit microphone creates a real audio boundary. Merely
+    // stopping the stopwatch leaves office noise flowing to server VAD, which
+    // can keep the turn open for several seconds after the reviewer stops.
+    setMuted(true);
     speechStartedRef.current = false;
     speechEndedAtRef.current = performance.now();
     responseStartedRef.current = agentSpeakingRef.current;
@@ -1756,6 +1761,7 @@ function QualityEvidenceReview({
       responseStartedRef.current = false;
       responseTimeoutRef.current = null;
       setCapturePhase("idle");
+      setMuted(false);
       setError(
         "No responsive replica frame arrived within 20 seconds. This run was not recorded; click Start speaking to retry.",
       );
@@ -1776,6 +1782,7 @@ function QualityEvidenceReview({
     responseTimeoutRef.current = null;
     setRuns((current) => [...current, measured]);
     setCapturePhase("idle");
+    setMuted(false);
   }
 
   function responsiveAvatarFrame(timestamp: number) {
@@ -1943,12 +1950,12 @@ function QualityEvidenceReview({
                 />
                 <span>
                   {liveStatus === "connected"
-                    ? muted
-                      ? "Microphone muted"
-                      : capturePhase === "speaking"
-                        ? "Timing run — speak now"
-                        : capturePhase === "waiting"
-                          ? "Waiting for the replica response…"
+                    ? capturePhase === "speaking"
+                      ? "Timing run — speak now"
+                      : capturePhase === "waiting"
+                        ? "Microphone closed — waiting for the replica response…"
+                        : muted
+                          ? "Microphone muted"
                           : "Connected — start a speaking run"
                     : (liveStatus ?? "Connecting…")}
                 </span>
@@ -1986,6 +1993,7 @@ function QualityEvidenceReview({
                 <button
                   className="secondary-button"
                   type="button"
+                  disabled={capturePhase !== "idle"}
                   onClick={() => setMuted((value) => !value)}
                 >
                   {muted ? <MicOff size={16} /> : <Mic size={16} />}
