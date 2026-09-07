@@ -62,6 +62,7 @@ export function LiveVoiceRoom({
   const onRoomReadyRef = useRef(onRoomReady);
   const onLanguageAppliedRef = useRef(onLanguageApplied);
   const onVoiceErrorRef = useRef(onVoiceError);
+  const terminalVoiceErrorRef = useRef(false);
   const firstAudioFiredRef = useRef(false);
   const awaitingResponseFrameRef = useRef(false);
   // The voice and avatar agents publish the same speech on separate tracks. Keep
@@ -226,6 +227,12 @@ export function LiveVoiceRoom({
           message?.type === "vhm_voice_error" &&
           typeof message.message === "string"
         ) {
+          // A provider quota/auth/voice error closes the WebSocket, which emits
+          // a second generic connection error. Keep the actionable first error.
+          if (message.code === "provider_unavailable" && terminalVoiceErrorRef.current) return;
+          if (message.code && message.code !== "provider_unavailable") {
+            terminalVoiceErrorRef.current = true;
+          }
           onVoiceErrorRef.current?.(message.message, message.code);
         }
       } catch {

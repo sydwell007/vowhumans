@@ -437,7 +437,18 @@ async def entrypoint(ctx: JobContext):
     def _on_agent_state_changed(event) -> None:
         asyncio.create_task(_publish_voice_state(ctx, event.new_state))
 
+    terminal_voice_error_code: str | None = None
+
     def _on_session_error(event) -> None:
+        nonlocal terminal_voice_error_code
+        code, _message = _safe_voice_error(event)
+        # A terminal provider response (quota, credentials, or voice access) is
+        # commonly followed by a transport-close event. Preserve the actionable
+        # root cause instead of replacing it with a generic connection message.
+        if code == "provider_unavailable" and terminal_voice_error_code:
+            return
+        if code != "provider_unavailable":
+            terminal_voice_error_code = code
         asyncio.create_task(_publish_voice_error(ctx, event))
 
     session.on("agent_state_changed", _on_agent_state_changed)
