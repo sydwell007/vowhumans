@@ -19,6 +19,7 @@ import httpx
 from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, RunContext, WorkerOptions, cli, function_tool
 from livekit.plugins import openai
+from openai.types.beta.realtime.session import TurnDetection
 
 STUDIO_WEB_URL = (os.getenv("STUDIO_WEB_URL") or "https://vowhumans.com").strip()
 INTERNAL_KEY = os.getenv("VOWHUMANS_INTERNAL_KEY", "")
@@ -31,6 +32,8 @@ FALLBACK_INSTRUCTIONS = "Stay within the configured Persona scope, keep answers 
 FALLBACK_OPENING_INSTRUCTION = "Disclose that you are AI, then deliver the approved opening message."
 FALLBACK_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
 AVATAR_READY_WAIT_SECONDS = float(os.getenv("AVATAR_READY_WAIT_SECONDS", "15"))
+OPENAI_VAD_SILENCE_MS = int(os.getenv("OPENAI_VAD_SILENCE_MS", "300"))
+OPENAI_VAD_THRESHOLD = float(os.getenv("OPENAI_VAD_THRESHOLD", "0.55"))
 AVATAR_VIDEO_TRACK = "vhm-avatar-video"
 LANGUAGE_SWITCH_TOPIC = "vhm_language_switch_request"
 LANGUAGE_SWITCH_APPLIED_TOPIC = "vhm_language_switch_applied"
@@ -390,7 +393,24 @@ async def entrypoint(ctx: JobContext):
 
     ctx.room.on("data_received", _on_avatar_data)
 
-    session = AgentSession(llm=openai.realtime.RealtimeModel(model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"), voice=voice))
+    # Semantic VAD can wait up to two or more seconds after a complete sentence,
+    # which made otherwise healthy replica rooms fail the 1.5 s interaction
+    # gate. Server VAD gives this measured workflow a bounded, language-neutral
+    # silence window while retaining automatic response creation/interruption.
+    session = AgentSession(
+        llm=openai.realtime.RealtimeModel(
+            model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"),
+            voice=voice,
+            turn_detection=TurnDetection(
+                type="server_vad",
+                threshold=OPENAI_VAD_THRESHOLD,
+                prefix_padding_ms=250,
+                silence_duration_ms=OPENAI_VAD_SILENCE_MS,
+                create_response=True,
+                interrupt_response=True,
+            ),
+        )
+    )
 
     def _on_agent_state_changed(event) -> None:
         asyncio.create_task(_publish_voice_state(ctx, event.new_state))

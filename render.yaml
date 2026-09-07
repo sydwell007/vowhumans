@@ -63,6 +63,10 @@ services:
         sync: false
       - key: OPENAI_REALTIME_MODEL
         value: gpt-realtime-2.1
+      - key: OPENAI_VAD_SILENCE_MS
+        value: "300"
+      - key: OPENAI_VAD_THRESHOLD
+        value: "0.55"
       - key: STUDIO_WEB_URL
         sync: false
       - key: VOWHUMANS_INTERNAL_KEY
