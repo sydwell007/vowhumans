@@ -348,7 +348,7 @@ class AvatarSession:
         if self._speaking != was_speaking:
             _log(f"active_speakers_changed: agent speaking={self._speaking} (speakers={[p.identity for p in speakers]})")
             if self._speaking:
-                self._capture_video_frame(self._response_frame)
+                asyncio.create_task(self._publish_response_frame())
 
     def _on_data_received(self, data_packet) -> None:
         try:
@@ -375,13 +375,22 @@ class AvatarSession:
             # when the agent begins its response. The expensive mouth-retargeted
             # clip follows when ready, but the room now has a genuine responsive
             # replica frame inside the 1.5 s interaction gate.
-            self._capture_video_frame(self._response_frame)
+            asyncio.create_task(self._publish_response_frame())
             if self._pending_finalize is not None:
                 self._pending_finalize.cancel()
                 self._pending_finalize = None
         elif was_speaking:
             self._pending_finalize = asyncio.create_task(self._finalize_after_drain())
         _log(f"voice state event: {state} (was_speaking={was_speaking})")
+
+    async def _publish_response_frame(self) -> None:
+        """Mark the next frame before publishing it so the browser can measure
+        the decoded responsive frame without racing LiveKit speaker events."""
+        await self._ctx.room.local_participant.publish_data(
+            json.dumps({"type": "vhm_avatar_response_frame"}),
+            reliable=True,
+        )
+        self._capture_video_frame(self._response_frame)
 
     async def _consume_agent_audio(self, track: rtc.Track) -> None:
         _log("_consume_agent_audio: starting to consume audio frames")

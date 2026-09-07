@@ -26,6 +26,7 @@ export function LiveVoiceRoom({
   onSpeakingChange,
   onLocalSpeakingChange,
   onAvatarVideoFrame,
+  onAvatarResponseFrame,
   onFirstAudio,
   onReconnected,
   onRoomReady,
@@ -40,6 +41,7 @@ export function LiveVoiceRoom({
   onSpeakingChange?: (speaking: boolean) => void;
   onLocalSpeakingChange?: (speaking: boolean) => void;
   onAvatarVideoFrame?: (timestamp: number) => void;
+  onAvatarResponseFrame?: (timestamp: number) => void;
   onFirstAudio?: () => void;
   onReconnected?: () => void;
   onRoomReady?: (room: Room) => void;
@@ -54,12 +56,14 @@ export function LiveVoiceRoom({
   const onSpeakingChangeRef = useRef(onSpeakingChange);
   const onLocalSpeakingChangeRef = useRef(onLocalSpeakingChange);
   const onAvatarVideoFrameRef = useRef(onAvatarVideoFrame);
+  const onAvatarResponseFrameRef = useRef(onAvatarResponseFrame);
   const onFirstAudioRef = useRef(onFirstAudio);
   const onReconnectedRef = useRef(onReconnected);
   const onRoomReadyRef = useRef(onRoomReady);
   const onLanguageAppliedRef = useRef(onLanguageApplied);
   const onVoiceErrorRef = useRef(onVoiceError);
   const firstAudioFiredRef = useRef(false);
+  const awaitingResponseFrameRef = useRef(false);
   // The voice and avatar agents publish the same speech on separate tracks. Keep
   // every raw publication so avatar mode can be exclusive even across reconnects
   // or when the readiness data packet arrived before the browser joined.
@@ -81,6 +85,9 @@ export function LiveVoiceRoom({
   useEffect(() => {
     onAvatarVideoFrameRef.current = onAvatarVideoFrame;
   }, [onAvatarVideoFrame]);
+  useEffect(() => {
+    onAvatarResponseFrameRef.current = onAvatarResponseFrame;
+  }, [onAvatarResponseFrame]);
 
   useEffect(() => {
     onFirstAudioRef.current = onFirstAudio;
@@ -159,7 +166,12 @@ export function LiveVoiceRoom({
         if ("requestVideoFrameCallback" in element) {
           const watchFrame = () => {
             if (cancelled || !element.isConnected) return;
-            onAvatarVideoFrameRef.current?.(performance.now());
+            const timestamp = performance.now();
+            onAvatarVideoFrameRef.current?.(timestamp);
+            if (awaitingResponseFrameRef.current) {
+              awaitingResponseFrameRef.current = false;
+              onAvatarResponseFrameRef.current?.(timestamp);
+            }
             element.requestVideoFrameCallback(watchFrame);
           };
           element.requestVideoFrameCallback(watchFrame);
@@ -199,6 +211,8 @@ export function LiveVoiceRoom({
         };
         if (message?.type === "vhm_avatar_ready") {
           setAvatarMode(true);
+        } else if (message?.type === "vhm_avatar_response_frame") {
+          awaitingResponseFrameRef.current = true;
         } else if (
           message?.type === LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC &&
           typeof message.language_code === "string" &&

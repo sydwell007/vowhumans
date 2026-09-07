@@ -1593,6 +1593,7 @@ function QualityEvidenceReview({
   const speechEndedAtRef = useRef<number | null>(null);
   const responseStartedRef = useRef(false);
   const agentSpeakingRef = useRef(false);
+  const responseTimeoutRef = useRef<number | null>(null);
   const average = runs.length
     ? Math.round(runs.reduce((sum, value) => sum + value, 0) / runs.length)
     : null;
@@ -1718,6 +1719,9 @@ function QualityEvidenceReview({
     speechEndedAtRef.current = null;
     responseStartedRef.current = false;
     agentSpeakingRef.current = false;
+    if (responseTimeoutRef.current !== null)
+      window.clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = null;
     setCapturePhase("idle");
     if (sessionId)
       await fetch(`/api/v1/live-sessions/${sessionId}/end`, {
@@ -1745,6 +1749,17 @@ function QualityEvidenceReview({
     speechEndedAtRef.current = performance.now();
     responseStartedRef.current = agentSpeakingRef.current;
     setCapturePhase("waiting");
+    if (responseTimeoutRef.current !== null)
+      window.clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = window.setTimeout(() => {
+      speechEndedAtRef.current = null;
+      responseStartedRef.current = false;
+      responseTimeoutRef.current = null;
+      setCapturePhase("idle");
+      setError(
+        "No responsive replica frame arrived within 20 seconds. This run was not recorded; click Start speaking to retry.",
+      );
+    }, 20_000);
   }
 
   function avatarFrame(timestamp: number) {
@@ -1756,8 +1771,17 @@ function QualityEvidenceReview({
     );
     responseStartedRef.current = false;
     speechEndedAtRef.current = null;
+    if (responseTimeoutRef.current !== null)
+      window.clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = null;
     setRuns((current) => [...current, measured]);
     setCapturePhase("idle");
+  }
+
+  function responsiveAvatarFrame(timestamp: number) {
+    if (speechEndedAtRef.current === null) return;
+    responseStartedRef.current = true;
+    avatarFrame(timestamp);
   }
 
   function networkProfile() {
@@ -1774,6 +1798,14 @@ function QualityEvidenceReview({
       ? `${connection.effectiveType ?? "unknown"}, ${connection.downlink ?? "?"} Mbps downlink, ${connection.rtt ?? "?"} ms RTT`
       : `${navigator.userAgent}; browser network metrics unavailable`;
   }
+
+  useEffect(
+    () => () => {
+      if (responseTimeoutRef.current !== null)
+        window.clearTimeout(responseTimeoutRef.current);
+    },
+    [],
+  );
 
   return (
     <section className="replica-quality-review">
@@ -1907,7 +1939,7 @@ function QualityEvidenceReview({
                   muted={muted}
                   onStatusChange={setLiveStatus}
                   onSpeakingChange={agentSpeakingChanged}
-                  onAvatarVideoFrame={avatarFrame}
+                  onAvatarResponseFrame={responsiveAvatarFrame}
                 />
                 <span>
                   {liveStatus === "connected"
