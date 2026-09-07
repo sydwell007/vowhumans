@@ -1586,9 +1586,13 @@ function QualityEvidenceReview({
   );
   const [muted, setMuted] = useState(false);
   const [runs, setRuns] = useState<number[]>([]);
+  const [capturePhase, setCapturePhase] = useState<
+    "idle" | "speaking" | "waiting"
+  >("idle");
   const speechStartedRef = useRef(false);
   const speechEndedAtRef = useRef<number | null>(null);
   const responseStartedRef = useRef(false);
+  const agentSpeakingRef = useRef(false);
   const average = runs.length
     ? Math.round(runs.reduce((sum, value) => sum + value, 0) / runs.length)
     : null;
@@ -1676,6 +1680,7 @@ function QualityEvidenceReview({
     setError(null);
     setRuns([]);
     setMuted(false);
+    setCapturePhase("idle");
     try {
       const session = await api<{ session_id: string }>(
         "/api/v1/live-sessions",
@@ -1712,26 +1717,34 @@ function QualityEvidenceReview({
     speechStartedRef.current = false;
     speechEndedAtRef.current = null;
     responseStartedRef.current = false;
+    agentSpeakingRef.current = false;
+    setCapturePhase("idle");
     if (sessionId)
       await fetch(`/api/v1/live-sessions/${sessionId}/end`, {
         method: "POST",
       }).catch(() => undefined);
   }
 
-  function localSpeakingChanged(speaking: boolean) {
-    if (speaking) {
-      speechStartedRef.current = true;
-      speechEndedAtRef.current = null;
-      responseStartedRef.current = false;
-    } else if (speechStartedRef.current) {
-      speechStartedRef.current = false;
-      speechEndedAtRef.current = performance.now();
-    }
-  }
-
   function agentSpeakingChanged(speaking: boolean) {
+    agentSpeakingRef.current = speaking;
     if (speaking && speechEndedAtRef.current !== null)
       responseStartedRef.current = true;
+  }
+
+  function startSpeakingRun() {
+    setError(null);
+    speechStartedRef.current = true;
+    speechEndedAtRef.current = null;
+    responseStartedRef.current = false;
+    setCapturePhase("speaking");
+  }
+
+  function stopSpeakingRun() {
+    if (!speechStartedRef.current) return;
+    speechStartedRef.current = false;
+    speechEndedAtRef.current = performance.now();
+    responseStartedRef.current = agentSpeakingRef.current;
+    setCapturePhase("waiting");
   }
 
   function avatarFrame(timestamp: number) {
@@ -1744,6 +1757,7 @@ function QualityEvidenceReview({
     responseStartedRef.current = false;
     speechEndedAtRef.current = null;
     setRuns((current) => [...current, measured]);
+    setCapturePhase("idle");
   }
 
   function networkProfile() {
@@ -1880,9 +1894,9 @@ function QualityEvidenceReview({
           </StatusPill>
           <h3>LiveKit latency</h3>
           <p>
-            Start the staged room, speak a short sentence, then stop. Each
-            genuine result measures from the end of your speech to the first
-            decoded responsive replica frame. Complete three runs.
+            Start the staged room. For each run, click Start speaking, say one
+            short sentence, then click Stop speaking &amp; measure. The result is
+            completed by the first decoded responsive replica frame.
           </p>
           {liveRoom ? (
             <>
@@ -1892,7 +1906,6 @@ function QualityEvidenceReview({
                   token={liveRoom.token}
                   muted={muted}
                   onStatusChange={setLiveStatus}
-                  onLocalSpeakingChange={localSpeakingChanged}
                   onSpeakingChange={agentSpeakingChanged}
                   onAvatarVideoFrame={avatarFrame}
                 />
@@ -1900,11 +1913,44 @@ function QualityEvidenceReview({
                   {liveStatus === "connected"
                     ? muted
                       ? "Microphone muted"
-                      : "Connected — speak, then pause"
+                      : capturePhase === "speaking"
+                        ? "Timing run — speak now"
+                        : capturePhase === "waiting"
+                          ? "Waiting for the replica response…"
+                          : "Connected — start a speaking run"
                     : (liveStatus ?? "Connecting…")}
                 </span>
               </div>
               <div className="editor-actions">
+                {capturePhase === "speaking" ? (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={stopSpeakingRun}
+                  >
+                    <CircleCheck size={16} />
+                    Stop speaking &amp; measure
+                  </button>
+                ) : (
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={
+                      liveStatus !== "connected" ||
+                      muted ||
+                      capturePhase === "waiting" ||
+                      runs.length >= 3
+                    }
+                    onClick={startSpeakingRun}
+                  >
+                    <Mic size={16} />
+                    {capturePhase === "waiting"
+                      ? "Waiting for response"
+                      : runs.length >= 3
+                        ? "Three runs complete"
+                        : "Start speaking"}
+                  </button>
+                )}
                 <button
                   className="secondary-button"
                   type="button"
