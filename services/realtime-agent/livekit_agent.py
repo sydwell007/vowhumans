@@ -150,6 +150,11 @@ def _safe_voice_error(error_event) -> tuple[str, str]:
             "provider_authentication_failed",
             "Live voice is unavailable because the speech provider credentials were rejected.",
         )
+    if any(marker in detail for marker in ("voice_not_found", "invalid_voice", "voice_id", "custom voice", "permission")):
+        return (
+            "provider_voice_rejected",
+            "The selected live voice is unavailable or is not accessible with the speech provider credentials.",
+        )
     return (
         "provider_unavailable",
         "Live voice stopped because the speech provider became unavailable. Please end the call and try again.",
@@ -158,6 +163,13 @@ def _safe_voice_error(error_event) -> tuple[str, str]:
 
 async def _publish_voice_error(ctx: JobContext, error_event) -> None:
     code, message = _safe_voice_error(error_event)
+    error = getattr(error_event, "error", error_event)
+    nested = getattr(error, "error", None)
+    print(
+        "[realtime-agent] provider error "
+        f"code={code} error_type={type(error).__name__} nested_type={type(nested).__name__ if nested else 'none'}",
+        flush=True,
+    )
     try:
         await ctx.room.local_participant.publish_data(
             json.dumps({"type": VOICE_ERROR_TOPIC, "code": code, "message": message}),
@@ -298,7 +310,18 @@ def _make_knowledge_tool(client: httpx.AsyncClient, organisation_id: str, knowle
     return search_knowledge_base
 
 
-def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None, required_language: str | None = None) -> tuple[str, str, str, list] | None:
+def _realtime_voice(provider_voice_id: str | None):
+    """Return the OpenAI Realtime voice shape for built-in or custom voices."""
+    if not provider_voice_id:
+        return FALLBACK_VOICE
+    provider_voice_id = provider_voice_id.strip()
+    if not provider_voice_id:
+        return FALLBACK_VOICE
+    # OpenAI custom voices are object references. Built-in voices remain names.
+    return {"id": provider_voice_id} if provider_voice_id.startswith("voice_") else provider_voice_id
+
+
+def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None, required_language: str | None = None) -> tuple[str, str, object, list] | None:
     persona = persona_data.get("persona") if persona_data else None
     if not persona:
         return None
@@ -322,8 +345,7 @@ def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_
     if voice_info and not voice_info.get("provider_voice_id"):
         raise RuntimeError("The selected voice is a sample only and has not been enrolled for live speech")
     voice_id = voice_info.get("provider_voice_id") if voice_info else None
-    # OpenAI custom voices use an object reference; built-in voices use their name.
-    voice = {"id": voice_id} if voice_id and voice_id.startswith("voice_") else (voice_id or FALLBACK_VOICE)
+    voice = _realtime_voice(voice_id)
     knowledge_base_ids = persona.get("knowledge_base_ids") or []
     tools: list = [_make_knowledge_tool(client, organisation_id, knowledge_base_ids)] if knowledge_base_ids else []
     return instructions, opening_instruction, voice, tools
