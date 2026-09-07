@@ -1723,12 +1723,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const user = await requireUser(request);
     const digitalHumanId = typeof body.digital_human_id === "string" ? body.digital_human_id : "";
+    const stagedReplicaProfileId = typeof body.staged_replica_profile_id === "string" ? body.staged_replica_profile_id : null;
     if (!digitalHumanId) {
       return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id is required." }, { status: 422 });
     }
 
     const [human] = await sql<{ id: string; default_language_code: string }[]>`SELECT id, default_language_code FROM digital_humans WHERE id = ${digitalHumanId} AND organisation_id = ${organisationId}`;
     if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND", message: "VowHuman not found." }, { status: 404 });
+    if (stagedReplicaProfileId) {
+      const [stagedReplica] = await sql<{ id: string }[]>`
+        SELECT id FROM replica_profiles WHERE id=${stagedReplicaProfileId} AND organisation_id=${organisationId}
+          AND human_slug=${digitalHumanId} AND status IN ('quality_review','approved') LIMIT 1
+      `;
+      if (!stagedReplica) return NextResponse.json({ success: false, code: "STAGED_REPLICA_NOT_READY", message: "This staged replica is not ready for a LiveKit quality test." }, { status: 409 });
+    }
 
     const [publishedVersion] = await sql<{ id: string }[]>`
       SELECT pv.id FROM human_persona_assignments hpa JOIN persona_versions pv ON pv.id = hpa.persona_version_id
@@ -1789,7 +1797,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const avatarMode = face ? "live-avatar" : "audio-only";
       const [session] = await sql<{ id: string }[]>`
         INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_user_id, transport_provider, avatar_mode, context)
-        VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: "studio-test", ...(requestedLanguage ? { requested_language: requestedLanguage } : {}) })})
+        VALUES (${organisationId}, NULL, ${digitalHumanId}, ${publishedVersion.id}, ${user?.id ?? null}, 'livekit', ${avatarMode}, ${sql.json({ source: stagedReplicaProfileId ? "replica-quality-test" : "studio-test", ...(stagedReplicaProfileId ? { staged_replica_profile_id: stagedReplicaProfileId, replica_worker_image: "syd001/vowhumans-avatar-worker:v15" } : {}), ...(requestedLanguage ? { requested_language: requestedLanguage } : {}) })})
         RETURNING id
       `;
       return NextResponse.json({
@@ -1815,6 +1823,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!session) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
     const context = typeof session.context === "string" ? JSON.parse(session.context) : session.context;
     const requestedLanguage = typeof (context as { requested_language?: unknown } | null)?.requested_language === "string" ? (context as { requested_language: string }).requested_language : undefined;
+    const stagedReplicaProfileId = typeof (context as { staged_replica_profile_id?: unknown } | null)?.staged_replica_profile_id === "string" ? (context as { staged_replica_profile_id: string }).staged_replica_profile_id : undefined;
 
     const baseUrl = process.env.API_GATEWAY_URL;
     if (!baseUrl) {
@@ -1830,6 +1839,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           human_slug: session.digital_human_id,
           persona_version_id: session.persona_version_id,
           ...(requestedLanguage ? { requested_language: requestedLanguage } : {}),
+          ...(stagedReplicaProfileId ? { staged_replica_profile_id: stagedReplicaProfileId } : {}),
         }),
         signal: AbortSignal.timeout(40000),
       });

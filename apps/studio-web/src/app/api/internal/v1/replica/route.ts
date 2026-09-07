@@ -15,14 +15,34 @@ function authorised(provided: string | null) {
 
 export async function GET(request: NextRequest) {
   if (!authorised(request.headers.get("x-internal-key"))) return NextResponse.json({ message: "Internal service key required" }, { status: 401 });
-  if (process.env.ENABLE_VIDEO_REPLICA !== "true") return NextResponse.json({ message: "Video Replica is disabled" }, { status: 404 });
+  const stagedProfileId = request.nextUrl.searchParams.get("staged_profile_id") ?? "";
+  if (!stagedProfileId && process.env.ENABLE_VIDEO_REPLICA !== "true") return NextResponse.json({ message: "Video Replica is disabled" }, { status: 404 });
   if (!databaseConfigured || !privateObjectStorageConfigured()) return NextResponse.json({ message: "Replica storage is not configured" }, { status: 503 });
   const organisationId = request.headers.get("x-organisation-id") ?? "";
   const humanSlug = request.nextUrl.searchParams.get("human_slug") ?? "";
   if (!organisationId || !humanSlug) return NextResponse.json({ message: "Organisation and human slug are required" }, { status: 422 });
 
   try {
-    const assignments = await sql<{
+    const assignments = stagedProfileId ? await sql<{
+      replica_id: string; version_id: string; identity_id: string; provider: string;
+      quality_mode: string; manifest_sha256: string;
+    }[]>`
+      SELECT rp.id AS replica_id, rv.id AS version_id, rp.identity_id, rv.provider,
+        rp.quality_mode, rv.manifest_sha256
+      FROM replica_profiles rp
+      JOIN LATERAL (
+        SELECT id, provider, manifest_sha256 FROM replica_versions
+        WHERE organisation_id=rp.organisation_id AND replica_profile_id=rp.id
+          AND state IN ('quality_review','published') ORDER BY version DESC LIMIT 1
+      ) rv ON true
+      JOIN identities i ON i.id=rp.identity_id AND i.organisation_id=rp.organisation_id
+      WHERE rp.organisation_id=${organisationId} AND rp.id=${stagedProfileId}
+        AND rp.human_slug=${humanSlug} AND rp.status IN ('quality_review','approved')
+        AND i.state='approved' AND i.revoked_at IS NULL AND i.commercial_use_confirmed=true
+        AND EXISTS (SELECT 1 FROM identity_consents ic WHERE ic.organisation_id=rp.organisation_id AND ic.identity_id=i.id AND ic.consent_type='face' AND ic.state='approved' AND ic.revoked_at IS NULL AND (ic.expires_at IS NULL OR ic.expires_at>now()))
+        AND EXISTS (SELECT 1 FROM identity_consents ic WHERE ic.organisation_id=rp.organisation_id AND ic.identity_id=i.id AND ic.consent_type='commercial' AND ic.state='approved' AND ic.revoked_at IS NULL AND (ic.expires_at IS NULL OR ic.expires_at>now()))
+      LIMIT 1
+    ` : await sql<{
       replica_id: string; version_id: string; identity_id: string; provider: string;
       quality_mode: string; manifest_sha256: string;
     }[]>`

@@ -90,6 +90,7 @@ async def entrypoint(ctx: JobContext) -> None:
     metadata = json.loads(ctx.job.metadata) if ctx.job.metadata else {}
     organisation_id = metadata.get("organisation_id")
     human_slug = metadata.get("human_slug")
+    staged_replica_profile_id = metadata.get("staged_replica_profile_id")
     if not organisation_id or not human_slug:
         _log("No organisation_id/human_slug on this job — nothing to do.")
         return
@@ -98,7 +99,7 @@ async def entrypoint(ctx: JobContext) -> None:
     _log(f"entrypoint: connected to room {ctx.room.name} as {ctx.room.local_participant.identity}")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=30.0)) as client:
-        prepared_appearance = await _prepare_appearance(client, organisation_id, human_slug)
+        prepared_appearance = await _prepare_appearance(client, organisation_id, human_slug, staged_replica_profile_id)
         if prepared_appearance is None:
             _log(f"No usable appearance for {organisation_id}/{human_slug} — this call stays audio-only.")
             return
@@ -114,9 +115,9 @@ async def entrypoint(ctx: JobContext) -> None:
             await _release_appearance(client, appearance_id, renderer)
 
 
-async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray, str] | None:
+async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray, str] | None:
     if ENABLE_VIDEO_REPLICA:
-        replica = await _prepare_replica(client, organisation_id, human_slug)
+        replica = await _prepare_replica(client, organisation_id, human_slug, staged_replica_profile_id)
         if replica is not None:
             return replica[0], replica[1], "video_replica"
         _log("No approved usable replica assignment; falling back to Quick Portrait.")
@@ -124,14 +125,14 @@ async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, h
     return (portrait[0], portrait[1], "portrait") if portrait is not None else None
 
 
-async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, human_slug: str) -> tuple[str, np.ndarray] | None:
+async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray] | None:
     if not (AVATAR_WORKER_URL and STUDIO_WEB_URL and INTERNAL_KEY):
         return None
     try:
         manifest_response = await client.get(
             f"{STUDIO_WEB_URL.rstrip('/')}/api/internal/v1/replica",
             headers={"x-internal-key": INTERNAL_KEY, "x-organisation-id": organisation_id},
-            params={"human_slug": human_slug},
+            params={"human_slug": human_slug, **({"staged_profile_id": staged_replica_profile_id} if staged_replica_profile_id else {})},
         )
         if manifest_response.status_code != 200:
             return None
