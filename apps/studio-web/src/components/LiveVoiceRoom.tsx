@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RemoteTrackPublication, Room, RoomEvent, Track } from "livekit-client";
-import { LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC, type LiveLanguageApplied } from "@/lib/liveLanguage";
+import {
+  LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC,
+  type LiveLanguageApplied,
+} from "@/lib/liveLanguage";
 
-export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "disconnected";
+export type LiveVoiceRoomStatus =
+  "connecting" | "connected" | "error" | "disconnected";
 
 // Tracks published by the avatar-participant service (services/avatar-participant)
 // under these fixed names — see services/api-gateway/main.py's RoomAgentDispatch and
@@ -13,7 +17,35 @@ export type LiveVoiceRoomStatus = "connecting" | "connected" | "error" | "discon
 // something this app controls or can rely on.
 const AVATAR_TRACK_PREFIX = "vhm-avatar-";
 
-export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, onSpeakingChange, onLocalSpeakingChange, onAvatarVideoFrame, onFirstAudio, onReconnected, onRoomReady, onLanguageApplied, onVoiceError }: { url: string; token: string; muted: boolean; portraitUrl?: string; onStatusChange?: (status: LiveVoiceRoomStatus) => void; onSpeakingChange?: (speaking: boolean) => void; onLocalSpeakingChange?: (speaking: boolean) => void; onAvatarVideoFrame?: (timestamp: number) => void; onFirstAudio?: () => void; onReconnected?: () => void; onRoomReady?: (room: Room) => void; onLanguageApplied?: (event: LiveLanguageApplied) => void; onVoiceError?: (message: string, code?: string) => void }) {
+export function LiveVoiceRoom({
+  url,
+  token,
+  muted,
+  portraitUrl,
+  onStatusChange,
+  onSpeakingChange,
+  onLocalSpeakingChange,
+  onAvatarVideoFrame,
+  onFirstAudio,
+  onReconnected,
+  onRoomReady,
+  onLanguageApplied,
+  onVoiceError,
+}: {
+  url: string;
+  token: string;
+  muted: boolean;
+  portraitUrl?: string;
+  onStatusChange?: (status: LiveVoiceRoomStatus) => void;
+  onSpeakingChange?: (speaking: boolean) => void;
+  onLocalSpeakingChange?: (speaking: boolean) => void;
+  onAvatarVideoFrame?: (timestamp: number) => void;
+  onFirstAudio?: () => void;
+  onReconnected?: () => void;
+  onRoomReady?: (room: Room) => void;
+  onLanguageApplied?: (event: LiveLanguageApplied) => void;
+  onVoiceError?: (message: string, code?: string) => void;
+}) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [hasAvatarVideo, setHasAvatarVideo] = useState(false);
@@ -43,8 +75,12 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
     onSpeakingChangeRef.current = onSpeakingChange;
   }, [onSpeakingChange]);
 
-  useEffect(() => { onLocalSpeakingChangeRef.current = onLocalSpeakingChange; }, [onLocalSpeakingChange]);
-  useEffect(() => { onAvatarVideoFrameRef.current = onAvatarVideoFrame; }, [onAvatarVideoFrame]);
+  useEffect(() => {
+    onLocalSpeakingChangeRef.current = onLocalSpeakingChange;
+  }, [onLocalSpeakingChange]);
+  useEffect(() => {
+    onAvatarVideoFrameRef.current = onAvatarVideoFrame;
+  }, [onAvatarVideoFrame]);
 
   useEffect(() => {
     onFirstAudioRef.current = onFirstAudio;
@@ -91,7 +127,8 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
     };
 
     room.on(RoomEvent.TrackSubscribed, (track, publication) => {
-      const isAvatarTrack = publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
+      const isAvatarTrack =
+        publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
 
       if (track.kind === Track.Kind.Audio) {
         if (isAvatarTrack) {
@@ -135,7 +172,8 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
         rawAudioEls.delete(element as HTMLMediaElement);
         element.remove();
       });
-      const isAvatarTrack = publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
+      const isAvatarTrack =
+        publication.trackName?.startsWith(AVATAR_TRACK_PREFIX) ?? false;
       if (isAvatarTrack && track.kind === Track.Kind.Audio) {
         // Avatar-participant dropped mid-call (crash, GPU pod down, etc.) — fall
         // back to the raw agent track so the conversation stays audible.
@@ -152,16 +190,28 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
 
     room.on(RoomEvent.DataReceived, (payload) => {
       try {
-        const message = JSON.parse(new TextDecoder().decode(payload)) as { type?: string; language_code?: string; phase?: string; code?: string; message?: string };
+        const message = JSON.parse(new TextDecoder().decode(payload)) as {
+          type?: string;
+          language_code?: string;
+          phase?: string;
+          code?: string;
+          message?: string;
+        };
         if (message?.type === "vhm_avatar_ready") {
           setAvatarMode(true);
         } else if (
-          message?.type === LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC
-          && typeof message.language_code === "string"
-          && (message.phase === "initial" || message.phase === "switch")
+          message?.type === LIVE_LANGUAGE_SWITCH_APPLIED_TOPIC &&
+          typeof message.language_code === "string" &&
+          (message.phase === "initial" || message.phase === "switch")
         ) {
-          onLanguageAppliedRef.current?.({ languageCode: message.language_code, phase: message.phase });
-        } else if (message?.type === "vhm_voice_error" && typeof message.message === "string") {
+          onLanguageAppliedRef.current?.({
+            languageCode: message.language_code,
+            phase: message.phase,
+          });
+        } else if (
+          message?.type === "vhm_voice_error" &&
+          typeof message.message === "string"
+        ) {
           onVoiceErrorRef.current?.(message.message, message.code);
         }
       } catch {
@@ -179,8 +229,12 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
     // calls, so any active remote speaker is unambiguously the agent.
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       if (cancelled) return;
-      const agentSpeaking = speakers.some((speaker) => speaker.sid !== room.localParticipant.sid);
-      const localSpeaking = speakers.some((speaker) => speaker.sid === room.localParticipant.sid);
+      const agentSpeaking = speakers.some(
+        (speaker) => speaker.sid !== room.localParticipant.sid,
+      );
+      const localSpeaking = speakers.some(
+        (speaker) => speaker.sid === room.localParticipant.sid,
+      );
       onSpeakingChangeRef.current?.(agentSpeaking);
       onLocalSpeakingChangeRef.current?.(localSpeaking);
       // A subscribed track can remain completely silent when the provider
@@ -200,7 +254,9 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
         // Microphone access is optional for a presenter session. A blocked or
         // unavailable input must not turn an otherwise connected, listen-only
         // lesson into a failed call.
-        return room.localParticipant.setMicrophoneEnabled(!muted).catch(() => {});
+        return room.localParticipant
+          .setMicrophoneEnabled(!muted)
+          .catch(() => {});
       })
       .catch(() => notify("error"));
 
@@ -216,13 +272,23 @@ export function LiveVoiceRoom({ url, token, muted, portraitUrl, onStatusChange, 
   }, [url, token]);
 
   useEffect(() => {
-    roomRef.current?.localParticipant.setMicrophoneEnabled(!muted).catch(() => {});
+    roomRef.current?.localParticipant
+      .setMicrophoneEnabled(!muted)
+      .catch(() => {});
   }, [muted]);
 
   return (
     <>
-      <div ref={audioContainerRef} className="live-voice-audio" aria-hidden="true" />
-      <div ref={videoContainerRef} className="live-voice-video" aria-hidden="true">
+      <div
+        ref={audioContainerRef}
+        className="live-voice-audio"
+        aria-hidden="true"
+      />
+      <div
+        ref={videoContainerRef}
+        className="live-voice-video"
+        aria-hidden="true"
+      >
         {portraitUrl && !hasAvatarVideo && (
           // The portrait is the approved face for this short-lived embed session.
           // eslint-disable-next-line @next/next/no-img-element
