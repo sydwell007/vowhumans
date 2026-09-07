@@ -64,6 +64,12 @@ type Segment = {
 };
 type ReplicaDetail = {
   profile: ReplicaSummary & { identity_id: string };
+  assignment: {
+    human_slug: string;
+    replica_version_id: string;
+    enabled: boolean;
+    assigned_at: string;
+  } | null;
   capture_session: { id: string; status: string } | null;
   segments: Segment[];
   readiness: { ready: boolean; missing: string[] };
@@ -383,6 +389,7 @@ export function ReplicaStudio() {
                 key={detail.profile.id}
                 detail={detail}
                 storageConfigured={catalogue?.storage_configured ?? false}
+                runtimeEnabled={catalogue?.feature_flags.video_replica ?? false}
                 onRefresh={async () => {
                   await refreshDetail();
                   await refreshCatalogue();
@@ -594,10 +601,12 @@ function CreateReplicaForm({
 function ReplicaCaptureWorkflow({
   detail,
   storageConfigured,
+  runtimeEnabled,
   onRefresh,
 }: {
   detail: ReplicaDetail;
   storageConfigured: boolean;
+  runtimeEnabled: boolean;
   onRefresh: () => Promise<void>;
 }) {
   const [step, setStep] = useState(1);
@@ -731,7 +740,7 @@ function ReplicaCaptureWorkflow({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           human_slug: detail.profile.human_slug,
-          enabled: false,
+          enabled: true,
         }),
       });
       await onRefresh();
@@ -1086,17 +1095,35 @@ function ReplicaCaptureWorkflow({
                 : "Approve measured version"}
             </button>
             {detail.profile.status === "approved" && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={busy}
-                onClick={assign}
-              >
-                Assign safely (disabled)
-                <ArrowRight size={16} />
-              </button>
+              detail.assignment?.enabled ? (
+                <Link className="secondary-button" href="/studio/live-sessions">
+                  Test deployed replica
+                  <ArrowRight size={16} />
+                </Link>
+              ) : (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={busy || !runtimeEnabled}
+                  onClick={assign}
+                  title={runtimeEnabled ? undefined : "The Video Replica runtime feature is not enabled."}
+                >
+                  {busy ? <RefreshCw className="spin" size={16} /> : <Video size={16} />}
+                  Deploy to {detail.profile.name}
+                  <ArrowRight size={16} />
+                </button>
+              )
             )}
           </div>
+          {detail.profile.status === "approved" && (
+            <p className="panel-note">
+              {detail.assignment?.enabled
+                ? `Deployed to ${detail.assignment.human_slug}. Open Live Sessions and start a real voice + replica test.`
+                : runtimeEnabled
+                  ? "Deploy this approved version to its Digital Human, then test it from Live Sessions."
+                  : "The approved version is ready, but ENABLE_VIDEO_REPLICA must be enabled before deployment."}
+            </p>
+          )}
         </section>
       )}
       <div className="replica-workflow-footer">

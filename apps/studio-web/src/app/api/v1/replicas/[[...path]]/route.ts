@@ -304,7 +304,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       FROM replica_processing_jobs WHERE organisation_id=${user.organisationId}
         AND replica_profile_id=${profile.id} ORDER BY created_at DESC
     `;
-    return ok({ profile: details, capture_session: profile.capture_session_id ? { id: profile.capture_session_id, status: profile.capture_status } : null, segments, quality_checks: qualityChecks, jobs, readiness: replicaCaptureReadiness(segments as never[]) });
+    const assignments = await sql`
+      SELECT human_slug, replica_version_id, enabled, assigned_at
+      FROM human_replica_assignments
+      WHERE organisation_id=${user.organisationId} AND replica_profile_id=${profile.id}
+      ORDER BY assigned_at DESC LIMIT 1
+    `;
+    return ok({ profile: details, assignment: assignments[0] ?? null, capture_session: profile.capture_session_id ? { id: profile.capture_session_id, status: profile.capture_status } : null, segments, quality_checks: qualityChecks, jobs, readiness: replicaCaptureReadiness(segments as never[]) });
   } catch (error) {
     return databaseFailure(error);
   }
