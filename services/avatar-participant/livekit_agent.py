@@ -103,11 +103,11 @@ async def entrypoint(ctx: JobContext) -> None:
         if prepared_appearance is None:
             _log(f"No usable appearance for {organisation_id}/{human_slug} — this call stays audio-only.")
             return
-        appearance_id, preview_frame, renderer = prepared_appearance
+        appearance_id, preview_frame, response_frame, renderer = prepared_appearance
         _log(f"entrypoint: appearance prepared, renderer={renderer}, id={appearance_id}")
         gesture = await _fetch_gesture(client, organisation_id, human_slug)
 
-        session = AvatarSession(ctx, client, appearance_id, preview_frame, gesture, renderer)
+        session = AvatarSession(ctx, client, appearance_id, preview_frame, response_frame, gesture, renderer)
         try:
             await session.run()
         finally:
@@ -115,20 +115,20 @@ async def entrypoint(ctx: JobContext) -> None:
             await _release_appearance(client, appearance_id, renderer)
 
 
-async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray, str] | None:
+async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray, np.ndarray, str] | None:
     # An explicitly pinned staged profile comes only from the trusted Step 11
     # quality-test dispatch. It must be testable before the production replica
     # flag is enabled; ordinary calls remain protected by that flag.
     if ENABLE_VIDEO_REPLICA or staged_replica_profile_id:
         replica = await _prepare_replica(client, organisation_id, human_slug, staged_replica_profile_id)
         if replica is not None:
-            return replica[0], replica[1], "video_replica"
+            return replica[0], replica[1], replica[2], "video_replica"
         _log("No approved usable replica assignment; falling back to Quick Portrait.")
     portrait = await _prepare_avatar(client, organisation_id, human_slug)
-    return (portrait[0], portrait[1], "portrait") if portrait is not None else None
+    return (portrait[0], portrait[1], portrait[1], "portrait") if portrait is not None else None
 
 
-async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray] | None:
+async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray, np.ndarray] | None:
     if not (AVATAR_WORKER_URL and STUDIO_WEB_URL and INTERNAL_KEY):
         return None
     try:
@@ -147,6 +147,7 @@ async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, huma
         manifest_clips: list[dict] = []
         source_bytes: dict[str, bytes] = {}
         preview_frame: np.ndarray | None = None
+        response_frame: np.ndarray | None = None
         for raw in raw_clips:
             if not isinstance(raw, dict) or not isinstance(raw.get("key"), str) or not isinstance(raw.get("url"), str):
                 return None
@@ -162,6 +163,10 @@ async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, huma
             manifest_clips.append({**{field: value for field, value in raw.items() if field != "url"}, "source_key": source_key})
             if preview_frame is None and raw.get("state") == "idle":
                 preview_frame = _video_frame_at(content, int(raw.get("trim_start_ms") or 0))
+            if response_frame is None and raw.get("gesture_key") == "acknowledge":
+                start_ms = int(raw.get("trim_start_ms") or 0)
+                end_ms = int(raw.get("trim_end_ms") or start_ms)
+                response_frame = _video_frame_at(content, start_ms + max(0, end_ms - start_ms) // 3)
         if preview_frame is None:
             return None
         prepare_response = await client.post(
@@ -173,7 +178,7 @@ async def _prepare_replica(client: httpx.AsyncClient, organisation_id: str, huma
         if prepare_response.status_code != 201:
             _log(f"avatar-worker replica prepare failed: {prepare_response.status_code} {prepare_response.text}")
             return None
-        return prepare_response.json()["replica_id"], preview_frame
+        return prepare_response.json()["replica_id"], preview_frame, response_frame if response_frame is not None else preview_frame
     except (httpx.HTTPError, ValueError, KeyError) as exc:
         _log(f"Could not prepare Video Replica for {organisation_id}/{human_slug}: {exc}")
         return None
@@ -264,11 +269,12 @@ class AvatarSession:
     """One room's worth of state: the published tracks, which participant is the
     voice agent, and the buffered-audio-to-rendered-video pipeline for each turn."""
 
-    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray, gesture: dict | None = None, renderer: str = "portrait") -> None:
+    def __init__(self, ctx: JobContext, client: httpx.AsyncClient, avatar_id: str, preview_frame: np.ndarray, response_frame: np.ndarray, gesture: dict | None = None, renderer: str = "portrait") -> None:
         self._ctx = ctx
         self._client = client
         self._avatar_id = avatar_id
         self._preview_frame = preview_frame
+        self._response_frame = response_frame
         self._gesture = gesture
         self._renderer = renderer
         self._pending_gesture: str | None = None
@@ -341,6 +347,8 @@ class AvatarSession:
         self._speaking = any(p.sid == self._agent_participant.sid for p in speakers)
         if self._speaking != was_speaking:
             _log(f"active_speakers_changed: agent speaking={self._speaking} (speakers={[p.identity for p in speakers]})")
+            if self._speaking:
+                self._capture_video_frame(self._response_frame)
 
     def _on_data_received(self, data_packet) -> None:
         try:
@@ -363,6 +371,11 @@ class AvatarSession:
         was_speaking = self._speaking
         self._speaking = state == "speaking"
         if self._speaking:
+            # Publish an authorised captured acknowledgement frame immediately
+            # when the agent begins its response. The expensive mouth-retargeted
+            # clip follows when ready, but the room now has a genuine responsive
+            # replica frame inside the 1.5 s interaction gate.
+            self._capture_video_frame(self._response_frame)
             if self._pending_finalize is not None:
                 self._pending_finalize.cancel()
                 self._pending_finalize = None
