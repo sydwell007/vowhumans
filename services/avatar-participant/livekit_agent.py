@@ -116,7 +116,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 async def _prepare_appearance(client: httpx.AsyncClient, organisation_id: str, human_slug: str, staged_replica_profile_id: str | None = None) -> tuple[str, np.ndarray, str] | None:
-    if ENABLE_VIDEO_REPLICA:
+    # An explicitly pinned staged profile comes only from the trusted Step 11
+    # quality-test dispatch. It must be testable before the production replica
+    # flag is enabled; ordinary calls remain protected by that flag.
+    if ENABLE_VIDEO_REPLICA or staged_replica_profile_id:
         replica = await _prepare_replica(client, organisation_id, human_slug, staged_replica_profile_id)
         if replica is not None:
             return replica[0], replica[1], "video_replica"
