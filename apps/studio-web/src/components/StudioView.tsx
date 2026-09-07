@@ -208,6 +208,7 @@ type DigitalHumanProfile = {
   voice: { id: string; name: string; provider: string; provider_voice_id: string | null; language: string; is_custom: boolean } | null;
   gesture_profile: { id: string; name: string; state_config: { features: Record<string, { enabled: boolean; range: string }> } } | null;
   persona: { persona_id: string; persona_name: string; version_id: string; version: number; role: string; state: string } | null;
+  replica: { replica_profile_id: string; name: string; version: number; enabled: boolean; assigned_at: string } | null;
   knowledge_bases: { id: string; name: string }[];
   languages: { code: string; english_name: string; status: string; voice_id: string | null; voice_name: string | null }[];
 };
@@ -399,6 +400,14 @@ function DigitalHumans() {
                 <ProfileSlot icon={BookOpenText} label="Knowledge" filled={detail.knowledge_bases.length > 0} meta={detail.knowledge_bases.map((k) => k.name).join(', ') || undefined} onSetup={() => openWizard(detail.human.id, 4)} />
                 <ProfileSlot icon={BrainCircuit} label="Persona" filled={Boolean(detail.persona)} meta={detail.persona ? `${detail.persona.persona_name} · v${detail.persona.version}` : undefined} onSetup={() => openWizard(detail.human.id, 5)} />
                 <ProfileSlot icon={Sparkles} label="Gestures" filled={Boolean(detail.gesture_profile)} meta={detail.gesture_profile?.name} onSetup={() => openWizard(detail.human.id, 6)} />
+                <article className={`profile-slot${detail.replica?.enabled ? '' : ' empty'}`}>
+                  <span className="empty-icon"><Video size={20} /></span>
+                  <strong>Photoreal Replica</strong>
+                  <p>{detail.replica?.enabled ? `${detail.replica.name} · v${detail.replica.version} deployed` : 'Not deployed'}</p>
+                  <Link className="plain-button" href="/studio/replicas">
+                    {detail.replica?.enabled ? 'Manage deployment' : 'Deploy approved replica'}
+                  </Link>
+                </article>
               </section>
               {detail.languages.length > 0 && (
                 <div className="wizard-subsection">

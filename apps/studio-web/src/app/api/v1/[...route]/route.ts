@@ -554,7 +554,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!organisationId) return NextResponse.json({ success: false, code: "UNAUTHENTICATED" }, { status: 401 });
     const [human] = await sql`SELECT id, name, role, disclosure, default_language_code, state, created_at, updated_at FROM digital_humans WHERE id = ${route[1]} AND organisation_id = ${organisationId}`;
     if (!human) return NextResponse.json({ success: false, code: "NOT_FOUND" }, { status: 404 });
-    const [[face], [voice], [gestureRow], [persona], knowledgeBases, languageRows] = await Promise.all([
+    const [[face], [voice], [gestureRow], [persona], knowledgeBases, languageRows, [replica]] = await Promise.all([
       sql`SELECT fa.id, fa.media_type, fa.detector_provider, fa.preprocessing_state, fa.state FROM human_face_assignments hfa JOIN face_assets fa ON fa.id = hfa.face_asset_id WHERE hfa.organisation_id = ${organisationId} AND hfa.human_slug = ${route[1]}`,
       sql`SELECT v.id, v.name, v.provider, v.provider_voice_id, v.language, v.is_custom FROM human_voice_assignments hva JOIN voices v ON v.id = hva.voice_id WHERE hva.organisation_id = ${organisationId} AND hva.human_slug = ${route[1]}`,
       sql`SELECT gp.id, gp.name, gp.state_config FROM human_gesture_assignments hga JOIN gesture_profiles gp ON gp.id = hga.gesture_profile_id WHERE hga.organisation_id = ${organisationId} AND hga.human_slug = ${route[1]}`,
@@ -575,9 +575,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             ORDER BY l.sort_order
           `
         : Promise.resolve([]),
+      sql`SELECT hra.replica_profile_id, rp.name, rv.version, hra.enabled, hra.assigned_at
+          FROM human_replica_assignments hra
+          JOIN replica_profiles rp ON rp.id = hra.replica_profile_id AND rp.organisation_id = hra.organisation_id
+          JOIN replica_versions rv ON rv.id = hra.replica_version_id AND rv.organisation_id = hra.organisation_id
+          WHERE hra.organisation_id = ${organisationId} AND hra.human_slug = ${route[1]}
+          ORDER BY hra.assigned_at DESC LIMIT 1`,
     ]);
     const gestureProfile = gestureRow ? { ...gestureRow, state_config: typeof gestureRow.state_config === "string" ? JSON.parse(gestureRow.state_config) : gestureRow.state_config } : null;
-    return response({ human, face: face ?? null, voice: voice ?? null, gesture_profile: gestureProfile, persona: persona ?? null, knowledge_bases: knowledgeBases, languages: languageRows });
+    return response({ human, face: face ?? null, voice: voice ?? null, gesture_profile: gestureProfile, persona: persona ?? null, replica: replica ?? null, knowledge_bases: knowledgeBases, languages: languageRows });
   }
 
   if (resource === "digital-humans" && !route[1]) {
