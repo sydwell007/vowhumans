@@ -26,7 +26,7 @@ function formatCallDuration(totalSeconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: LiveTestHuman; ready: boolean; notReadyReason?: string }) {
+export function LiveHumanTestCall({ human, ready, replica, notReadyReason }: { human: LiveTestHuman; ready: boolean; replica?: { name: string; version: number } | null; notReadyReason?: string }) {
   const [callStage, setCallStage] = useState<CallStage>("idle");
   const [selectedLanguage, setSelectedLanguage] = useState(human.defaultLanguageCode || "en-ZA");
   const [switchingLanguage, setSwitchingLanguage] = useState(false);
@@ -289,7 +289,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
         </div>
       ) : (
         <>
-          <PanelHeading name={human.name} />
+          <PanelHeading name={human.name} replica={replica} />
           {ready ? (
             <>
               <label className="pre-call-language">Conversation language
@@ -300,6 +300,7 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
                 {callStage === "starting" ? "Connecting…" : `Start live test call with ${human.name}`}
               </button>
               <p className="panel-note">Starts in {selectedLanguage} and keeps that language until the user explicitly asks to switch. The call uses {human.name}&rsquo;s published Persona, voice and knowledge.</p>
+              {replica && <p className="panel-note">Video mode is pinned to deployed {replica.name} v{replica.version}; the portrait is used only if the replica worker reports a safe fallback.</p>}
             </>
           ) : (
             <p className="panel-note">{notReadyReason ?? "Publish this VowHuman's Persona before running a live test call."}</p>
@@ -310,12 +311,12 @@ export function LiveHumanTestCall({ human, ready, notReadyReason }: { human: Liv
   );
 }
 
-function PanelHeading({ name }: { name: string }) {
+function PanelHeading({ name, replica }: { name: string; replica?: { name: string; version: number } | null }) {
   return (
     <div className="panel-title">
       <div>
-        <p className="eyebrow">Real live voice + avatar call</p>
-        <h2>Test {name}</h2>
+        <p className="eyebrow">{replica ? 'Real live voice + Photoreal Replica call' : 'Real live voice + avatar call'}</p>
+        <h2>Test {name}{replica ? ` · ${replica.name} v${replica.version}` : ''}</h2>
       </div>
       <StatusPill tone="good">Live</StatusPill>
     </div>

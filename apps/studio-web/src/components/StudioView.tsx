@@ -225,6 +225,7 @@ function DigitalHumans() {
   const [editRole, setEditRole] = useState('');
   const [editDisclosure, setEditDisclosure] = useState('');
   const [saving, setSaving] = useState(false);
+  const liveReplicaTestRef = useRef<HTMLDivElement | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardHumanId, setWizardHumanId] = useState<string | null>(null);
@@ -404,9 +405,16 @@ function DigitalHumans() {
                   <span className="empty-icon"><Video size={20} /></span>
                   <strong>Photoreal Replica</strong>
                   <p>{detail.replica?.enabled ? `${detail.replica.name} · v${detail.replica.version} deployed` : 'Not deployed'}</p>
-                  <Link className="plain-button" href="/studio/replicas">
-                    {detail.replica?.enabled ? 'Manage deployment' : 'Deploy approved replica'}
-                  </Link>
+                  <div className="editor-actions">
+                    {detail.replica?.enabled && (
+                      <button className="primary-button" type="button" onClick={() => liveReplicaTestRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                        <Mic size={15} />Test live replica
+                      </button>
+                    )}
+                    <Link className="plain-button" href="/studio/replicas">
+                      {detail.replica?.enabled ? 'Manage' : 'Deploy approved replica'}
+                    </Link>
+                  </div>
                 </article>
               </section>
               {detail.languages.length > 0 && (
@@ -417,6 +425,7 @@ function DigitalHumans() {
               )}
               <div className="wizard-subsection">
                 <PanelTitle title="Applications" eyebrow="Where this VowHuman can be embedded" />
+                {detail.replica?.enabled && <p className="panel-note"><Video size={15} /> Enabled applications use {detail.replica.name} v{detail.replica.version}; the portrait remains only as a safe fallback.</p>}
                 {apps.length === 0 && <p className="panel-note">No applications connected yet — connect one from the Applications page.</p>}
                 {apps.length > 0 && (
                   <div className="application-toggle-list" data-guide="dh-applications-toggle">
@@ -426,7 +435,7 @@ function DigitalHumans() {
                       const canEnable = detail.persona?.state === 'published';
                       return (
                         <div className="application-toggle-row" key={app.id}>
-                          <span><b>{app.name}</b><small>{app.slug}</small></span>
+                          <span><b>{app.name}</b><small>{enabled && detail.replica?.enabled ? `${app.slug} · Photoreal Replica live` : app.slug}</small></span>
                           <div className="editor-actions">
                             <button className="secondary-button" onClick={() => toggleApplication(app.id, !enabled)} disabled={appBusyId === app.id || (!enabled && !canEnable)}>
                               {appBusyId === app.id ? <RefreshCw size={14} className="spin" /> : null}
@@ -452,12 +461,15 @@ function DigitalHumans() {
         </div>
       </section>
       {!detailLoading && detail && detail.persona && (
+        <div ref={liveReplicaTestRef}>
         <LiveHumanTestCall
           key={detail.human.id}
           human={{ id: detail.human.id, name: detail.human.name, faceAssetId: detail.face?.id ?? null, defaultLanguageCode: detail.human.default_language_code }}
           ready={detail.persona.state === 'published'}
+          replica={detail.replica?.enabled ? { name: detail.replica.name, version: detail.replica.version } : null}
           notReadyReason="Publish this VowHuman's Persona (from the Personas page) before running a live test call — a draft Persona isn't what will actually run once deployed."
         />
+        </div>
       )}
       {!detailLoading && detail && !detail.persona && (
         <section className="panel ingestion-card"><span className="empty-icon"><Mic size={24} /></span><p className="eyebrow">No persona assigned yet</p><h2>Assign a persona to test this VowHuman</h2><p>The live test call needs a persona to know how to respond — set one up above before testing.</p></section>
