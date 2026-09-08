@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 import "./commercial.css";
 import "./brand.css";
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {children}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "SoftwareApplication", name: "VowHumans", applicationCategory: "BusinessApplication", operatingSystem: "Web", url: "https://vowhumans.com", creator: { "@type": "Organization", name: "GoalVow" } }).replaceAll("<", "\\u003c") }} />
       </body>
+      <GoogleAnalytics gaId="G-R5GPXHN9K3" />
     </html>
   );
 }

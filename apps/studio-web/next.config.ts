@@ -41,7 +41,7 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
         ],
       },
       {
@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
         // registered embed origin).
         source: "/embed/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
         ],
       },
     ];
