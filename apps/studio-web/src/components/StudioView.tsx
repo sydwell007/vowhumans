@@ -769,6 +769,43 @@ function DigitalHumanWizard({ humanId, startStep, onClose }: { humanId: string |
   );
 }
 
+function FaceAssetPicker({ faces, value, onChange }: { faces: FaceAsset[]; value: string; onChange: (faceId: string) => void }) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const selectedFace = faces.find((face) => face.id === value);
+  const labelFor = (face: FaceAsset) => `${face.media_type} · ${face.detector_provider === 'gpt-image-1' ? 'AI-generated' : 'Uploaded'}`;
+
+  function selectFace(faceId: string) {
+    onChange(faceId);
+    detailsRef.current?.removeAttribute('open');
+  }
+
+  return (
+    <details className="face-asset-picker" ref={detailsRef}>
+      <summary aria-label="Choose an existing face asset">
+        {selectedFace ? (
+          <>
+            <span className="face-asset-picker-avatar"><Image src={`/api/v1/faces/${selectedFace.id}/image`} alt="" fill sizes="36px" unoptimized /></span>
+            <span>{labelFor(selectedFace)}</span>
+          </>
+        ) : <span>Choose one</span>}
+        <ChevronRight className="face-asset-picker-chevron" size={17} aria-hidden="true" />
+      </summary>
+      <div className="face-asset-picker-menu" aria-label="Existing face assets">
+        {faces.map((face) => {
+          const selected = face.id === value;
+          return (
+            <button type="button" aria-pressed={selected} className={selected ? 'selected' : ''} key={face.id} onClick={() => selectFace(face.id)}>
+              <span className="face-asset-picker-avatar"><Image src={`/api/v1/faces/${face.id}/image`} alt="" fill sizes="40px" unoptimized /></span>
+              <span><strong>{labelFor(face)}</strong><small>Face asset {face.id.slice(0, 8)}</small></span>
+              {selected ? <Check size={16} aria-label="Selected" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
 function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => void }) {
   const [faces, setFaces] = useState<FaceAsset[]>([]);
   const [selectedFaceId, setSelectedFaceId] = useState('');
@@ -830,12 +867,9 @@ function WizardFaceStep({ humanId, onDone }: { humanId: string; onDone: () => vo
       {error && <div className="review-warning"><CircleAlert size={17} />{error}</div>}
       {faces.length > 0 && (
         <div className="form-grid two">
-          <label className="full">Existing face assets
-            <select value={selectedFaceId} onChange={(e) => setSelectedFaceId(e.target.value)}>
-              <option value="">Choose one</option>
-              {faces.map((f) => <option key={f.id} value={f.id}>{f.media_type} · {f.detector_provider === 'gpt-image-1' ? 'AI-generated' : 'Uploaded'}</option>)}
-            </select>
-          </label>
+          <div className="full face-asset-picker-field"><span>Existing face assets</span>
+            <FaceAssetPicker faces={faces} value={selectedFaceId} onChange={setSelectedFaceId} />
+          </div>
           <button className="secondary-button" type="button" onClick={assignExisting} disabled={busy || !selectedFaceId}>Use this face</button>
         </div>
       )}
