@@ -21,9 +21,9 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
     setStage("connecting");
     setErrorMessage(null);
     try {
-      const lessonContextToken = new URLSearchParams(
-        window.location.hash.replace(/^#/, ""),
-      ).get("lesson_context_token");
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const lessonContextToken = hashParams.get("lesson_context_token");
+      const languageCode = hashParams.get("language_code");
       const sessionRes = await fetch("/api/public/v1/embed-sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -31,6 +31,7 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
           digital_human_id: digitalHumanId,
           application_slug: applicationSlug,
           ...(lessonContextToken ? { lesson_context_token: lessonContextToken } : {}),
+          ...(languageCode ? { language_code: languageCode } : {}),
         }),
       });
       const sessionBody = await sessionRes.json().catch(() => null);

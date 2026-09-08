@@ -5,6 +5,7 @@ import {
   loadVowLmsLessonContext,
   VowLmsContextError,
 } from "@/lib/vowLmsContext";
+import { resolveForCapability } from "@/lib/languageRouter";
 
 // A pairing is only ever hit by anonymous traffic once it's already enabled — a
 // low, generous ceiling that stops one hot pairing (or a script hammering it)
@@ -45,6 +46,41 @@ function hashClientIp(request: NextRequest): string {
   return createHash("sha256").update(ip).digest("hex");
 }
 
+// Mirrors the same os.getenv(...).lower()=="true" idiom used everywhere else
+// this flag is read (apps/studio-web/src/app/api/v1/[...route]/route.ts) —
+// every embed degrades to today's exact default-language-only behaviour when off.
+function flagEnabled(name: string): boolean {
+  return (process.env[name] ?? "false").toLowerCase() === "true";
+}
+
+// A caller-requested language only ever overrides the digital human's
+// configured default when the platform flag is on AND `language_capabilities`
+// (the platform-wide, tenant-less source of truth per 010_multilingual_registry.sql
+// — "whether OpenAI's Whisper documents support for isiZulu is a platform fact, not
+// a per-org opinion") says the 'realtime' capability for that code is actually
+// usable. Reuses resolveForCapability — the same, already-tested resolution logic
+// the rest of this app uses (org preference if one exists, else the platform
+// matrix, else an honest fallback) — rather than a second, ad-hoc gate. Falls back
+// to the pairing's own default otherwise, silently: this must never be a hard
+// error for an unmapped, unsupported, or not-yet-quality-gated code.
+async function resolveRequestedLanguage(
+  organisationId: string,
+  defaultLanguageCode: string,
+  requestedCode: string,
+): Promise<{ languageCode: string; honored: boolean }> {
+  if (!requestedCode || !flagEnabled("ENABLE_MULTILINGUAL")) {
+    return { languageCode: defaultLanguageCode, honored: false };
+  }
+  const resolution = await resolveForCapability(organisationId, requestedCode, "realtime");
+  if (!resolution || !resolution.resolvedLanguageCode || resolution.status === "unsupported") {
+    return { languageCode: defaultLanguageCode, honored: false };
+  }
+  return {
+    languageCode: resolution.resolvedLanguageCode,
+    honored: !resolution.usedFallback && resolution.resolvedLanguageCode === requestedCode,
+  };
+}
+
 async function isIdentityClearedForApplication(organisationId: string, identityId: string, consentType: "face" | "voice", applicationId: string): Promise<boolean> {
   const [identity] = await sql<{ state: string }[]>`SELECT state FROM identities WHERE id = ${identityId} AND organisation_id = ${organisationId}`;
   if (!identity || identity.state !== "approved") return false;
@@ -69,6 +105,8 @@ export async function POST(request: NextRequest) {
   const applicationSlug = typeof body.application_slug === "string" ? body.application_slug : "";
   const lessonContextToken =
     typeof body.lesson_context_token === "string" ? body.lesson_context_token : "";
+  const requestedLanguageCode =
+    typeof body.language_code === "string" ? body.language_code.slice(0, 20) : "";
   if (!digitalHumanId || !applicationSlug) {
     return NextResponse.json({ success: false, code: "VALIDATION_ERROR", message: "digital_human_id and application_slug are required." }, { status: 422 });
   }
@@ -151,9 +189,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const { languageCode: requestedLanguage, honored: languageHonored } = await resolveRequestedLanguage(
+    pairing.organisation_id,
+    pairing.default_language_code,
+    requestedLanguageCode,
+  );
+
   const [session] = await sql<{ id: string }[]>`
     INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_external_ref_hash, transport_provider, avatar_mode, context)
-    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: pairing.default_language_code, ...(lessonContext ? { lesson: lessonContext } : {}) })})
+    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: requestedLanguage, ...(lessonContext ? { lesson: lessonContext } : {}) })})
     RETURNING id
   `;
 
@@ -163,6 +207,12 @@ export async function POST(request: NextRequest) {
       session_id: session.id,
       portrait_url: `/api/public/v1/embed-face?session_id=${encodeURIComponent(session.id)}`,
       disclosure: "You are speaking with an AI-generated digital human, not a real person.",
+      // Honest disclosure per this table's own doc comment: a caller that
+      // requested a specific language must be able to tell whether it was
+      // actually used, never assume silent success.
+      language_code: requestedLanguage,
+      language_requested: requestedLanguageCode || null,
+      language_honored: languageHonored,
     },
     meta: { mode: "live", request_id: randomUUID() },
   }, { status: 201 });
