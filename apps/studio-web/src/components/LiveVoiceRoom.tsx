@@ -32,6 +32,7 @@ export function LiveVoiceRoom({
   onRoomReady,
   onLanguageApplied,
   onVoiceError,
+  onPanelist,
 }: {
   url: string;
   token: string;
@@ -47,6 +48,7 @@ export function LiveVoiceRoom({
   onRoomReady?: (room: Room) => void;
   onLanguageApplied?: (event: LiveLanguageApplied) => void;
   onVoiceError?: (message: string, code?: string) => void;
+  onPanelist?: (name: string) => void;
 }) {
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +64,7 @@ export function LiveVoiceRoom({
   const onRoomReadyRef = useRef(onRoomReady);
   const onLanguageAppliedRef = useRef(onLanguageApplied);
   const onVoiceErrorRef = useRef(onVoiceError);
+  const onPanelistRef = useRef(onPanelist);
   const terminalVoiceErrorRef = useRef(false);
   const firstAudioFiredRef = useRef(false);
   const awaitingResponseFrameRef = useRef(false);
@@ -109,6 +112,10 @@ export function LiveVoiceRoom({
   useEffect(() => {
     onVoiceErrorRef.current = onVoiceError;
   }, [onVoiceError]);
+
+  useEffect(() => {
+    onPanelistRef.current = onPanelist;
+  }, [onPanelist]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +219,11 @@ export function LiveVoiceRoom({
         };
         if (message?.type === "vhm_avatar_ready") {
           setAvatarMode(true);
+        } else if (
+          message?.type === "vhm_panelist" &&
+          typeof (message as { name?: unknown }).name === "string"
+        ) {
+          onPanelistRef.current?.((message as { name: string }).name);
         } else if (message?.type === "vhm_avatar_response_frame") {
           awaitingResponseFrameRef.current = true;
         } else if (

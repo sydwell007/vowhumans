@@ -5,6 +5,10 @@ import {
   loadVowLmsLessonContext,
   VowLmsContextError,
 } from "@/lib/vowLmsContext";
+import {
+  verifyInterviewContextToken,
+  InterviewContextError,
+} from "@/lib/interviewContext";
 import { resolveForCapability } from "@/lib/languageRouter";
 
 // A pairing is only ever hit by anonymous traffic once it's already enabled — a
@@ -105,6 +109,10 @@ export async function POST(request: NextRequest) {
   const applicationSlug = typeof body.application_slug === "string" ? body.application_slug : "";
   const lessonContextToken =
     typeof body.lesson_context_token === "string" ? body.lesson_context_token : "";
+  const interviewContextToken =
+    typeof body.interview_context_token === "string" ? body.interview_context_token : "";
+  const panelPartnerId =
+    typeof body.panel_partner_id === "string" ? body.panel_partner_id : "";
   const requestedLanguageCode =
     typeof body.language_code === "string" ? body.language_code.slice(0, 20) : "";
   if (!digitalHumanId || !applicationSlug) {
@@ -189,6 +197,45 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let interviewContext = null;
+  if (interviewContextToken) {
+    try {
+      interviewContext = verifyInterviewContextToken(interviewContextToken);
+    } catch (error) {
+      const status = error instanceof InterviewContextError ? error.status : 400;
+      console.error("[embed-sessions] interview context rejected", {
+        status,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INTERVIEW_CONTEXT_INVALID",
+          message: "The interview briefing could not be verified. Please restart the practice from PlugConnect.",
+        },
+        { status: status === 503 ? 503 : 422 },
+      );
+    }
+  }
+
+  // A panel interview shows a second interviewer tile. The partner passes the
+  // partner's digital_human_id; validate it belongs to the same enabled pairing
+  // (never trusted blindly) and hand back a portrait URL the embed can render.
+  let panelPartnerPortraitUrl: string | null = null;
+  if (panelPartnerId && panelPartnerId !== digitalHumanId) {
+    const [partner] = await sql<{ digital_human_id: string }[]>`
+      SELECT dha.digital_human_id
+      FROM digital_human_applications dha
+      WHERE dha.organisation_id = ${pairing.organisation_id}
+        AND dha.application_id = ${pairing.application_id}
+        AND dha.digital_human_id = ${panelPartnerId}
+        AND dha.enabled = true
+    `;
+    if (partner) {
+      panelPartnerPortraitUrl = `/api/public/v1/embed-face?digital_human_id=${encodeURIComponent(panelPartnerId)}&application_slug=${encodeURIComponent(applicationSlug)}`;
+    }
+  }
+
   const { languageCode: requestedLanguage, honored: languageHonored } = await resolveRequestedLanguage(
     pairing.organisation_id,
     pairing.default_language_code,
@@ -226,7 +273,7 @@ export async function POST(request: NextRequest) {
 
   const [session] = await sql<{ id: string }[]>`
     INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_external_ref_hash, transport_provider, avatar_mode, context)
-    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, ${transportProvider}, ${avatarMode}, ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: requestedLanguage, renderer_tier: rendererTier, ...(lessonContext ? { lesson: lessonContext } : {}) })})
+    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, ${transportProvider}, ${avatarMode}, ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: requestedLanguage, renderer_tier: rendererTier, ...(lessonContext ? { lesson: lessonContext } : {}), ...(interviewContext ? { interview: interviewContext } : {}) })})
     RETURNING id
   `;
 
@@ -235,6 +282,8 @@ export async function POST(request: NextRequest) {
     data: {
       session_id: session.id,
       portrait_url: `/api/public/v1/embed-face?session_id=${encodeURIComponent(session.id)}`,
+      panel_partner_portrait_url: panelPartnerPortraitUrl,
+      interview_format: interviewContext?.interview_format ?? null,
       renderer_tier: rendererTier,
       disclosure: "You are speaking with an AI-generated digital human, not a real person.",
       // Honest disclosure per this table's own doc comment: a caller that

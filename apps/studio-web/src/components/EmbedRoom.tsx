@@ -1,11 +1,34 @@
 "use client";
 
 import { CircleAlert, Mic, MicOff, RefreshCw, Sparkles } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { Room } from "livekit-client";
 import { LiveVoiceRoom, type LiveVoiceRoomStatus } from "./LiveVoiceRoom";
 import { Rigged3DRoom } from "./Rigged3DRoom";
+import { publishLiveLanguageSwitch } from "@/lib/liveLanguage";
 
 type Stage = "consent" | "connecting" | "live" | "error";
+
+// Messages this embed posts to a hosting partner (e.g. PlugConnect's Interview
+// Practice room). No secrets — status only — so posting to "*" is fine; the
+// partner filters on event.origin. The partner may post back
+// { type: "vhm_language_switch", language_code } to change the active language.
+type ParentMessage =
+  | { source: "vowhumans-embed"; type: "status"; value: Stage }
+  | { source: "vowhumans-embed"; type: "speaking"; value: boolean }
+  | { source: "vowhumans-embed"; type: "panelist"; name: string }
+  | { source: "vowhumans-embed"; type: "ended" }
+  | { source: "vowhumans-embed"; type: "error"; message: string };
+
+function postToParent(message: ParentMessage) {
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(message, "*");
+    }
+  } catch {
+    // Cross-origin frame with a locked-down parent — nothing to do.
+  }
+}
 
 export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId: string; applicationSlug: string }) {
   const [stage, setStage] = useState<Stage>("consent");
@@ -21,7 +44,52 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
   const [voiceFallback, setVoiceFallback] = useState<{ sessionId: string; portraitUrl?: string } | null>(null);
   const [liveStatus, setLiveStatus] = useState<LiveVoiceRoomStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [panel, setPanel] = useState<{
+    names: [string, string];
+    partnerPortraitUrl?: string;
+    active: string | null;
+  } | null>(null);
   const lastRiggedState = useRef<string | null>(null);
+  const roomRef = useRef<Room | null>(null);
+
+  useEffect(() => {
+    postToParent({ source: "vowhumans-embed", type: "status", value: stage });
+    if (stage === "error" && errorMessage) {
+      postToParent({ source: "vowhumans-embed", type: "error", message: errorMessage });
+    }
+  }, [stage, errorMessage]);
+
+  function handleLiveStatus(status: LiveVoiceRoomStatus) {
+    setLiveStatus(status);
+    if (status === "disconnected") {
+      postToParent({ source: "vowhumans-embed", type: "ended" });
+    }
+  }
+
+  // Partner -> embed language switch, forwarded to the running realtime agent.
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; language_code?: string } | null;
+      if (!data || data.type !== "vhm_language_switch" || typeof data.language_code !== "string") return;
+      const room = roomRef.current;
+      if (room) void publishLiveLanguageSwitch(room, data.language_code).catch(() => undefined);
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  function readHash() {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    return {
+      lessonContextToken: params.get("lesson_context_token"),
+      interviewContextToken: params.get("interview_context_token"),
+      languageCode: params.get("language_code"),
+      panelPartnerId: params.get("panel_partner_id"),
+      panelists: params.get("panelists"),
+      isPanel: params.get("panel") === "1",
+      autostart: params.get("autostart") === "1",
+    };
+  }
 
   function sendRiggedControl(sessionId: string, message: { type: "state"; state: string } | { type: "motion"; intent: string }) {
     if (message.type === "state") {
@@ -60,17 +128,17 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
     setErrorMessage(null);
     lastRiggedState.current = null;
     try {
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      const lessonContextToken = hashParams.get("lesson_context_token");
-      const languageCode = hashParams.get("language_code");
+      const hash = readHash();
       const sessionRes = await fetch("/api/public/v1/embed-sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           digital_human_id: digitalHumanId,
           application_slug: applicationSlug,
-          ...(lessonContextToken ? { lesson_context_token: lessonContextToken } : {}),
-          ...(languageCode ? { language_code: languageCode } : {}),
+          ...(hash.lessonContextToken ? { lesson_context_token: hash.lessonContextToken } : {}),
+          ...(hash.interviewContextToken ? { interview_context_token: hash.interviewContextToken } : {}),
+          ...(hash.languageCode ? { language_code: hash.languageCode } : {}),
+          ...(hash.isPanel && hash.panelPartnerId ? { panel_partner_id: hash.panelPartnerId } : {}),
         }),
       });
       const sessionBody = await sessionRes.json().catch(() => null);
@@ -80,6 +148,20 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
         return;
       }
       const portraitUrl = typeof sessionBody.data.portrait_url === "string" ? sessionBody.data.portrait_url : undefined;
+
+      if (hash.isPanel) {
+        const rawNames = (hash.panelists || "Thandi,Sipho").split(",").map((n) => n.trim()).filter(Boolean);
+        const names: [string, string] = [rawNames[0] || "Thandi", rawNames[1] || "Sipho"];
+        setPanel({
+          names,
+          partnerPortraitUrl:
+            typeof sessionBody.data.panel_partner_portrait_url === "string"
+              ? sessionBody.data.panel_partner_portrait_url
+              : undefined,
+          active: names[0],
+        });
+      }
+
       if (sessionBody.data.renderer_tier === "rigged_3d") {
         const requestOptions = {
           method: "POST",
@@ -112,6 +194,20 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
     }
   }
 
+  // Optional auto-start: the partner already collected the disclosure + mic
+  // consent on its own page, so skip the extra click. The disclosure line still
+  // shows inside the live view. Deferred with a timeout so the initial setState
+  // does not run synchronously inside the mount effect.
+  const autostartFiredRef = useRef(false);
+  useEffect(() => {
+    if (autostartFiredRef.current || typeof window === "undefined") return;
+    if (!readHash().autostart) return;
+    autostartFiredRef.current = true;
+    const timer = setTimeout(() => { void start(); }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="embed-room">
       {stage === "consent" && (
@@ -132,17 +228,44 @@ export function EmbedRoom({ digitalHumanId, applicationSlug }: { digitalHumanId:
       {stage === "live" && liveRoom && (
         <div className="embed-live">
           <span className="embed-disclosure"><Sparkles size={13} />AI-generated digital human</span>
+          {panel && (
+            <div className="embed-panel-strip" aria-label="Interview panel">
+              {panel.names.map((name, index) => {
+                const tileUrl = index === 0 ? liveRoom.portraitUrl : panel.partnerPortraitUrl;
+                return (
+                  <div key={name} className={`embed-panel-tile${panel.active === name ? " active" : ""}`}>
+                    {tileUrl && (
+                      // Approved face for this short-lived embed session.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={tileUrl} alt="" />
+                    )}
+                    <span>{name}<small>{panel.active === name ? "Speaking" : "Listening"}</small></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {liveRoom.renderer === "live_voice" && liveStatus !== "connected" && (
             <div className="embed-status embed-status-overlay">{liveStatus === "error" ? "Live call failed to connect." : "Connecting…"}</div>
           )}
-          {liveRoom.renderer === "rigged_3d" ? <><Rigged3DRoom playerUrl={liveRoom.url} /><div className="rigged-voice-bridge"><LiveVoiceRoom url={liveRoom.voiceUrl!} token={liveRoom.token!} muted={muted} onStatusChange={setLiveStatus} onSpeakingChange={(speaking) => sendRiggedControl(liveRoom.sessionId!, { type: "state", state: speaking ? "speaking" : "listening" })} onFirstAudio={() => sendRiggedControl(liveRoom.sessionId!, { type: "motion", intent: "welcome" })} /></div></> : (
+          {liveRoom.renderer === "rigged_3d" ? <><Rigged3DRoom playerUrl={liveRoom.url} /><div className="rigged-voice-bridge"><LiveVoiceRoom url={liveRoom.voiceUrl!} token={liveRoom.token!} muted={muted} onStatusChange={handleLiveStatus} onRoomReady={(room) => { roomRef.current = room; }} onSpeakingChange={(speaking) => sendRiggedControl(liveRoom.sessionId!, { type: "state", state: speaking ? "speaking" : "listening" })} onFirstAudio={() => sendRiggedControl(liveRoom.sessionId!, { type: "motion", intent: "welcome" })} /></div></> : (
             <>
               <LiveVoiceRoom
                 url={liveRoom.url}
                 token={liveRoom.token!}
                 muted={muted}
                 portraitUrl={liveRoom.portraitUrl}
-                onStatusChange={setLiveStatus}
+                onStatusChange={handleLiveStatus}
+                onRoomReady={(room) => { roomRef.current = room; }}
+                onSpeakingChange={(speaking) => postToParent({ source: "vowhumans-embed", type: "speaking", value: speaking })}
+                onPanelist={(name) => {
+                  setPanel((current) => {
+                    if (!current) return current;
+                    const matched = current.names.find((n) => n.toLowerCase().startsWith(name.toLowerCase())) ?? current.active;
+                    return { ...current, active: matched };
+                  });
+                  postToParent({ source: "vowhumans-embed", type: "panelist", name });
+                }}
               />
             </>
           )}

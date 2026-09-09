@@ -37,10 +37,9 @@ export async function GET(request: NextRequest) {
   }
 
   const context = typeof row.context === "string" ? JSON.parse(row.context) : row.context;
-  const lesson =
-    context && typeof context === "object" && "lesson" in context
-      ? (context as { lesson?: unknown }).lesson
-      : null;
+  const asObject = context && typeof context === "object" ? (context as Record<string, unknown>) : {};
+  const lesson = "lesson" in asObject ? asObject.lesson : null;
+  const interview = "interview" in asObject ? asObject.interview : null;
 
-  return NextResponse.json({ success: true, data: { lesson } });
+  return NextResponse.json({ success: true, data: { lesson, interview } });
 }
