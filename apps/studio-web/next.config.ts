@@ -22,6 +22,10 @@ const riggedPlayerOrigin = safeRiggedPlayerOrigin();
 const frameSource = riggedPlayerOrigin ? ` 'self' ${riggedPlayerOrigin}` : " 'self'";
 const mediaPermissions = riggedPlayerOrigin ? `camera=(self \"${riggedPlayerOrigin}\"), microphone=(self \"${riggedPlayerOrigin}\"), geolocation=()` : "camera=(self), microphone=(self), geolocation=()";
 const upgradeInsecureRequests = process.env.NODE_ENV === "production" ? "; upgrade-insecure-requests" : "";
+// LiveKit's client does an HTTPS region-discovery call to <host>/settings/regions
+// before opening the wss:// socket — connect-src needs both schemes for *.livekit.cloud.
+const connectSrc =
+  "connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com https://*.livekit.cloud wss://*.livekit.cloud";
 
 const nextConfig: NextConfig = {
   // Vercel packages the Next.js output itself; standalone is for our Docker image.
@@ -56,7 +60,7 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: mediaPermissions },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; ${connectSrc}; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
         ],
       },
       {
@@ -72,7 +76,7 @@ const nextConfig: NextConfig = {
         // registered embed origin).
         source: "/embed/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; ${connectSrc}; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
         ],
       },
     ];
