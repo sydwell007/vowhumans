@@ -8,6 +8,21 @@ import { loadEnvConfig } from "@next/env";
 // request handler in this process sees the values via the normal process.env global.
 loadEnvConfig(path.resolve(__dirname, "../.."));
 
+function safeRiggedPlayerOrigin(): string {
+  try {
+    const url = new URL(process.env.RIGGED_3D_PLAYER_ORIGIN ?? "");
+    const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+    return url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.protocol === "http:" && loopback) ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+const riggedPlayerOrigin = safeRiggedPlayerOrigin();
+const frameSource = riggedPlayerOrigin ? ` 'self' ${riggedPlayerOrigin}` : " 'self'";
+const mediaPermissions = riggedPlayerOrigin ? `camera=(self \"${riggedPlayerOrigin}\"), microphone=(self \"${riggedPlayerOrigin}\"), geolocation=()` : "camera=(self), microphone=(self), geolocation=()";
+const upgradeInsecureRequests = process.env.NODE_ENV === "production" ? "; upgrade-insecure-requests" : "";
+
 const nextConfig: NextConfig = {
   // Vercel packages the Next.js output itself; standalone is for our Docker image.
   output: process.env.VERCEL ? undefined : "standalone",
@@ -38,10 +53,10 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
+          { key: "Permissions-Policy", value: mediaPermissions },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
         ],
       },
       {
@@ -57,7 +72,7 @@ const nextConfig: NextConfig = {
         // registered embed origin).
         source: "/embed/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com; media-src 'self' blob:; frame-src${frameSource}; connect-src 'self' https://api.vowhumans.com https://*.google-analytics.com https://www.googletagmanager.com wss://*.livekit.cloud; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; font-src 'self' data:; frame-ancestors *; base-uri 'self'; form-action 'self'; object-src 'none'${upgradeInsecureRequests}` },
         ],
       },
     ];

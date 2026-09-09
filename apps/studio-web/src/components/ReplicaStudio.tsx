@@ -266,14 +266,14 @@ export function ReplicaStudio() {
             <Sparkles size={22} />
           </span>
           <div>
-            <p className="eyebrow">Future renderer</p>
+            <p className="eyebrow">Controlled pilot renderer</p>
             <h2>Fully Rigged 3D</h2>
             <p>
-              Provider contract and governance path only. No production quality
-              claim or hidden synthetic fallback.
+              UE 5.8 MetaHuman, Pixel Streaming 2 and audited runtime allocation.
+              Publication still requires consent and measured quality gates.
             </p>
           </div>
-          <StatusPill tone="muted">Experimental</StatusPill>
+          <StatusPill tone={catalogue?.feature_flags.rigged_3d ? "good" : "muted"}>{catalogue?.feature_flags.rigged_3d ? "Pilot enabled" : "Gated"}</StatusPill>
         </article>
       </section>
 
@@ -302,6 +302,10 @@ export function ReplicaStudio() {
               className={catalogue?.feature_flags.streaming_replica ? "on" : ""}
             />
             Live streaming
+          </span>
+          <span>
+            <i className={catalogue?.feature_flags.rigged_3d ? "on" : ""} />
+            Rigged 3D pilot
           </span>
         </div>
       </section>
@@ -385,16 +389,20 @@ export function ReplicaStudio() {
           </aside>
           <section className="panel replica-workspace">
             {detail ? (
-              <ReplicaCaptureWorkflow
-                key={detail.profile.id}
-                detail={detail}
-                storageConfigured={catalogue?.storage_configured ?? false}
-                runtimeEnabled={catalogue?.feature_flags.video_replica ?? false}
-                onRefresh={async () => {
-                  await refreshDetail();
-                  await refreshCatalogue();
-                }}
-              />
+              detail.profile.renderer_tier === "rigged_3d" ? (
+                <Rigged3DReviewWorkflow key={detail.profile.id} detail={detail} runtimeEnabled={catalogue?.feature_flags.rigged_3d ?? false} onRefresh={async () => { await refreshDetail(); await refreshCatalogue(); }} />
+              ) : (
+                <ReplicaCaptureWorkflow
+                  key={detail.profile.id}
+                  detail={detail}
+                  storageConfigured={catalogue?.storage_configured ?? false}
+                  runtimeEnabled={catalogue?.feature_flags.video_replica ?? false}
+                  onRefresh={async () => {
+                    await refreshDetail();
+                    await refreshCatalogue();
+                  }}
+                />
+              )
             ) : (
               <div className="replica-empty">
                 <LockKeyhole size={28} />
@@ -427,6 +435,8 @@ function CreateReplicaForm({
   const [identityId, setIdentityId] = useState("");
   const [humanId, setHumanId] = useState("");
   const [qualityMode, setQualityMode] = useState("standard");
+  const [rendererTier, setRendererTier] = useState<"video_replica" | "rigged_3d">("video_replica");
+  const [characterManifestRef, setCharacterManifestRef] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const approvedIdentities = identities.filter(
@@ -448,6 +458,8 @@ function CreateReplicaForm({
           human_slug: humanId,
           digital_human_id: humanId,
           quality_mode: qualityMode,
+          renderer_tier: rendererTier,
+          ...(rendererTier === "rigged_3d" ? { character_manifest_ref: characterManifestRef } : {}),
         }),
       });
       onCreated(created.id);
@@ -466,8 +478,8 @@ function CreateReplicaForm({
     <section className="panel replica-create">
       <div className="panel-title">
         <div>
-          <p className="eyebrow">Consent before capture</p>
-          <h2>Create Photoreal Replica</h2>
+          <p className="eyebrow">Consent before renderer import</p>
+          <h2>{rendererTier === "rigged_3d" ? "Import Fully Rigged 3D" : "Create Photoreal Replica"}</h2>
         </div>
         <button className="plain-button" type="button" onClick={onCancel}>
           <ArrowLeft size={15} />
@@ -523,6 +535,13 @@ function CreateReplicaForm({
       )}
       <form className="form-grid two" onSubmit={submit}>
         <label>
+          Renderer tier
+          <select value={rendererTier} onChange={(event) => setRendererTier(event.target.value as "video_replica" | "rigged_3d")}>
+            <option value="video_replica">Photoreal Replica</option>
+            <option value="rigged_3d">Fully Rigged 3D · UE 5.8</option>
+          </select>
+        </label>
+        <label>
           Replica name
           <input
             required
@@ -572,6 +591,12 @@ function CreateReplicaForm({
             <option value="presenter">Presenter · batch output</option>
           </select>
         </label>
+        {rendererTier === "rigged_3d" ? (
+          <label className="full">
+            Assembled MetaHuman Blueprint reference
+            <input required value={characterManifestRef} onChange={(event) => setCharacterManifestRef(event.target.value)} placeholder="ue5.8:/Game/MetaHumans/VowFirst/BP_VowFirst" pattern="ue5\.8:/Game/[A-Za-z0-9_\-/]{3,500}" />
+          </label>
+        ) : null}
         <div className="editor-actions full">
           <button
             className="primary-button"
@@ -595,6 +620,75 @@ function CreateReplicaForm({
         </div>
       </form>
     </section>
+  );
+}
+
+const RIGGED_3D_CHECKS = [
+  ["metahuman_rig_integrity", "Body + face rig integrity"],
+  ["facial_animation_review", "Blink, gaze and facial animation"],
+  ["body_motion_review", "Body, hands and semantic motion"],
+  ["pixel_streaming_latency", "Pixel Streaming browser latency"],
+] as const;
+
+function Rigged3DReviewWorkflow({ detail, runtimeEnabled, onRefresh }: { detail: ReplicaDetail; runtimeEnabled: boolean; onRefresh: () => Promise<void> }) {
+  const [checkCode, setCheckCode] = useState<string>(RIGGED_3D_CHECKS[0][0]);
+  const [status, setStatus] = useState<"passed" | "failed">("passed");
+  const [notes, setNotes] = useState("");
+  const [latency, setLatency] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const latest = new Map<string, string>();
+  for (const check of detail.quality_checks) if (!latest.has(check.check_code)) latest.set(check.check_code, check.status);
+  const gatesPassed = RIGGED_3D_CHECKS.every(([code]) => ["passed", "warning"].includes(latest.get(code) ?? ""));
+
+  async function recordCheck(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/v1/replicas/${detail.profile.id}/quality-checks`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: checkCode, status, notes, ...(checkCode === "pixel_streaming_latency" && latency ? { measured_value: Number(latency) } : {}) }) });
+      setNotes("");
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not record the quality check.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveOrDeploy(action: "approve" | "assign") {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/v1/replicas/${detail.profile.id}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action === "assign" ? { human_slug: detail.profile.human_slug, enabled: true } : {}) });
+      await onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `Could not ${action} this 3D human.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="replica-workflow">
+      <div className="panel-title"><div><p className="eyebrow">UE 5.8 quality gate</p><h2>{detail.profile.name}</h2></div><StatusPill tone={toneForStatus(detail.profile.status)}>{detail.profile.status.replaceAll("_", " ")}</StatusPill></div>
+      <p className="panel-note"><ShieldCheck size={16} />The imported character stays unavailable to public embeds until every review passes, a reviewer approves it and the rigged-3D feature flag is enabled.</p>
+      {error ? <div className="review-warning" role="alert"><CircleAlert size={17} />{error}</div> : null}
+      <div className="requirement-list">
+        {RIGGED_3D_CHECKS.map(([code, label]) => <div key={code}><span className={latest.get(code) === "passed" ? "requirement-dot ready" : "requirement-dot"} /><strong>{label}</strong><StatusPill tone={toneForStatus(latest.get(code) ?? "not_tested")}>{latest.get(code)?.replaceAll("_", " ") ?? "not tested"}</StatusPill></div>)}
+      </div>
+      {detail.profile.status !== "approved" ? (
+        <form className="form-grid two" onSubmit={recordCheck}>
+          <label>Review check<select value={checkCode} onChange={(event) => setCheckCode(event.target.value)}>{RIGGED_3D_CHECKS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+          <label>Decision<select value={status} onChange={(event) => setStatus(event.target.value as "passed" | "failed")}><option value="passed">Passed</option><option value="failed">Failed</option></select></label>
+          {checkCode === "pixel_streaming_latency" ? <label>Measured latency (ms)<input type="number" min="1" value={latency} onChange={(event) => setLatency(event.target.value)} /></label> : null}
+          <label className="full">Evidence note<textarea required minLength={10} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What was tested, on which browser/GPU, and what you observed" /></label>
+          <div className="editor-actions full"><button className="secondary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Record append-only evidence"}</button>{gatesPassed ? <button className="primary-button" type="button" disabled={busy} onClick={() => approveOrDeploy("approve")}><BadgeCheck size={16} />Approve version</button> : null}</div>
+        </form>
+      ) : (
+        <div className="editor-actions"><button className="primary-button" type="button" disabled={busy || detail.assignment?.enabled || !runtimeEnabled} onClick={() => approveOrDeploy("assign")}><Sparkles size={16} />{detail.assignment?.enabled ? "Deployed" : runtimeEnabled ? "Deploy to Digital Human" : "Enable pilot flag to deploy"}</button></div>
+      )}
+    </div>
   );
 }
 

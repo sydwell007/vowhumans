@@ -78,9 +78,9 @@ async function identityConsentReady(organisationId: string, identityId: string) 
 async function findProfile(organisationId: string, profileId: string) {
   const rows = await sql<{
     id: string; identity_id: string; status: string; active_version_id: string | null;
-    capture_session_id: string | null; capture_status: string | null;
+    renderer_tier: string; capture_session_id: string | null; capture_status: string | null;
   }[]>`
-    SELECT rp.id, rp.identity_id, rp.status, rp.active_version_id,
+    SELECT rp.id, rp.identity_id, rp.status, rp.active_version_id, rp.renderer_tier,
       rcs.id AS capture_session_id, rcs.status AS capture_status
     FROM replica_profiles rp
     LEFT JOIN LATERAL (
@@ -417,6 +417,35 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const consent = await identityConsentReady(user.organisationId, identityId);
       if (!consent.ready) return problem("Approved likeness and commercial consent are required before capture.", "CONSENT_REQUIRED", 409, { missing: consent.missing });
       const profileId = randomUUID();
+
+      if (body.renderer_tier === "rigged_3d") {
+        if (!new Set(["owner", "admin", "reviewer"]).has(user.role)) return problem("A reviewer or administrator must import a rigged character.", "FORBIDDEN", 403);
+        const characterManifestRef = typeof body.character_manifest_ref === "string" ? body.character_manifest_ref.trim() : "";
+        if (!/^ue5\.8:\/Game\/[A-Za-z0-9_\-/]{3,500}$/.test(characterManifestRef)) {
+          return problem("A UE 5.8 Blueprint reference is required, for example ue5.8:/Game/MetaHumans/Ada/BP_Ada.", "VALIDATION_ERROR", 422);
+        }
+        const versionId = randomUUID();
+        const manifestSha256 = createHash("sha256").update(characterManifestRef).digest("hex");
+        const checks = ["metahuman_rig_integrity", "facial_animation_review", "body_motion_review", "pixel_streaming_latency"];
+        await sql.begin(async (transaction) => {
+          await transaction`
+            INSERT INTO replica_profiles (id, organisation_id, digital_human_id, human_slug, identity_id, name, renderer_tier, quality_mode, provider, status, created_by)
+            VALUES (${profileId}, ${user.organisationId}, ${digitalHumanId}, ${humanSlug || null}, ${identityId}, ${name}, 'rigged_3d', ${qualityMode}, 'unreal-metahuman-5.8', 'quality_review', ${user.id})
+          `;
+          await transaction`
+            INSERT INTO replica_versions (id, organisation_id, replica_profile_id, version, provider, state, manifest_object_key, manifest_sha256, capability_snapshot)
+            VALUES (${versionId}, ${user.organisationId}, ${profileId}, 1, 'unreal-metahuman-5.8', 'quality_review', ${characterManifestRef}, ${manifestSha256}, ${transaction.json({ unreal_engine: "5.8", rigged_body: true, rigged_face: true, pixel_streaming_2: true, streaming_validated: false })})
+          `;
+          for (const check of checks) {
+            await transaction`
+              INSERT INTO replica_quality_checks (organisation_id, replica_profile_id, replica_version_id, check_code, status, safe_detail)
+              VALUES (${user.organisationId}, ${profileId}, ${versionId}, ${check}, 'not_tested', ${transaction.json({ source: "rigged_3d_import" })})
+            `;
+          }
+        });
+        return ok({ id: profileId, version_id: versionId, status: "quality_review", renderer_tier: "rigged_3d", required_checks: checks }, 201);
+      }
+
       const captureSessionId = randomUUID();
       await sql.begin(async (transaction) => {
         await transaction`
@@ -731,7 +760,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const code = typeof body.code === "string" ? body.code : "";
       const status = body.status === "passed" || body.status === "failed" ? body.status : "";
       const notes = typeof body.notes === "string" ? body.notes.trim() : "";
-      if (!new Set(["lip_sync_visual_review", "livekit_latency"]).has(code) || !status || notes.length < 10) {
+      const supportedChecks = profile.renderer_tier === "rigged_3d"
+        ? new Set(["metahuman_rig_integrity", "facial_animation_review", "body_motion_review", "pixel_streaming_latency"])
+        : new Set(["lip_sync_visual_review", "livekit_latency"]);
+      if (!supportedChecks.has(code) || !status || notes.length < 10) {
         return problem("A supported check, pass/fail decision and evidence note are required.", "VALIDATION_ERROR", 422);
       }
       const versions = await sql<{ id: string; state: string }[]>`SELECT id, state FROM replica_versions WHERE organisation_id=${user.organisationId} AND replica_profile_id=${profileId} ORDER BY version DESC LIMIT 1`;
@@ -740,7 +772,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const measured = typeof body.measured_value === "number" && Number.isFinite(body.measured_value) ? body.measured_value : null;
       await sql`
         INSERT INTO replica_quality_checks (organisation_id, replica_profile_id, replica_version_id, check_code, status, measured_value, threshold_value, unit, safe_detail)
-        VALUES (${user.organisationId}, ${profileId}, ${versions[0].id}, ${code}, ${status}, ${measured}, ${code === "livekit_latency" ? 1500 : null}, ${code === "livekit_latency" ? "ms" : null}, ${sql.json({ notes, reviewer_id: user.id })})
+        VALUES (${user.organisationId}, ${profileId}, ${versions[0].id}, ${code}, ${status}, ${measured}, ${code === "livekit_latency" || code === "pixel_streaming_latency" ? 1500 : null}, ${code === "livekit_latency" || code === "pixel_streaming_latency" ? "ms" : null}, ${sql.json({ notes, reviewer_id: user.id })})
       `;
       return ok({ code, status, recorded: true, append_only: true }, 201);
     }
@@ -760,7 +792,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         WHERE organisation_id=${user.organisationId} AND replica_profile_id=${profileId}
         ORDER BY check_code, checked_at DESC
       `;
-      const requiredChecks = ["capture_resolution", "capture_frame_rate", "single_face_continuity", "clip_duration", "lip_sync_visual_review", "livekit_latency"];
+      const requiredChecks = profile.renderer_tier === "rigged_3d"
+        ? ["metahuman_rig_integrity", "facial_animation_review", "body_motion_review", "pixel_streaming_latency"]
+        : ["capture_resolution", "capture_frame_rate", "single_face_continuity", "clip_duration", "lip_sync_visual_review", "livekit_latency"];
       const qualityMissing = requiredChecks.filter((code) => {
         const status = latestChecks.find((check) => check.check_code === code)?.status;
         return status !== "passed" && status !== "warning";
@@ -778,10 +812,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const humanSlug = typeof body.human_slug === "string" ? body.human_slug.trim() : "";
       const enabled = body.enabled === true;
       if (!humanSlug) return problem("A Digital Human slug is required.", "VALIDATION_ERROR", 422);
-      if (enabled && process.env.ENABLE_VIDEO_REPLICA !== "true") return problem("Enable the Video Replica feature only after the authorised POC passes.", "FEATURE_DISABLED", 409);
+      const featureFlag = profile.renderer_tier === "rigged_3d" ? process.env.ENABLE_RIGGED_3D : process.env.ENABLE_VIDEO_REPLICA;
+      if (enabled && featureFlag !== "true") return problem(`Enable the ${profile.renderer_tier === "rigged_3d" ? "Fully Rigged 3D" : "Video Replica"} feature only after the authorised POC passes.`, "FEATURE_DISABLED", 409);
       await sql`
         INSERT INTO human_replica_assignments (organisation_id, human_slug, replica_profile_id, replica_version_id, renderer_tier, quality_mode, enabled)
-        SELECT organisation_id, ${humanSlug}, id, active_version_id, 'video_replica', quality_mode, ${enabled}
+        SELECT organisation_id, ${humanSlug}, id, active_version_id, renderer_tier, quality_mode, ${enabled}
         FROM replica_profiles WHERE id=${profileId} AND organisation_id=${user.organisationId}
         ON CONFLICT (organisation_id, human_slug) DO UPDATE SET
           replica_profile_id=EXCLUDED.replica_profile_id, replica_version_id=EXCLUDED.replica_version_id,

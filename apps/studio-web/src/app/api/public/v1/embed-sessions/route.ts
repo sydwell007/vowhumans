@@ -195,9 +195,38 @@ export async function POST(request: NextRequest) {
     requestedLanguageCode,
   );
 
+  const [riggedAssignment] = flagEnabled("ENABLE_RIGGED_3D") ? await sql<{ ready: boolean }[]>`
+    SELECT true AS ready
+    FROM human_replica_assignments hra
+    JOIN replica_profiles rp ON rp.id = hra.replica_profile_id AND rp.organisation_id = hra.organisation_id
+    JOIN replica_versions rv ON rv.id = hra.replica_version_id AND rv.replica_profile_id = rp.id AND rv.organisation_id = hra.organisation_id
+    JOIN identities i ON i.id = rp.identity_id AND i.organisation_id = hra.organisation_id
+    WHERE hra.organisation_id = ${pairing.organisation_id} AND hra.human_slug = ${pairing.digital_human_id}::text
+      AND hra.renderer_tier = 'rigged_3d' AND hra.enabled = true
+      AND rp.renderer_tier = 'rigged_3d' AND rp.status = 'approved' AND rp.active_version_id = rv.id
+      AND rv.state = 'published' AND i.state = 'approved' AND i.commercial_use_confirmed = true
+      AND (i.expires_at IS NULL OR i.expires_at > now())
+      AND EXISTS (
+        SELECT 1 FROM identity_consents ic WHERE ic.organisation_id = hra.organisation_id AND ic.identity_id = rp.identity_id
+          AND ic.consent_type = 'face' AND ic.state = 'approved' AND ic.revoked_at IS NULL
+          AND (ic.expires_at IS NULL OR ic.expires_at > now())
+          AND (ic.permitted_application_ids = '{}' OR ${pairing.application_id} = ANY(ic.permitted_application_ids))
+      )
+      AND EXISTS (
+        SELECT 1 FROM identity_consents ic WHERE ic.organisation_id = hra.organisation_id AND ic.identity_id = rp.identity_id
+          AND ic.consent_type = 'commercial' AND ic.state = 'approved' AND ic.revoked_at IS NULL
+          AND (ic.expires_at IS NULL OR ic.expires_at > now())
+          AND (ic.permitted_application_ids = '{}' OR ${pairing.application_id} = ANY(ic.permitted_application_ids))
+      )
+    LIMIT 1
+  ` : [];
+  const rendererTier = riggedAssignment?.ready ? "rigged_3d" : "live_voice";
+  const transportProvider = rendererTier === "rigged_3d" ? "pixel-streaming-2" : "livekit";
+  const avatarMode = rendererTier === "rigged_3d" ? "rigged-3d" : "live-avatar";
+
   const [session] = await sql<{ id: string }[]>`
     INSERT INTO sessions (organisation_id, application_id, digital_human_id, persona_version_id, owner_external_ref_hash, transport_provider, avatar_mode, context)
-    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, 'livekit', 'live-avatar', ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: requestedLanguage, ...(lessonContext ? { lesson: lessonContext } : {}) })})
+    VALUES (${pairing.organisation_id}, ${pairing.application_id}, ${pairing.digital_human_id}, ${pairing.persona_version_id}, ${ipHash}, ${transportProvider}, ${avatarMode}, ${sql.json({ source: "embed", application_slug: applicationSlug, requested_language: requestedLanguage, renderer_tier: rendererTier, ...(lessonContext ? { lesson: lessonContext } : {}) })})
     RETURNING id
   `;
 
@@ -206,6 +235,7 @@ export async function POST(request: NextRequest) {
     data: {
       session_id: session.id,
       portrait_url: `/api/public/v1/embed-face?session_id=${encodeURIComponent(session.id)}`,
+      renderer_tier: rendererTier,
       disclosure: "You are speaking with an AI-generated digital human, not a real person.",
       // Honest disclosure per this table's own doc comment: a caller that
       // requested a specific language must be able to tell whether it was
