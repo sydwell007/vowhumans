@@ -65,6 +65,20 @@ Returns `{ portrait: true, photo_replica: boolean, languages: string[] }`.
 (`providers.avatar === "configured"`); PlugConnect uses it to gate the
 "PhotoReplica" option and falls back to "Portrait" otherwise.
 
+## Embed origin policy — important
+
+`applications.settings.allowed_embed_origins` **cannot** restrict which site
+frames the widget. The `/embed` page is served by studio-web, so its own fetch to
+`embed-sessions` is *same-origin* — the browser sends `Origin: https://vowhumans.com`
+(and `Sec-Fetch-Site: same-origin`), never the framing partner's origin. The
+allowlist therefore only blocks a **direct cross-site API call** from another
+site's JavaScript; a request from the embed page passes regardless of the list.
+
+Real gates for the interview flow: the pairing must be `enabled`, and a valid
+HMAC `interview_context_token` (which needs the shared secret) is required for a
+grounded interview. Restricting *which sites may iframe* `/embed/*` is a separate
+job for a per-application `frame-ancestors` CSP (currently `*`).
+
 ## Operator setup
 
 1. **Seed the digital humans** (idempotent, run once against the target DB):

@@ -81,8 +81,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Read-only capability probe (no session, no cost). Only reject an explicit
+  // cross-site browser call from an origin the application hasn't listed; same-
+  // origin (the embed page), server-to-server (PlugConnect's own SSR fetch), and
+  // an empty list all pass. Mirrors passesEmbedOriginPolicy in embed-sessions.
   const allowedOrigins = parseAllowedOrigins(pairing.application_settings);
-  if (allowedOrigins.length > 0) {
+  const secFetchSite = request.headers.get("sec-fetch-site");
+  const crossSiteBrowserCall = secFetchSite === "cross-site" || secFetchSite === "same-site";
+  if (allowedOrigins.length > 0 && crossSiteBrowserCall) {
     const origin = requestOrigin(request);
     if (!origin || !allowedOrigins.includes(origin)) {
       return NextResponse.json(

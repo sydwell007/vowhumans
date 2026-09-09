@@ -41,6 +41,36 @@ function requestOrigin(request: NextRequest): string | null {
   }
 }
 
+// The /embed page is served by this app, so its own fetch to this route is
+// same-origin: the browser sends Origin/Referer = studio-web's origin (never the
+// framing partner's), and Sec-Fetch-Site: same-origin. An application's
+// allowed_embed_origins list can therefore only ever match a *direct* cross-site
+// API call from another site's own JavaScript — which is exactly what it should
+// block. A request coming from the embed page itself passes regardless of the
+// list; the pairing being enabled plus (for interviews) the HMAC context token
+// are the real gates for that path. Narrowing which sites may frame /embed is a
+// separate concern handled by the per-application frame-ancestors CSP.
+function passesEmbedOriginPolicy(request: NextRequest, allowedOrigins: string[]): boolean {
+  if (allowedOrigins.length === 0) return true;
+
+  const secFetchSite = request.headers.get("sec-fetch-site");
+  if (secFetchSite === "same-origin" || secFetchSite === "none") return true;
+
+  const origin = requestOrigin(request);
+  if (!origin) return true; // server-to-server / no browser origin — token/pairing gate it
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Same-origin as this deployment (the embed page), even when Sec-Fetch-Site is
+  // absent on an older client.
+  try {
+    const selfHost = request.headers.get("host");
+    if (selfHost && new URL(origin).host === selfHost) return true;
+  } catch {
+    // fall through to deny
+  }
+  return false;
+}
+
 // Never store a raw IP (owner_external_ref_hash is explicitly named for exactly
 // this kind of anonymised identifier) — a stable hash is all rate-limit bucketing
 // needs, and IPs aren't secret, so no pepper is needed either.
@@ -143,11 +173,8 @@ export async function POST(request: NextRequest) {
   // existed) rather than silently locking out every already-enabled pairing.
   const allowedOriginsRaw = parseSettings(pairing.application_settings).allowed_embed_origins;
   const allowedOrigins = Array.isArray(allowedOriginsRaw) ? allowedOriginsRaw.filter((o): o is string => typeof o === "string") : [];
-  if (allowedOrigins.length > 0) {
-    const origin = requestOrigin(request);
-    if (!origin || !allowedOrigins.includes(origin)) {
-      return NextResponse.json({ success: false, code: "ORIGIN_NOT_ALLOWED", message: "This application does not allow embedding from this origin." }, { status: 403 });
-    }
+  if (!passesEmbedOriginPolicy(request, allowedOrigins)) {
+    return NextResponse.json({ success: false, code: "ORIGIN_NOT_ALLOWED", message: "This application does not allow embedding from this origin." }, { status: 403 });
   }
 
   // No face/voice in this app has ever been given a real identity_id yet (every
