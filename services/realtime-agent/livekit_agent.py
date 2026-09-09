@@ -450,6 +450,30 @@ def _make_knowledge_tool(client: httpx.AsyncClient, organisation_id: str, knowle
     return search_knowledge_base
 
 
+# The OpenAI Realtime API accepts only this set of built-in voice names (plus
+# voice_* custom-voice object refs). Studio's voice library also lets an operator
+# pick a TTS-only voice such as "nova" or "onyx" — those are rejected by Realtime
+# with an invalid_value error on session.update, which breaks the whole call. Map
+# the common TTS voices onto their nearest Realtime timbre, and fall back for
+# anything else, so a mis-picked voice degrades to sound instead of silence.
+REALTIME_VOICES = frozenset(
+    {"alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"}
+)
+TTS_TO_REALTIME_VOICE = {
+    "nova": "marin",
+    "shimmer": "shimmer",
+    "coral": "coral",
+    "alloy": "alloy",
+    "echo": "echo",
+    "sage": "sage",
+    "ash": "ash",
+    "ballad": "ballad",
+    "verse": "verse",
+    "onyx": "cedar",
+    "fable": "verse",
+}
+
+
 def _realtime_voice(provider_voice_id: str | None):
     """Return the OpenAI Realtime voice shape for built-in or custom voices."""
     if not provider_voice_id:
@@ -457,8 +481,23 @@ def _realtime_voice(provider_voice_id: str | None):
     provider_voice_id = provider_voice_id.strip()
     if not provider_voice_id:
         return FALLBACK_VOICE
-    # OpenAI custom voices are object references. Built-in voices remain names.
-    return {"id": provider_voice_id} if provider_voice_id.startswith("voice_") else provider_voice_id
+    # OpenAI custom voices are object references and are passed through untouched.
+    if provider_voice_id.startswith("voice_"):
+        return {"id": provider_voice_id}
+    if provider_voice_id in REALTIME_VOICES:
+        return provider_voice_id
+    mapped = TTS_TO_REALTIME_VOICE.get(provider_voice_id.lower())
+    if mapped:
+        print(
+            f"[realtime-agent] voice '{provider_voice_id}' is not a Realtime voice; using '{mapped}'",
+            flush=True,
+        )
+        return mapped
+    print(
+        f"[realtime-agent] voice '{provider_voice_id}' is not a Realtime voice; using fallback",
+        flush=True,
+    )
+    return FALLBACK_VOICE
 
 
 def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_data: dict | None, required_language: str | None = None) -> tuple[str, str, object, list] | None:
@@ -482,9 +521,15 @@ def _persona_to_config(client: httpx.AsyncClient, organisation_id: str, persona_
         f"Translate it before speaking when its source wording is not already in {language_name}; do not read the English source wording aloud."
     )
     voice_info = persona_data.get("voice")
-    if voice_info and not voice_info.get("provider_voice_id"):
-        raise RuntimeError("The selected voice is a sample only and has not been enrolled for live speech")
     voice_id = voice_info.get("provider_voice_id") if voice_info else None
+    if voice_info and not voice_id:
+        # A sample-only voice (no enrolled provider id) must not kill the whole
+        # call — degrade to the fallback voice so the candidate still hears an
+        # interviewer. Studio should stop this being pickable for live humans.
+        print(
+            "[realtime-agent] assigned voice has no provider_voice_id (sample only); using fallback voice",
+            flush=True,
+        )
     voice = _realtime_voice(voice_id)
     knowledge_base_ids = persona.get("knowledge_base_ids") or []
     tools: list = [_make_knowledge_tool(client, organisation_id, knowledge_base_ids)] if knowledge_base_ids else []

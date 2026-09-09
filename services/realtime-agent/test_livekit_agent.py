@@ -17,6 +17,16 @@ class RealtimeVoiceTests(unittest.TestCase):
     def test_missing_voice_uses_fallback(self):
         self.assertIsInstance(_realtime_voice(None), str)
 
+    def test_tts_only_voice_is_mapped_to_a_realtime_voice(self):
+        # "nova" is a valid OpenAI TTS voice but NOT a Realtime voice — it must be
+        # mapped, never passed through (that breaks the whole session.update).
+        self.assertEqual(_realtime_voice("nova"), "marin")
+        self.assertEqual(_realtime_voice("onyx"), "cedar")
+
+    def test_unknown_voice_falls_back_instead_of_passing_through(self):
+        result = _realtime_voice("totally-made-up-voice")
+        self.assertIn(result, {"alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"})
+
     def test_rejected_custom_voice_has_actionable_browser_error(self):
         code, message = _safe_voice_error(RuntimeError("invalid_voice: custom voice permission denied"))
         self.assertEqual(code, "provider_voice_rejected")
