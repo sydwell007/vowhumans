@@ -814,7 +814,12 @@ async def entrypoint(ctx: JobContext):
             if idx == 0 and confirmation_spoken:
                 step = "The selected-language confirmation has already been spoken; do not repeat it. " + step
             _unused, step = _enforce_language(persona_instructions, step, active_language)
-            await session.generate_reply(instructions=step)
+            # The introduction plays as a fixed sequence — a stray cough or "mm"
+            # from the candidate must not cut a panelist off mid-sentence.
+            try:
+                await session.generate_reply(instructions=step, allow_interruptions=False)
+            except TypeError:
+                await session.generate_reply(instructions=step)
     else:
         await session.generate_reply(instructions=opening_instruction)
 
