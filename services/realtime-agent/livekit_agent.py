@@ -286,9 +286,26 @@ def _ground_in_interview(instructions: str, opening_instruction: str, interview:
     question_count = max(3, min(12, question_count))
     experience = str(interview.get("experience_level") or "entry").strip()
 
-    panelists = interview.get("panelists") if isinstance(interview.get("panelists"), list) else []
-    panel_names = [str((p or {}).get("name") or "").strip() for p in panelists[:2]]
-    panel_names = [n for n in panel_names if n] or ["Thandi Mokoena", "Sipho Dlamini"]
+    panelists_raw = interview.get("panelists") if isinstance(interview.get("panelists"), list) else []
+    panel_people: list[dict] = []
+    for p in panelists_raw[:2]:
+        nm = str((p or {}).get("name") or "").strip()
+        if nm:
+            panel_people.append({"name": nm, "role": str((p or {}).get("role") or "").strip()})
+    if not panel_people:
+        panel_people = [
+            {"name": "Thandi Mokoena", "role": "talent partner"},
+            {"name": "Sipho Dlamini", "role": "hiring manager"},
+        ]
+    if len(panel_people) == 1:
+        first_lower = panel_people[0]["name"].lower()
+        default_second = (
+            {"name": "Sipho Dlamini", "role": "hiring manager"}
+            if "sipho" not in first_lower
+            else {"name": "Thandi Mokoena", "role": "talent partner"}
+        )
+        panel_people.append(default_second)
+    panel_names = [p["name"] for p in panel_people]
 
     lines = [
         instructions,
@@ -328,22 +345,33 @@ def _ground_in_interview(instructions: str, opening_instruction: str, interview:
     ]
 
     if fmt == "panel":
-        lead_name, second_name = panel_names[0], (panel_names[1] if len(panel_names) > 1 else "Sipho Dlamini")
+        lead = panel_people[0]
+        second = panel_people[1]
+        lead_name, second_name = lead["name"], second["name"]
+        lead_first, second_first = lead_name.split()[0], second_name.split()[0]
+        lead_role = lead["role"] or "talent partner"
+        second_role = second["role"] or "hiring manager"
         lines += [
             "",
             "PANEL FORMAT: You simulate a two-person interview panel and voice both members:",
-            f"- {lead_name}: warm talent partner. Opens the interview, handles motivation/culture/closing, keeps the candidate at ease.",
-            f"- {second_name}: direct hiring manager. Probes technical depth, behavioural detail, and judgement.",
-            "Alternate naturally between the two. Hand off out loud, e.g. \"Thanks. Over to you, "
-            f"{second_name.split()[0]}.\"",
-            "Before EACH question, call the announce_panelist tool with the first name of whoever is about to speak "
-            f"(\"{lead_name.split()[0]}\" or \"{second_name.split()[0]}\"), then speak that person's line in the first person.",
-            "Do NOT read tool names, brackets, or stage directions aloud.",
+            f"- {lead_name} ({lead_role}): warm. Runs the room — opens, introduces the colleague, asks the first questions, handles motivation/culture/closing, keeps the candidate at ease.",
+            f"- {second_name} ({second_role}): more direct. Probes role capability, behavioural detail, and judgement.",
+            "The interview OPENS with a scripted three-part introduction (see the opening instruction): the lead greets and introduces the colleague, the colleague introduces themselves, then the lead resumes and begins questions.",
+            "After the introduction, alternate naturally between the two and hand off out loud, e.g. "
+            f"\"Thanks {first_name}. {second_first}, over to you.\"",
+            "EVERY time the speaker changes — including the three introduction turns and before every question — call the announce_panelist tool FIRST with that person's first name "
+            f"(\"{lead_first}\" or \"{second_first}\"), then speak that person's line in the first person.",
+            "Only one panelist speaks at a time. Do NOT read tool names, brackets, or stage directions aloud.",
         ]
         opening = (
-            f"Briefly disclose that you are AI voicing a practice panel. As {lead_name}, greet {first_name} by name, "
-            f"introduce both panel members, name the {role} role, and explain you will take turns asking questions. "
-            f"Call announce_panelist with \"{lead_name.split()[0]}\" first. Invite {first_name} to say when ready for the first question."
+            "Perform the panel introduction as a short scripted sequence. Switch speaker with announce_panelist before each part and speak each person in the first person. "
+            f"1) Call announce_panelist(\"{lead_first}\"). As {lead_name}, briefly disclose you are an AI practice panel, greet {first_name} by name, "
+            f"and name the {role} role. Then say you are joined today by a colleague and introduce them: {second_name}, {second_role}. "
+            f"2) Call announce_panelist(\"{second_first}\"). As {second_name}, greet {first_name} directly and introduce yourself in one or two sentences — "
+            "your role and what you will focus on in this interview. "
+            f"3) Call announce_panelist(\"{lead_first}\"). As {lead_name}, take over again, say the two of you will take turns asking questions, "
+            f"and invite {first_name} to say when they are ready for the first question. "
+            "Keep the whole introduction under about 90 words total and do NOT start asking interview questions yet."
         )
     else:
         interviewer_name = panel_names[0]
