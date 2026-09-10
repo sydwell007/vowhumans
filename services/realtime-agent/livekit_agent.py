@@ -356,22 +356,17 @@ def _ground_in_interview(instructions: str, opening_instruction: str, interview:
             "PANEL FORMAT: You simulate a two-person interview panel and voice both members:",
             f"- {lead_name} ({lead_role}): warm. Runs the room — opens, introduces the colleague, asks the first questions, handles motivation/culture/closing, keeps the candidate at ease.",
             f"- {second_name} ({second_role}): more direct. Probes role capability, behavioural detail, and judgement.",
-            "The interview OPENS with a scripted three-part introduction (see the opening instruction): the lead greets and introduces the colleague, the colleague introduces themselves, then the lead resumes and begins questions.",
-            "After the introduction, alternate naturally between the two and hand off out loud, e.g. "
-            f"\"Thanks {first_name}. {second_first}, over to you.\"",
-            "EVERY time the speaker changes — including the three introduction turns and before every question — call the announce_panelist tool FIRST with that person's first name "
-            f"(\"{lead_first}\" or \"{second_first}\"), then speak that person's line in the first person.",
-            "Only one panelist speaks at a time. Do NOT read tool names, brackets, or stage directions aloud.",
+            f"The three-part opening (lead greets + introduces {second_first}; {second_first} introduces themselves; lead resumes and starts questions) is delivered turn by turn and is already handled — do not repeat it.",
+            f"From the first interview question onward, before EVERY speaker change call the announce_panelist tool FIRST with that person's first name (\"{lead_first}\" or \"{second_first}\"), then speak that person's line in the first person.",
+            f"Alternate naturally and hand off out loud, e.g. \"Thanks {first_name}. {second_first}, over to you.\" Only one panelist speaks at a time. Do NOT read tool names or stage directions aloud.",
         ]
+        # Fallback single-shot opening — used only if the deterministic per-turn
+        # intro in entrypoint() cannot run. _panel_intro_steps() below is the
+        # primary path.
         opening = (
-            "Perform the panel introduction as a short scripted sequence. Switch speaker with announce_panelist before each part and speak each person in the first person. "
-            f"1) Call announce_panelist(\"{lead_first}\"). As {lead_name}, briefly disclose you are an AI practice panel, greet {first_name} by name, "
-            f"and name the {role} role. Then say you are joined today by a colleague and introduce them: {second_name}, {second_role}. "
-            f"2) Call announce_panelist(\"{second_first}\"). As {second_name}, greet {first_name} directly and introduce yourself in one or two sentences — "
-            "your role and what you will focus on in this interview. "
-            f"3) Call announce_panelist(\"{lead_first}\"). As {lead_name}, take over again, say the two of you will take turns asking questions, "
-            f"and invite {first_name} to say when they are ready for the first question. "
-            "Keep the whole introduction under about 90 words total and do NOT start asking interview questions yet."
+            f"You are {lead_name}. Briefly disclose you are an AI practice panel, greet {first_name} by name, name the {role} role, "
+            f"introduce your colleague {second_name} ({second_role}), have {second_name} greet {first_name} and introduce themselves in one sentence, "
+            f"then as {lead_name} say you will take turns asking questions and invite {first_name} to begin. Keep it under 90 words. Do not ask questions yet."
         )
     else:
         interviewer_name = panel_names[0]
@@ -385,6 +380,74 @@ def _ground_in_interview(instructions: str, opening_instruction: str, interview:
         )
 
     return "\n".join(lines), opening
+
+
+def _panel_people(interview: dict) -> list[dict]:
+    raw = interview.get("panelists") if isinstance(interview.get("panelists"), list) else []
+    people: list[dict] = []
+    for p in raw[:2]:
+        nm = str((p or {}).get("name") or "").strip()
+        if nm:
+            people.append({"name": nm, "role": str((p or {}).get("role") or "").strip()})
+    if not people:
+        people = [{"name": "Thandi Mokoena", "role": "talent partner"}, {"name": "Sipho Dlamini", "role": "hiring manager"}]
+    if len(people) == 1:
+        people.append(
+            {"name": "Sipho Dlamini", "role": "hiring manager"}
+            if "sipho" not in people[0]["name"].lower()
+            else {"name": "Thandi Mokoena", "role": "talent partner"}
+        )
+    return people
+
+
+def _panel_intro_steps(interview: dict | None) -> list[tuple[str, str]] | None:
+    """The panel introduction as three separate spoken turns, so it survives
+    language enforcement and non-English tool-calling (which the model does not do
+    reliably). entrypoint() publishes the panelist packet and calls generate_reply
+    once per step. Returns None for a non-panel interview."""
+    if not isinstance(interview, dict) or interview.get("interview_format") != "panel":
+        return None
+    role = str(interview.get("target_role") or "").strip()
+    if not role:
+        return None
+    first_name = str(interview.get("candidate_first_name") or "there").strip()
+    people = _panel_people(interview)
+    lead, second = people[0], people[1]
+    lead_first, second_first = lead["name"].split()[0], second["name"].split()[0]
+    lead_role = lead["role"] or "talent partner"
+    second_role = second["role"] or "hiring manager"
+    return [
+        (
+            lead_first,
+            f"Speak as {lead['name']}, the {lead_role}, in the first person. In one short turn: briefly say you are an AI "
+            f"practice panel (not a real person), warmly greet {first_name} by name, name the {role} role, and say you are "
+            f"joined today by a colleague — introduce them by name and title: {second['name']}, {second_role}. "
+            "About 35-45 words. Do not ask any interview question yet and do not speak for the colleague.",
+        ),
+        (
+            second_first,
+            f"Speak as {second['name']}, the {second_role}, in the first person. In one short turn: greet {first_name} "
+            "directly and introduce yourself in one or two sentences — your role and what you will focus on in this "
+            "interview. About 25-35 words. Do not ask an interview question yet.",
+        ),
+        (
+            lead_first,
+            f"Speak as {lead['name']} again, in the first person. In one short turn: say that you and {second_first} will "
+            f"take turns asking questions, and invite {first_name} to say when they are ready for the first question. "
+            "About 20-30 words. Do not ask the first question yet.",
+        ),
+    ]
+
+
+async def _publish_panelist(ctx: JobContext, name: str) -> None:
+    try:
+        await ctx.room.local_participant.publish_data(
+            json.dumps({"type": PANELIST_TOPIC, "name": name}),
+            reliable=True,
+            topic=PANELIST_TOPIC,
+        )
+    except Exception as exc:  # noqa: BLE001 - room teardown can race this
+        print(f"[realtime-agent] panelist publish skipped: {exc}", flush=True)
 
 
 def _make_panelist_tool(ctx: JobContext):
@@ -728,16 +791,33 @@ async def entrypoint(ctx: JobContext):
             await asyncio.wait_for(avatar_ready.wait(), timeout=AVATAR_READY_WAIT_SECONDS)
         except asyncio.TimeoutError:
             print("[realtime-agent] avatar readiness timed out; continuing voice-only", flush=True)
+    confirmation_spoken = False
     if active_language and active_language != "en-ZA":
         # A literal sentence provides immediate audible proof and primes the
         # Realtime conversation with real text in the selected language.
         await _confirm_language(session, active_language)
         await _publish_language_applied(ctx, active_language, "initial")
+        confirmation_spoken = True
         opening_instruction = (
             "The selected-language confirmation has already been spoken. Do not repeat that confirmation. "
             f"{opening_instruction}"
         )
-    await session.generate_reply(instructions=opening_instruction)
+
+    panel_intro = _panel_intro_steps(interview_context)
+    if panel_intro:
+        # Deterministic per-turn panel introduction: the lead greets and
+        # introduces the colleague, the colleague introduces themselves, then the
+        # lead resumes. The panelist tile switch is published by us, not left to
+        # the model (unreliable in non-English), and each turn is language-enforced.
+        for idx, (panelist_first, step) in enumerate(panel_intro):
+            await _publish_panelist(ctx, panelist_first)
+            if idx == 0 and confirmation_spoken:
+                step = "The selected-language confirmation has already been spoken; do not repeat it. " + step
+            _unused, step = _enforce_language(persona_instructions, step, active_language)
+            await session.generate_reply(instructions=step)
+    else:
+        await session.generate_reply(instructions=opening_instruction)
+
     if active_language == "en-ZA":
         await _publish_language_applied(ctx, active_language, "initial")
 
