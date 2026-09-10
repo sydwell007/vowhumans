@@ -814,12 +814,11 @@ async def entrypoint(ctx: JobContext):
             if idx == 0 and confirmation_spoken:
                 step = "The selected-language confirmation has already been spoken; do not repeat it. " + step
             _unused, step = _enforce_language(persona_instructions, step, active_language)
-            # The introduction plays as a fixed sequence — a stray cough or "mm"
-            # from the candidate must not cut a panelist off mid-sentence.
-            try:
-                await session.generate_reply(instructions=step, allow_interruptions=False)
-            except TypeError:
-                await session.generate_reply(instructions=step)
+            # One bounded spoken turn per panelist. (allow_interruptions is a
+            # no-op with the RealtimeModel's server-side VAD, so it isn't set —
+            # the intro is short and a candidate rarely talks over their own
+            # interview opening.)
+            await session.generate_reply(instructions=step)
     else:
         await session.generate_reply(instructions=opening_instruction)
 
